@@ -9,8 +9,11 @@
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "moby": false,
+      "moby": false
     },
+    "ghcr.io/devcontainers/features/apt-get-packages:1": {
+      "packages": "protobuf-compiler"
+    }
   },
 
   // Features to add to the dev container. More info: https://containers.dev/features.

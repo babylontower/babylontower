@@ -70,7 +70,9 @@ vet:
 proto:
 	@echo "Generating protobuf code..."
 	@if command -v protoc > /dev/null 2>&1; then \
+		export PATH=$$PATH:$(go env GOPATH)/bin; \
 		protoc --go_out=. --go_opt=paths=source_relative $(PROTO_SRC); \
+		mv $(PROTO_DIR)/message.pb.go $(PROTO_OUT)/message.pb.go; \
 	else \
 		echo "protoc not installed. Install protobuf compiler first."; \
 		exit 1; \

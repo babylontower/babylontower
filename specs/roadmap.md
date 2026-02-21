@@ -147,30 +147,33 @@ babylontower/
 
 **Goal:** Implement embedded key-value storage with BadgerDB.
 
+**Status:** ✅ Complete
+
 #### 2.1 Protobuf Definitions (`proto/`)
 
 | Task | Description | Acceptance Criteria |
 |------|-------------|---------------------|
-| 2.1.1 | Create `message.proto` | All messages from spec section 5.2 |
-| 2.1.2 | Generate Go code | `message.pb.go` compiles correctly |
-| 2.1.3 | Add Makefile proto target | `make proto` regenerates code |
+| 2.1.1 | Create `message.proto` | All messages from spec section 5.2 | ✅
+| 2.1.2 | Generate Go code | `message.pb.go` compiles correctly | ✅
+| 2.1.3 | Add Makefile proto target | `make proto` regenerates code | ✅
 
 #### 2.2 Storage Implementation (`pkg/storage`)
 
 | Task | Description | Acceptance Criteria |
 |------|-------------|---------------------|
-| 2.2.1 | BadgerDB initialization | DB opens in configurable directory |
-| 2.2.2 | Contact storage interface | `AddContact`, `GetContact`, `ListContacts`, `DeleteContact` |
-| 2.2.3 | Message storage interface | `AddMessage`, `GetMessages`, `DeleteMessages` |
-| 2.2.4 | Composite key for messages | Format: `contact_pubkey + timestamp + nonce` |
-| 2.2.5 | Transaction handling | Proper Badger transactions for writes |
-| 2.2.6 | Graceful shutdown | DB closes without data loss |
+| 2.2.1 | BadgerDB initialization | DB opens in configurable directory | ✅
+| 2.2.2 | Contact storage interface | `AddContact`, `GetContact`, `ListContacts`, `DeleteContact` | ✅
+| 2.2.3 | Message storage interface | `AddMessage`, `GetMessages`, `DeleteMessages` | ✅
+| 2.2.4 | Composite key for messages | Format: `contact_pubkey + timestamp + nonce` | ✅
+| 2.2.5 | Transaction handling | Proper Badger transactions for writes | ✅
+| 2.2.6 | Graceful shutdown | DB closes without data loss | ✅
 
 **Deliverables:**
-- [ ] Protobuf definitions compiled
-- [ ] Storage interface fully implemented
-- [ ] Unit tests with in-memory or temp DB
-- [ ] CRUD operations verified
+- [x] Protobuf definitions compiled
+- [x] Storage interface fully implemented
+- [x] Unit tests with in-memory or temp DB
+- [x] CRUD operations verified
+- [x] Test coverage: 87.9%
 
 ---
 
