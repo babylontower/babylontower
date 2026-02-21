@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# Git commit-msg hook
+# Validates commit messages against Conventional Commits specification
+#
+# Install: make install-hooks
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Run the validation script
+"$PROJECT_ROOT/scripts/validate-commit.sh" "$1"

@@ -1,16 +1,168 @@
-## Hi there 👋
+# Babylon Tower
 
-<!--
-**babylontower/babylontower** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+A decentralized, secure peer-to-peer messenger that operates without central servers.
 
-Here are some ideas to get you started:
+## Overview
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+Babylon Tower is a Proof of Concept (PoC) implementation of a serverless messaging system using:
+
+- **End-to-end encryption** (XChaCha20-Poly1305, Ed25519 signatures)
+- **IPFS** for decentralized communication via PubSub
+- **BadgerDB** for local message and contact storage
+- **Go** for a single, portable binary
+
+## ⚠️ Initial Development Phase
+
+This project is in **early development**. The PoC is functional but:
+
+- Features and architecture may change significantly
+- Security has not been audited
+- Not suitable for production use
+- Some limitations (e.g., NAT traversal) are documented as known issues
+
+## Project Status
+
+See [`specs/roadmap.md`](specs/roadmap.md) for the complete implementation plan and current progress.
+
+## Requirements
+
+- Go 1.25 or later
+- GNU Make
+- protoc (optional, for protobuf generation)
+
+## Quick Start
+
+### Build
+
+```bash
+# Build the application
+make build
+
+# The binary will be created at at ./bin/messenger
+```
+
+### Check Version
+
+```bash
+# Show version information
+make version
+```
+
+### Run Tests
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+```
+
+### Run Linter
+
+```bash
+# Install linter first (if not already installed)
+make install-deps
+
+# Run linter
+make lint
+```
+
+### Run the Application
+
+```bash
+# Build and run
+make run
+```
+
+## Makefile Commands
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the application |
+| `make version` | Show version information |
+| `make test` | Run all tests |
+| `make test-coverage` | Run tests with coverage report |
+| `make lint` | Run golangci-lint |
+| `make fmt` | Format code |
+| `make vet` | Run go vet |
+| `make proto` | Generate protobuf code |
+| `make tidy` | Tidy go modules |
+| `make clean` | Clean build artifacts |
+| `make run` | Build and run the application |
+| `make help` | Show all available commands |
+| `make install-hooks` | Install git hooks for commit validation |
+| `make uninstall-hooks` | Uninstall git hooks |
+
+## Commit Guidelines
+
+This project follows the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+
+### Format
+
+```
+<type>[optional scope][!]: <description>
+```
+
+### Valid Types
+
+| Type | Description |
+|------|-------------|
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs` | Documentation changes |
+| `style` | Code style changes (formatting, etc.) |
+| `refactor` | Code refactoring without feature change |
+| `perf` | Performance improvements |
+| `test` | Adding or updating tests |
+| `build` | Build system or dependency changes |
+| `ci` | CI/CD configuration changes |
+| `chore` | Maintenance tasks |
+| `revert` | Reverting a previous commit |
+
+### Examples
+
+```
+feat: add user authentication
+fix(storage): resolve database connection issue
+docs!: update API documentation (breaking change)
+refactor(cli): simplify command parsing
+```
+
+### Installing Git Hooks
+
+To enforce commit message validation locally:
+
+```bash
+make install-hooks
+```
+
+This will configure git to use the hooks in `.githooks/` which validate commit messages before each commit.
+
+## Project Structure
+
+```
+babylontower/
+├── cmd/
+│   └── messenger/          # Application entry point
+├── pkg/
+│   ├── identity/           # Identity and key management
+│   ├── crypto/             # Cryptographic operations
+│   ├── storage/            # BadgerDB storage layer
+│   ├── ipfsnode/           # Embedded IPFS node
+│   ├── messaging/          # Messaging protocol
+│   ├── cli/                # Command-line interface
+│   └── proto/              # Generated protobuf code
+├── proto/
+│   └── message.proto       # Protobuf definitions
+├── configs/                # Configuration management
+├── internal/
+│   └── testutil/           # Test utilities
+├── specs/                  # Technical specifications
+├── Makefile
+└── go.mod
+```
+
+## License
+
+See [LICENSE](LICENSE)
