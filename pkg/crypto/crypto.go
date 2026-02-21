@@ -132,6 +132,24 @@ func GenerateKey() ([]byte, error) {
 	return key, nil
 }
 
+// GenerateX25519KeyPair generates a new X25519 key pair
+// Returns public key (32 bytes), private key (32 bytes), and error
+func GenerateX25519KeyPair() (pubKey, privKey []byte, err error) {
+	privKey = make([]byte, SharedSecretSize)
+	if _, err := io.ReadFull(rand.Reader, privKey); err != nil {
+		return nil, nil, fmt.Errorf("failed to generate private key: %w", err)
+	}
+	var privArray [32]byte
+	copy(privArray[:], privKey)
+	result, err := curve25519.X25519(privArray[:], curve25519.Basepoint)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to compute public key: %w", err)
+	}
+	pubKey = make([]byte, SharedSecretSize)
+	copy(pubKey, result)
+	return pubKey, privKey, nil
+}
+
 // EncryptWithSharedSecret encrypts a message using a shared secret
 // Derives an encryption key from the shared secret using HKDF
 // Returns nonce and ciphertext (caller should store both for decryption)
