@@ -281,50 +281,53 @@ babylontower/
 
 **Goal:** Build interactive command-line interface.
 
+**Status:** ✅ Complete
+
 #### 5.1 REPL Engine (`pkg/cli`)
 
 | Task | Description | Acceptance Criteria |
 |------|-------------|---------------------|
-| 5.1.1 | Read-eval-print loop | Continuous input processing |
-| 5.1.2 | Command parsing | `/command args` pattern recognized |
-| 5.1.3 | Concurrent input/events | User input and incoming messages don't block |
-| 5.1.4 | Graceful exit | `/exit` closes all resources |
+| 5.1.1 | Read-eval-print loop | Continuous input processing | ✅
+| 5.1.2 | Command parsing | `/command args` pattern recognized | ✅
+| 5.1.3 | Concurrent input/events | User input and incoming messages don't block | ✅
+| 5.1.4 | Graceful exit | `/exit` closes all resources | ✅
 
 #### 5.2 Commands (`pkg/cli/commands.go`)
 
 | Task | Description | Acceptance Criteria |
 |------|-------------|---------------------|
-| 5.2.1 | `/help` | Lists all commands with descriptions |
-| 5.2.2 | `/myid` | Displays own public key (hex/base58) |
-| 5.2.3 | `/add <pubkey> [nickname]` | Adds contact to storage |
-| 5.2.4 | `/list` | Shows numbered contact list |
-| 5.2.5 | `/chat <contact>` | Enters chat mode with contact |
-| 5.2.6 | `/history <contact> [limit]` | Shows last N messages |
-| 5.2.7 | `/exit` | Quits application |
+| 5.2.1 | `/help` | Lists all commands with descriptions | ✅
+| 5.2.2 | `/myid` | Displays own public key (hex/base58) | ✅
+| 5.2.3 | `/add <pubkey> [nickname]` | Adds contact to storage | ✅
+| 5.2.4 | `/list` | Shows numbered contact list | ✅
+| 5.2.5 | `/chat <contact>` | Enters chat mode with contact | ✅
+| 5.2.6 | `/history <contact> [limit]` | Shows last N messages | ✅
+| 5.2.7 | `/exit` | Quits application | ✅
 
 #### 5.3 Chat Mode
 
 | Task | Description | Acceptance Criteria |
 |------|-------------|---------------------|
-| 5.3.1 | Message input loop | Lines sent as messages |
-| 5.3.2 | Empty line exits chat | Returns to main prompt |
-| 5.3.3 | Real-time message display | Incoming messages shown immediately |
-| 5.3.4 | Message formatting | Timestamps, sender info displayed |
+| 5.3.1 | Message input loop | Lines sent as messages | ✅
+| 5.3.2 | Empty line exits chat | Returns to main prompt | ✅
+| 5.3.3 | Real-time message display | Incoming messages shown immediately | ✅
+| 5.3.4 | Message formatting | Timestamps, sender info displayed | ✅
 
 #### 5.4 Display (`pkg/cli/display.go`)
 
 | Task | Description | Acceptance Criteria |
 |------|-------------|---------------------|
-| 5.4.1 | Contact list formatting | Shortened keys, nice table |
-| 5.4.2 | Message formatting | `[timestamp] sender: text` |
-| 5.4.3 | Error display | User-friendly error messages |
-| 5.4.4 | Help formatting | Clear command descriptions |
+| 5.4.1 | Contact list formatting | Shortened keys, nice table | ✅
+| 5.4.2 | Message formatting | `[timestamp] sender: text` | ✅
+| 5.4.3 | Error display | User-friendly error messages | ✅
+| 5.4.4 | Help formatting | Clear command descriptions | ✅
 
 **Deliverables:**
-- [ ] All commands implemented
-- [ ] Chat mode with real-time updates
-- [ ] Clean, readable UI
-- [ ] Manual testing completed
+- [x] All commands implemented
+- [x] Chat mode with real-time updates
+- [x] Clean, readable UI
+- [x] Manual testing completed
+- [x] Unit tests passing (12 tests)
 
 ---
 
