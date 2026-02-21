@@ -443,7 +443,9 @@ func TestPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	pubKey := []byte("test_public_key_32_bytes_longggg")
 	contact := createTestContact(pubKey, "Persistent Contact")
@@ -455,7 +457,7 @@ func TestPersistence(t *testing.T) {
 	}
 
 	if err := store1.AddContact(contact); err != nil {
-		store1.Close()
+		_ = store1.Close()
 		t.Fatalf("AddContact failed: %v", err)
 	}
 
@@ -468,7 +470,9 @@ func TestPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to reopen storage: %v", err)
 	}
-	defer store2.Close()
+	defer func() {
+		_ = store2.Close()
+	}()
 
 	retrieved, err := store2.GetContact(pubKey)
 	if err != nil {
