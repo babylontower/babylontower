@@ -3,6 +3,7 @@ module babylontower
 go 1.25.6
 
 require (
+	github.com/chzyer/readline v1.5.1
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/ipfs/go-cid v0.5.0
 	github.com/ipfs/go-log/v2 v2.5.1
