@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package messenger;
+
+option go_package = "babylontower/pkg/proto";
+
+// Message represents a plaintext message (what the user types)
+message Message {
+  string text = 1;
+  uint64 timestamp = 2;  // Unix timestamp (seconds)
+}
+
+// Envelope is the encrypted container for a Message
+message Envelope {
+  bytes ciphertext = 1;       // Encrypted Message (XChaCha20-Poly1305)
+  bytes ephemeral_pubkey = 2; // X25519 ephemeral public key (32 bytes)
+  bytes nonce = 3;            // 24-byte nonce for XChaCha20-Poly1305
+}
+
+// SignedEnvelope is the signed and self-contained unit sent over IPFS
+message SignedEnvelope {
+  bytes envelope = 1;         // Serialized Envelope
+  bytes signature = 2;        // Ed25519 signature of envelope (64 bytes)
+  bytes sender_pubkey = 3;    // Ed25519 public key of sender (32 bytes)
+}
+
+// Contact represents a contact stored locally (not transmitted)
+message Contact {
+  bytes public_key = 1;       // Contact's Ed25519 public key (32 bytes)
+  string display_name = 2;    // Optional nickname for the contact
+  uint64 created_at = 3;      // Unix timestamp when contact was added
+}
