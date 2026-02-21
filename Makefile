@@ -113,7 +113,7 @@ uninstall-hooks:
 ## install-deps: Install development dependencies
 install-deps:
 	@echo "Installing development dependencies..."
-	@$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint/v2@latest
 
 help:
 	@echo "Babylon Tower - Available commands:"
