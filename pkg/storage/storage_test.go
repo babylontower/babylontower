@@ -58,16 +58,16 @@ func createTestEnvelopeWithNonce(text string, senderPubKey, nonce []byte) *pb.Si
 
 	// Create envelope (with dummy encryption for testing)
 	env := &pb.Envelope{
-		Ciphertext:    msgData, // Not actually encrypted in test
+		Ciphertext:      msgData, // Not actually encrypted in test
 		EphemeralPubkey: make([]byte, 32),
-		Nonce:         nonce,
+		Nonce:           nonce,
 	}
 	envData, _ := proto.Marshal(env)
 
 	// Create signed envelope (with dummy signature for testing)
 	return &pb.SignedEnvelope{
-		Envelope:    envData,
-		Signature:   make([]byte, 64), // Dummy signature
+		Envelope:     envData,
+		Signature:    make([]byte, 64), // Dummy signature
 		SenderPubkey: senderPubKey,
 	}
 }
@@ -374,15 +374,15 @@ func TestMessageOrdering(t *testing.T) {
 		msgData, _ := proto.Marshal(msg)
 
 		env := &pb.Envelope{
-			Ciphertext:    msgData,
+			Ciphertext:      msgData,
 			EphemeralPubkey: make([]byte, 32),
-			Nonce:         []byte{byte(i)}, // Different nonce for each message
+			Nonce:           []byte{byte(i)}, // Different nonce for each message
 		}
 		envData, _ := proto.Marshal(env)
 
 		envelope := &pb.SignedEnvelope{
-			Envelope:    envData,
-			Signature:   make([]byte, 64),
+			Envelope:     envData,
+			Signature:    make([]byte, 64),
 			SenderPubkey: senderPubKey,
 		}
 

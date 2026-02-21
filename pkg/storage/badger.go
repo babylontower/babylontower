@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgraph-io/badger/v3"
 	pb "babylontower/pkg/proto"
+	"github.com/dgraph-io/badger/v3"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -17,9 +17,9 @@ const (
 	messagePrefix = "m:"
 
 	// Key component sizes
-	pubKeySize = 32
+	pubKeySize    = 32
 	timestampSize = 8
-	nonceSize = 24
+	nonceSize     = 24
 )
 
 // BadgerStorage implements Storage using BadgerDB

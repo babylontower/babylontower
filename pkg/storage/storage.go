@@ -1,8 +1,8 @@
 package storage
 
 import (
-	"github.com/mr-tron/base58"
 	pb "babylontower/pkg/proto"
+	"github.com/mr-tron/base58"
 )
 
 // Storage defines the interface for persistent storage
