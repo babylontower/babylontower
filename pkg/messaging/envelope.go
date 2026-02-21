@@ -42,6 +42,10 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 		return nil, fmt.Errorf("invalid recipient public key length: %d", len(recipientX25519PubKey))
 	}
 
+	logger.Debugw("building envelope", 
+		"recipient_pub", fmt.Sprintf("%x", recipientX25519PubKey[:8]),
+		"plaintext_len", len(plaintext))
+
 	// Generate ephemeral X25519 key pair
 	ephemeralPub, ephemeralPriv, err := generateEphemeralKeyPair()
 	if err != nil {
@@ -53,6 +57,8 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
 	}
+
+	logger.Debugw("computed shared secret", "secret", fmt.Sprintf("%x", sharedSecret[:8]))
 
 	// Encrypt with shared secret
 	nonce, ciphertext, err := crypto.EncryptWithSharedSecret(sharedSecret, plaintext)
@@ -66,6 +72,11 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 		EphemeralPubkey: ephemeralPub,
 		Nonce:           nonce,
 	}
+
+	logger.Debugw("envelope built", 
+		"ephemeral_pub", fmt.Sprintf("%x", ephemeralPub[:8]),
+		"nonce_len", len(nonce),
+		"ciphertext_len", len(ciphertext))
 
 	return envelope, nil
 }
@@ -170,8 +181,13 @@ func DecryptEnvelope(envelope *pb.Envelope, recipientX25519PrivKey []byte) ([]by
 		return nil, ErrInvalidEnvelope
 	}
 	if len(recipientX25519PrivKey) != crypto.SharedSecretSize {
-		return nil, fmt.Errorf("invalid recipient private key length")
+		return nil, fmt.Errorf("invalid recipient private key length: %d", len(recipientX25519PrivKey))
 	}
+
+	logger.Debugw("decrypting envelope", 
+		"ephemeral_pub", fmt.Sprintf("%x", envelope.EphemeralPubkey[:8]),
+		"nonce_len", len(envelope.Nonce),
+		"ciphertext_len", len(envelope.Ciphertext))
 
 	// Compute shared secret: X25519(recipient_static_priv, ephemeral_pub)
 	sharedSecret, err := crypto.ComputeSharedSecret(recipientX25519PrivKey, envelope.EphemeralPubkey)
@@ -179,11 +195,15 @@ func DecryptEnvelope(envelope *pb.Envelope, recipientX25519PrivKey []byte) ([]by
 		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
 	}
 
+	logger.Debugw("computed shared secret", "secret", fmt.Sprintf("%x", sharedSecret[:8]))
+
 	// Decrypt ciphertext
 	plaintext, err := crypto.DecryptWithSharedSecret(sharedSecret, envelope.Nonce, envelope.Ciphertext)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
+
+	logger.Debugw("decryption successful", "plaintext_len", len(plaintext))
 
 	return plaintext, nil
 }

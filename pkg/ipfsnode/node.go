@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-multihash"
@@ -78,6 +79,7 @@ type Node struct {
 	dht        *dht.IpfsDHT
 	pubsub     *pubsub.PubSub
 	discovery  *routing.RoutingDiscovery
+	mdns       mdns.Service
 	ctx        context.Context
 	cancel     context.CancelFunc
 	peerChan   <-chan peer.AddrInfo
@@ -178,17 +180,21 @@ func (n *Node) Start() error {
 	// Create discovery service
 	n.discovery = routing.NewRoutingDiscovery(dhtNode)
 
-	// Bootstrap DHT
+	// Start mDNS for local network discovery (faster than DHT)
+	n.mdns = mdns.NewMdnsService(n.host, n.config.ProtocolID, n)
+	logger.Info("mDNS discovery enabled for local network")
+
+	// Bootstrap DHT (for wider network discovery)
 	if err := n.bootstrapDHT(); err != nil {
 		logger.Warnw("DHT bootstrap failed", "error", err)
-		// Continue anyway - may work in local network
+		// Continue anyway - mDNS will handle local discovery
 	}
 
 	// Start peer discovery
 	n.startPeerDiscovery()
 
 	n.isStarted = true
-	logger.Info("IPFS node started successfully")
+	logger.Infow("IPFS node started successfully", "mDNS", "enabled", "DHT", "enabled")
 
 	return nil
 }
@@ -207,6 +213,13 @@ func (n *Node) Stop() error {
 	// Close all topics
 	if n.topicCache != nil {
 		n.topicCache.closeAll()
+	}
+
+	// Stop mDNS service
+	if n.mdns != nil {
+		if err := n.mdns.Close(); err != nil {
+			logger.Warnw("mDNS close error", "error", err)
+		}
 	}
 
 	// Close DHT
@@ -296,6 +309,22 @@ func (n *Node) Context() context.Context {
 // IsStarted returns true if the node is running
 func (n *Node) IsStarted() bool {
 	return n.isStarted
+}
+
+// HandlePeerFound is called by mDNS when a peer is discovered
+// This implements the mdns.PeerNotif interface
+func (n *Node) HandlePeerFound(peerInfo peer.AddrInfo) {
+	logger.Infow("mDNS discovered peer", "peer", peerInfo.ID, "addrs", peerInfo.Addrs)
+	
+	// Try to connect to discovered peer
+	ctx, cancel := context.WithTimeout(n.ctx, ConnectionTimeout)
+	defer cancel()
+	
+	if err := n.host.Connect(ctx, peerInfo); err != nil {
+		logger.Debugw("failed to connect to mDNS discovered peer", "peer", peerInfo.ID, "error", err)
+	} else {
+		logger.Infow("connected to mDNS discovered peer", "peer", peerInfo.ID)
+	}
 }
 
 // PeerID returns the node's peer ID

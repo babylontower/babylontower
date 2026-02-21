@@ -23,9 +23,11 @@ type SendResult struct {
 // 1. Build message
 // 2. Encrypt with recipient's X25519 public key
 // 3. Sign with sender's Ed25519 private key
-// 4. Add to IPFS (get CID)
-// 5. Publish CID via PubSub to recipient's topic
-// 6. Store message locally
+// 4. Publish signed envelope via PubSub to recipient's topic
+// 5. Store message locally
+//
+// Note: For PoC, we send the envelope directly via PubSub instead of storing in IPFS
+// and sending CID. This avoids the IPFS Get limitation in the PoC.
 func (s *Service) SendMessage(
 	text string,
 	recipientEd25519PubKey []byte,
@@ -76,16 +78,10 @@ func (s *Service) SendMessage(
 		return nil, fmt.Errorf("failed to marshal signed envelope: %w", err)
 	}
 
-	// Add to IPFS to get CID
-	cidStr, err := s.ipfsNode.Add(envelopeBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add envelope to IPFS: %w", err)
-	}
-
-	// Publish CID via PubSub to recipient's topic
-	cidBytes := []byte(cidStr)
-	if err := s.ipfsNode.PublishTo(recipientEd25519PubKey, cidBytes); err != nil {
-		return nil, fmt.Errorf("failed to publish CID: %w", err)
+	// Publish envelope directly via PubSub to recipient's topic
+	// This avoids the IPFS Get limitation in PoC
+	if err := s.ipfsNode.PublishTo(recipientEd25519PubKey, envelopeBytes); err != nil {
+		return nil, fmt.Errorf("failed to publish envelope: %w", err)
 	}
 
 	// Store message locally (sent messages)
@@ -95,7 +91,10 @@ func (s *Service) SendMessage(
 		// Don't fail the send if storage fails
 	}
 
-	logger.Infow("message sent", "cid", cidStr, "to", fmt.Sprintf("%x", recipientEd25519PubKey))
+	logger.Infow("message sent", "to", fmt.Sprintf("%x", recipientEd25519PubKey), "text", msg.Text)
+
+	// Generate a pseudo-CID for reference (hash of envelope)
+	cidStr := fmt.Sprintf("poc-%x", envelopeBytes[:8])
 
 	return &SendResult{
 		SignedEnvelope: signedEnvelope,

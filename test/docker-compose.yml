@@ -1,0 +1,56 @@
+version: '3.8'
+
+# Docker Compose for running two Babylon Tower instances
+# Used for Phase 6 integration testing
+
+services:
+  # Instance 1 (Alice)
+  babylon-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: babylon-alice
+    hostname: babylon-alice
+    volumes:
+      # Persist identity and data for instance 1
+      - ./test-data/instance1:/home/babylon/.babylontower
+    networks:
+      - babylon-net
+    ports:
+      - "4001:4001"  # IPFS TCP
+      - "4002:4002"  # IPFS WebSocket
+    environment:
+      - BABYLON_INSTANCE=alice
+      - BABYLON_DATA_DIR=/home/babylon/.babylontower
+    stdin_open: true
+    tty: true
+    restart: "no"
+
+  # Instance 2 (Bob)
+  babylon-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: babylon-bob
+    hostname: babylon-bob
+    volumes:
+      # Persist identity and data for instance 2
+      - ./test-data/instance2:/home/babylon/.babylontower
+    networks:
+      - babylon-net
+    ports:
+      - "4011:4001"  # IPFS TCP (different host port)
+      - "4012:4002"  # IPFS WebSocket (different host port)
+    environment:
+      - BABYLON_INSTANCE=bob
+      - BABYLON_DATA_DIR=/home/babylon/.babylontower
+    stdin_open: true
+    tty: true
+    restart: "no"
+
+networks:
+  babylon-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

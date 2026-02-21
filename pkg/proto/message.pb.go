@@ -198,12 +198,13 @@ func (x *SignedEnvelope) GetSenderPubkey() []byte {
 
 // Contact represents a contact stored locally (not transmitted)
 type Contact struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey     []byte                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`       // Contact's Ed25519 public key (32 bytes)
-	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // Optional nickname for the contact
-	CreatedAt     uint64                 `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`      // Unix timestamp when contact was added
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey       []byte                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`                     // Contact's Ed25519 public key (32 bytes)
+	DisplayName     string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`               // Optional nickname for the contact
+	CreatedAt       uint64                 `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`                    // Unix timestamp when contact was added
+	X25519PublicKey []byte                 `protobuf:"bytes,4,opt,name=x25519_public_key,json=x25519PublicKey,proto3" json:"x25519_public_key,omitempty"` // Contact's X25519 public key (32 bytes) for encryption
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Contact) Reset() {
@@ -257,6 +258,13 @@ func (x *Contact) GetCreatedAt() uint64 {
 	return 0
 }
 
+func (x *Contact) GetX25519PublicKey() []byte {
+	if x != nil {
+		return x.X25519PublicKey
+	}
+	return nil
+}
+
 var File_proto_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_proto_rawDesc = "" +
@@ -274,13 +282,14 @@ const file_proto_message_proto_rawDesc = "" +
 	"\x0eSignedEnvelope\x12\x1a\n" +
 	"\benvelope\x18\x01 \x01(\fR\benvelope\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\fR\tsignature\x12#\n" +
-	"\rsender_pubkey\x18\x03 \x01(\fR\fsenderPubkey\"j\n" +
+	"\rsender_pubkey\x18\x03 \x01(\fR\fsenderPubkey\"\x96\x01\n" +
 	"\aContact\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\fR\tpublicKey\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\x04R\tcreatedAtB\x18Z\x16babylontower/pkg/protob\x06proto3"
+	"created_at\x18\x03 \x01(\x04R\tcreatedAt\x12*\n" +
+	"\x11x25519_public_key\x18\x04 \x01(\fR\x0fx25519PublicKeyB\x18Z\x16babylontower/pkg/protob\x06proto3"
 
 var (
 	file_proto_message_proto_rawDescOnce sync.Once

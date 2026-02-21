@@ -1,4 +1,4 @@
-.PHONY: build test lint clean run proto help
+.PHONY: build test lint clean run proto help test-integration test-e2e docker-build docker-run docker-stop docker-clean
 
 # Version
 VERSION=0.0.1
@@ -25,6 +25,10 @@ PROTO_OUT=pkg/proto
 
 # Linter
 LINTER=golangci-lint
+
+# Test directories
+TEST_DIR=test
+TEST_SCRIPTS_DIR=scripts/test
 
 all: build
 
@@ -116,6 +120,70 @@ uninstall-hooks:
 install-deps:
 	@echo "Installing development dependencies..."
 	@$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint/v2@latest
+
+## test-integration: Run integration tests (requires build)
+test-integration: build
+	@echo "Running integration tests..."
+	@$(GOTEST) -v -tags=integration ./$(TEST_DIR)/...
+
+## test-e2e: Run end-to-end tests with two instances
+test-e2e: build
+	@echo "Running end-to-end tests..."
+	@$(GOTEST) -v -tags=integration ./$(TEST_DIR)/... -run TestTwoInstance
+
+## docker-build: Build Docker image for testing
+docker-build:
+	@echo "Building Docker image..."
+	@docker build -t babylontower:test -f $(TEST_DIR)/Dockerfile .
+
+## docker-run: Run two instances using docker-compose
+docker-run: docker-build
+	@echo "Starting two Docker instances..."
+	@cd $(TEST_DIR) && docker-compose up -d
+	@echo ""
+	@echo "Instances started:"
+	@echo "  - Alice: docker exec -it babylon-alice /app/messenger"
+	@echo "  - Bob:   docker exec -it babylon-bob /app/messenger"
+
+## docker-stop: Stop Docker containers
+docker-stop:
+	@echo "Stopping Docker containers..."
+	@cd $(TEST_DIR) && docker-compose down
+
+## docker-clean: Clean up Docker containers and test data
+docker-clean: docker-stop
+	@echo "Cleaning up Docker resources..."
+	@cd $(TEST_DIR) && docker-compose rm -f
+	@rm -rf test-data/instance1 test-data/instance2
+	@echo "Cleanup complete"
+
+## launch-test: Launch two instances locally for manual testing
+launch-test: build
+	@echo "Launching two instances for manual testing..."
+	@echo ""
+	@echo "Open two terminals and run:"
+	@echo "  Terminal 1: ./scripts/test/launch-instance1.sh"
+	@echo "  Terminal 2: ./scripts/test/launch-instance2.sh"
+	@echo ""
+
+## launch-test-docker: Launch two instances in Docker for manual testing
+launch-test-docker:
+	@echo "Launching two Docker instances for manual testing..."
+	@$(TEST_SCRIPTS_DIR)/launch-two-instances.sh docker
+
+## launch-instance1: Launch Instance 1 (Alice)
+launch-instance1: build
+	@$(TEST_SCRIPTS_DIR)/launch-instance1.sh
+
+## launch-instance2: Launch Instance 2 (Bob)
+launch-instance2: build
+	@$(TEST_SCRIPTS_DIR)/launch-instance2.sh
+
+## clean-test: Clean test data and artifacts
+clean-test:
+	@echo "Cleaning test artifacts..."
+	@$(TEST_SCRIPTS_DIR)/clean-test-data.sh
+	@rm -f $(TEST_DIR)/coverage.out $(TEST_DIR)/coverage.html
 
 help:
 	@echo "Babylon Tower - Available commands:"

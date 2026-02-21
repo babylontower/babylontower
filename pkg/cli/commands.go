@@ -68,30 +68,31 @@ func NewCommandHandler(
 // HandleCommand processes a command and returns true if the app should exit
 func (h *CommandHandler) HandleCommand(input string) bool {
 	input = strings.TrimSpace(input)
-	
-	if input == "" {
-		return false
-	}
-	
-	// Check if in chat mode
+
+	// Check if in chat mode first (empty line exits chat)
 	if h.inChatMode {
 		return h.handleChatInput(input)
 	}
-	
+
+	// Empty input when not in chat mode - ignore
+	if input == "" {
+		return false
+	}
+
 	// Parse command
 	if !strings.HasPrefix(input, "/") {
 		h.output(FormatInfo("Not a command. Type /help for available commands."))
 		return false
 	}
-	
+
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
 		return false
 	}
-	
+
 	cmd := strings.ToLower(parts[0])
 	args := parts[1:]
-	
+
 	switch cmd {
 	case "/help":
 		h.handleHelp()
@@ -105,12 +106,14 @@ func (h *CommandHandler) HandleCommand(input string) bool {
 		h.handleChat(args)
 	case "/history":
 		h.handleHistory(args)
+	case "/connect":
+		h.handleConnect(args)
 	case "/exit":
 		return true
 	default:
 		h.output(FormatErrorString(fmt.Sprintf("Unknown command: %s. Type /help for help.", cmd)))
 	}
-	
+
 	return false
 }
 
@@ -119,15 +122,38 @@ func (h *CommandHandler) handleHelp() {
 	h.output(FormatHelp())
 }
 
-// handleMyID displays the user's public key
+// handleMyID displays the user's public keys (Ed25519 and X25519)
 func (h *CommandHandler) handleMyID() {
-	hexKey := FormatPublicKey(h.ed25519PubKey)
-	base58Key := base58.Encode(h.ed25519PubKey)
+	ed25519Hex := FormatPublicKey(h.ed25519PubKey)
+	ed25519Base58 := base58.Encode(h.ed25519PubKey)
+	x25519Hex := hex.EncodeToString(h.x25519PubKey)
+	x25519Base58 := base58.Encode(h.x25519PubKey)
+
+	h.output(FormatInfo("Your Public Keys:"))
+	h.output("")
+	h.output("Ed25519 (for signatures and verification):")
+	h.output(fmt.Sprintf("  Hex:    %s", ed25519Hex))
+	h.output(fmt.Sprintf("  Base58: %s", ed25519Base58))
+	h.output("")
+	h.output("X25519 (for encryption - share this with contacts):")
+	h.output(fmt.Sprintf("  Hex:    %s", x25519Hex))
+	h.output(fmt.Sprintf("  Base58: %s", x25519Base58))
+	h.output("")
+	h.output(FormatInfo("Share your X25519 public key with contacts so they can encrypt messages to you."))
+	h.output(FormatInfo("Your Ed25519 key is used to verify your signatures."))
+	h.output("")
 	
-	h.output(FormatInfo("Your Public Key:"))
-	h.output(fmt.Sprintf("  Hex:    %s", hexKey))
-	h.output(fmt.Sprintf("  Base58: %s", base58Key))
-	h.output("\nShare your public key with contacts so they can message you.")
+	// Show multiaddr for direct connection
+	if h.ipfsNode != nil && h.ipfsNode.IsStarted() {
+		addrs := h.ipfsNode.Multiaddrs()
+		if len(addrs) > 0 {
+			h.output(FormatInfo("Your Node Multiaddr (for /connect command):"))
+			peerID := h.ipfsNode.PeerID()
+			for _, addr := range addrs {
+				h.output(fmt.Sprintf("  %s/p2p/%s", addr, peerID))
+			}
+		}
+	}
 }
 
 // handleAdd adds a new contact
@@ -135,6 +161,8 @@ func (h *CommandHandler) handleAdd(args []string) {
 	if len(args) == 0 {
 		h.output(FormatErrorString("Usage: /add <pubkey> [nickname]"))
 		h.output(FormatInfo("Public key can be in hex or base58 format."))
+		h.output(FormatInfo("To enable encryption, also share your X25519 key:"))
+		h.output(FormatInfo("  /add <ed25519_pubkey> <nickname> <x25519_pubkey>"))
 		return
 	}
 
@@ -152,7 +180,7 @@ func (h *CommandHandler) handleAdd(args []string) {
 			return
 		}
 	}
-	
+
 	// Validate key length
 	if len(pubKey) != ed25519.PublicKeySize {
 		h.output(FormatErrorString(fmt.Sprintf("Invalid public key length: expected %d bytes, got %d", ed25519.PublicKeySize, len(pubKey))))
@@ -177,11 +205,36 @@ func (h *CommandHandler) handleAdd(args []string) {
 		displayName = strings.Join(args[1:], " ")
 	}
 
+	// Get optional X25519 public key (last argument if it looks like a key)
+	var x25519PubKey []byte
+	if len(args) >= 2 {
+		// Check if last argument looks like an X25519 key (64 hex chars or 32+ base58 chars)
+		lastArg := args[len(args)-1]
+		if potentialKey, err := hex.DecodeString(lastArg); err == nil && len(potentialKey) == 32 {
+			x25519PubKey = potentialKey
+			// Remove X25519 key from nickname
+			if len(args) > 2 {
+				displayName = strings.Join(args[1:len(args)-1], " ")
+			} else {
+				displayName = ""
+			}
+		} else if potentialKey, err := base58.Decode(lastArg); err == nil && len(potentialKey) == 32 {
+			x25519PubKey = potentialKey
+			// Remove X25519 key from nickname
+			if len(args) > 2 {
+				displayName = strings.Join(args[1:len(args)-1], " ")
+			} else {
+				displayName = ""
+			}
+		}
+	}
+
 	// Create contact
 	contact := &pb.Contact{
-		PublicKey:   pubKey,
-		DisplayName: displayName,
-		CreatedAt:   uint64(timeNow().Unix()),
+		PublicKey:       pubKey,
+		DisplayName:     displayName,
+		CreatedAt:       uint64(timeNow().Unix()),
+		X25519PublicKey: x25519PubKey,
 	}
 
 	// Store contact
@@ -189,12 +242,19 @@ func (h *CommandHandler) handleAdd(args []string) {
 		h.output(FormatErrorString(fmt.Sprintf("Failed to add contact: %v", err)))
 		return
 	}
-	
+
 	name := displayName
 	if name == "" {
 		name = FormatPublicKeyBase58(pubKey)
 	}
-	h.output(FormatSuccess(fmt.Sprintf("Contact added: %s", name)))
+	
+	if len(x25519PubKey) > 0 {
+		h.output(FormatSuccess(fmt.Sprintf("Contact added: %s (with encryption)", name)))
+	} else {
+		h.output(FormatSuccess(fmt.Sprintf("Contact added: %s", name)))
+		h.output(FormatInfo("Note: No X25519 key provided. Message encryption will not work."))
+		h.output(FormatInfo("Ask contact to share their X25519 public key."))
+	}
 }
 
 // handleList lists all contacts
@@ -290,59 +350,36 @@ func (h *CommandHandler) sendMessage(text string) error {
 	if h.chatContactPubKey == nil {
 		return fmt.Errorf("no active chat")
 	}
-	
-	// For PoC, we need the recipient's X25519 public key
-	// This is a limitation - in a full implementation, we'd store it with the contact
-	// For now, we'll return an error explaining the limitation
-	recipientX25519Key, err := messaging.GetContactX25519PubKey(h.chatContactPubKey)
+
+	// Get contact from storage to retrieve X25519 key
+	contact, err := h.storage.GetContact(h.chatContactPubKey)
 	if err != nil {
-		// For PoC demo, explain the limitation
-		return fmt.Errorf("recipient X25519 key not available (PoC limitation - contacts need to share X25519 keys)")
+		return fmt.Errorf("failed to get contact: %w", err)
 	}
-	
-	// Create the encrypted message
-	signedEnvelope, err := messaging.CreateOutgoingMessage(
-		text,
-		recipientX25519Key,
-		h.ed25519PrivKey,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
-	}
-	
-	// Serialize envelope
-	envelopeBytes, err := messaging.SerializeEnvelope(signedEnvelope)
-	if err != nil {
-		return fmt.Errorf("failed to serialize envelope: %w", err)
-	}
-	
-	// Add to IPFS to get CID
-	cidStr, err := h.ipfsNode.Add(envelopeBytes)
-	if err != nil {
-		return fmt.Errorf("failed to add to IPFS: %w", err)
+	if contact == nil {
+		return fmt.Errorf("contact not found")
 	}
 
-	// Get recipient's topic
-	topic := ipfsnode.TopicFromPublicKey(h.chatContactPubKey)
+	// Check if we have the recipient's X25519 key
+	if len(contact.X25519PublicKey) != 32 {
+		return fmt.Errorf("recipient X25519 key not available - ask contact to share their X25519 public key")
+	}
 
-	// Publish CID via PubSub
-	if err := h.ipfsNode.Publish(topic, []byte(cidStr)); err != nil {
-		return fmt.Errorf("failed to publish message: %w", err)
+	// Use the messaging service to send the message
+	result, err := h.messaging.SendMessageToContact(text, h.chatContactPubKey, contact.X25519PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to send message: %w", err)
 	}
-	
-	// Store message locally
-	if err := h.storage.AddMessage(h.chatContactPubKey, signedEnvelope); err != nil {
-		// Log but don't fail - message was sent
-		logger.Warnw("failed to store sent message", "error", err)
-	}
-	
+
 	// Display sent message
 	msg := &pb.Message{
 		Text:      text,
 		Timestamp: uint64(timeNow().Unix()),
 	}
 	h.output(FormatMessage(msg, h.chatContactName, true))
-	
+
+	logger.Debugw("message sent via service", "cid", result.CID, "text", text)
+
 	return nil
 }
 
@@ -398,22 +435,22 @@ func (h *CommandHandler) handleHistory(args []string) {
 			return
 		}
 	}
-	
+
 	// Get messages
 	envelopes, err := h.storage.GetMessages(contact.PublicKey, limit, 0)
 	if err != nil {
 		h.output(FormatErrorString(fmt.Sprintf("Failed to get messages: %v", err)))
 		return
 	}
-	
+
 	if len(envelopes) == 0 {
 		h.output(FormatInfo(fmt.Sprintf("No messages with %s.", contact.DisplayName)))
 		return
 	}
-	
+
 	// Display messages
 	h.output(fmt.Sprintf("\n=== History with %s ===\n", contact.DisplayName))
-	
+
 	// For PoC, we can't decrypt messages without the full flow
 	// Show placeholder messages
 	for _, env := range envelopes {
@@ -421,8 +458,27 @@ func (h *CommandHandler) handleHistory(args []string) {
 		isOutgoing := string(env.SenderPubkey) == string(h.ed25519PubKey)
 		h.output(FormatMessageFromEnvelope(env, contact.DisplayName, isOutgoing))
 	}
-	
+
 	h.output("==========================\n")
+}
+
+// handleConnect connects to a peer node by multiaddr
+func (h *CommandHandler) handleConnect(args []string) {
+	if len(args) == 0 {
+		h.output(FormatErrorString("Usage: /connect <multiaddr>"))
+		h.output(FormatInfo("Multiaddr format: /ip4/127.0.0.1/tcp/4001/p2p/QmPeerID"))
+		h.output(FormatInfo("Get multiaddr from other node using /myid"))
+		return
+	}
+
+	maddr := args[0]
+
+	if err := h.ipfsNode.ConnectToPeer(maddr); err != nil {
+		h.output(FormatErrorString(fmt.Sprintf("Failed to connect: %v", err)))
+		return
+	}
+
+	h.output(FormatSuccess("Connected to peer!"))
 }
 
 // GetChatContactPubKey returns the current chat contact's public key

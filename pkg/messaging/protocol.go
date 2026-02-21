@@ -171,27 +171,19 @@ func (s *Service) listenForMessages() {
 
 // handlePubSubMessage processes an incoming PubSub message
 func (s *Service) handlePubSubMessage(pubsubMsg *ipfsnode.Message) {
-	// The PubSub message contains a CID string
-	cidStr := string(pubsubMsg.Data)
-	logger.Debugw("received CID via PubSub", "cid", cidStr, "from", pubsubMsg.From)
+	// The PubSub message contains the encrypted envelope directly
+	// (For PoC, we send envelopes directly instead of CIDs)
+	logger.Debugw("received envelope via PubSub", "size", len(pubsubMsg.Data), "from", pubsubMsg.From)
 
-	// Fetch the SignedEnvelope from IPFS
-	// Note: In PoC, direct block fetch is not implemented
-	// For now, we log the limitation
-	logger.Warnw("IPFS Get not implemented in PoC - message cannot be fetched", "cid", cidStr)
-
-	// In a full implementation:
-	// envelope, err := s.ipfsNode.Get(cidStr)
-	// if err != nil {
-	//     logger.Warnw("failed to fetch envelope", "cid", cidStr, "error", err)
-	//     return
-	// }
-	// s.processEnvelope(envelope)
+	// Process the envelope directly
+	if err := s.processEnvelope(pubsubMsg.Data); err != nil {
+		logger.Errorw("failed to process envelope", "error", err, "from", pubsubMsg.From)
+		return
+	}
 }
 
 // processEnvelope verifies, decrypts, and stores an incoming envelope
 // This is called internally when a PubSub message is received
-// nolint:unused
 func (s *Service) processEnvelope(envelopeBytes []byte) error {
 	// Parse signed envelope
 	signedEnvelope, err := ParseSignedEnvelope(envelopeBytes)
@@ -251,7 +243,7 @@ func (s *Service) processEnvelope(envelopeBytes []byte) error {
 
 	select {
 	case s.messageChan <- event:
-		logger.Debugw("message event emitted", "from", fmt.Sprintf("%x", senderPubKey))
+		logger.Infow("message event emitted", "from", fmt.Sprintf("%x", senderPubKey), "text", msg.Text)
 	default:
 		logger.Warnw("message channel full, dropping event")
 	}

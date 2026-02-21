@@ -41,8 +41,8 @@ func main() {
 }
 
 func run() error {
-	// Setup logging
-	if err := log.SetLogLevel("babylontower", "info"); err != nil {
+	// Setup logging - use debug level for development
+	if err := log.SetLogLevel("babylontower", "debug"); err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
 	}
 
