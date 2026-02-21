@@ -158,7 +158,7 @@ func FormatBanner(version string, publicKey string) string {
 	sb.WriteString("║     Decentralized P2P Messenger          ║\n")
 	sb.WriteString("╚══════════════════════════════════════════╝\n")
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("Your public key: %s\n", publicKey))
+	fmt.Fprintf(&sb, "Your public key: %s\n", publicKey)
 	sb.WriteString("\nType /help for available commands.\n\n")
 	return sb.String()
 }
@@ -167,8 +167,8 @@ func FormatBanner(version string, publicKey string) string {
 func FormatChatHeader(contactName string, contactPubKey string) string {
 	var sb strings.Builder
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("━━━ Chat with %s ━━━\n", contactName))
-	sb.WriteString(fmt.Sprintf("Public key: %s\n", contactPubKey))
+	fmt.Fprintf(&sb, "━━━ Chat with %s ━━━\n", contactName)
+	fmt.Fprintf(&sb, "Public key: %s\n", contactPubKey)
 	sb.WriteString("Type your message and press Enter to send.\n")
 	sb.WriteString("Press Enter on an empty line to exit chat.\n")
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
