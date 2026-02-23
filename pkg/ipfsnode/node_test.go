@@ -607,3 +607,286 @@ func TestMessageString(t *testing.T) {
 
 	t.Logf("Message string: %s", str)
 }
+
+// TestBootstrapResult tests the BootstrapResult struct
+func TestBootstrapResult(t *testing.T) {
+	result := &BootstrapResult{
+		StoredPeersAttempted: 5,
+		StoredPeersConnected: 3,
+		ConfigPeersAttempted: 10,
+		ConfigPeersConnected: 7,
+		TotalConnected:       10,
+		RoutingTableSize:     15,
+		Duration:             5 * time.Second,
+	}
+
+	if result.StoredPeersAttempted != 5 {
+		t.Errorf("StoredPeersAttempted mismatch: %d", result.StoredPeersAttempted)
+	}
+	if result.TotalConnected != 10 {
+		t.Errorf("TotalConnected mismatch: %d", result.TotalConnected)
+	}
+	if result.RoutingTableSize != 15 {
+		t.Errorf("RoutingTableSize mismatch: %d", result.RoutingTableSize)
+	}
+}
+
+// TestConfigWithStoredPeers tests node config accepts stored peers
+func TestConfigWithStoredPeers(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create test stored peers
+	storedPeers := []peer.AddrInfo{
+		{
+			ID:    peer.ID("QmTestPeer1"),
+			Addrs: nil,
+		},
+		{
+			ID:    peer.ID("QmTestPeer2"),
+			Addrs: nil,
+		},
+	}
+
+	config := &Config{
+		RepoDir:     tmpDir,
+		StoredPeers: storedPeers,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+	defer stopNode(node)()
+
+	if len(node.config.StoredPeers) != 2 {
+		t.Errorf("StoredPeers not set correctly: %d", len(node.config.StoredPeers))
+	}
+}
+
+// TestLoadStoredPeersEmpty tests loadStoredPeers with no stored peers
+func TestLoadStoredPeersEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		RepoDir:     tmpDir,
+		StoredPeers: nil,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+	defer stopNode(node)()
+
+	peers, err := node.loadStoredPeers()
+	if err != nil {
+		t.Errorf("loadStoredPeers should not fail with empty stored peers: %v", err)
+	}
+	if len(peers) != 0 {
+		t.Errorf("Expected 0 peers, got: %d", len(peers))
+	}
+}
+
+// TestLoadStoredPeers tests loadStoredPeers with stored peers
+func TestLoadStoredPeers(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	storedPeers := []peer.AddrInfo{
+		{
+			ID: peer.ID("QmStoredPeer1"),
+		},
+		{
+			ID: peer.ID("QmStoredPeer2"),
+		},
+	}
+
+	config := &Config{
+		RepoDir:     tmpDir,
+		StoredPeers: storedPeers,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+	defer stopNode(node)()
+
+	peers, err := node.loadStoredPeers()
+	if err != nil {
+		t.Errorf("loadStoredPeers failed: %v", err)
+	}
+	if len(peers) != 2 {
+		t.Errorf("Expected 2 stored peers, got: %d", len(peers))
+	}
+}
+
+// TestConnectToPeersParallel tests parallel peer connection
+func TestConnectToPeersParallel(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		RepoDir: tmpDir,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	if err := node.Start(); err != nil {
+		t.Fatalf("Failed to start node: %v", err)
+	}
+	defer stopNode(node)()
+
+	// Create empty peer list (no actual connections)
+	peers := []peer.AddrInfo{}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connected := node.connectToPeersParallel(ctx, peers)
+	if connected != 0 {
+		t.Errorf("Expected 0 connections with empty peer list, got: %d", connected)
+	}
+}
+
+// TestConnectToBootstrapPeersWithDNS tests DNS resolution for bootstrap peers
+func TestConnectToBootstrapPeersWithDNS(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		RepoDir: tmpDir,
+		// Use minimal bootstrap peers for testing
+		BootstrapPeers: []string{},
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	if err := node.Start(); err != nil {
+		t.Fatalf("Failed to start node: %v", err)
+	}
+	defer stopNode(node)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Test with empty bootstrap list
+	connected := node.connectToBootstrapPeersWithDNS(ctx)
+	if connected != 0 {
+		t.Errorf("Expected 0 connections with empty bootstrap list, got: %d", connected)
+	}
+}
+
+// TestDHTMaintenance tests that DHT maintenance runs
+func TestDHTMaintenance(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		RepoDir: tmpDir,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	if err := node.Start(); err != nil {
+		t.Fatalf("Failed to start node: %v", err)
+	}
+	defer stopNode(node)()
+
+	// DHT maintenance should be running in background
+	// Just verify the node doesn't crash
+	time.Sleep(100 * time.Millisecond)
+
+	// Get DHT info
+	dhtInfo := node.GetDHTInfo()
+	if dhtInfo == nil || !dhtInfo.IsStarted {
+		t.Error("DHT should be started")
+	}
+}
+
+// TestAdvertiseSelf tests self-advertisement to DHT
+func TestAdvertiseSelf(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		RepoDir: tmpDir,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	if err := node.Start(); err != nil {
+		t.Fatalf("Failed to start node: %v", err)
+	}
+	defer stopNode(node)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Advertise self
+	err = node.AdvertiseSelf(ctx)
+	if err != nil {
+		t.Logf("AdvertiseSelf returned: %v (may be expected in isolated test)", err)
+	}
+
+	// Check DHT info
+	dhtInfo := node.GetDHTInfo()
+	t.Logf("DHT info after advertise: routing_table=%d, connected=%d",
+		dhtInfo.RoutingTableSize, dhtInfo.ConnectedPeerCount)
+}
+
+// TestGetNetworkInfo tests network info retrieval
+func TestGetNetworkInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		RepoDir: tmpDir,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	if err := node.Start(); err != nil {
+		t.Fatalf("Failed to start node: %v", err)
+	}
+	defer stopNode(node)()
+
+	info := node.GetNetworkInfo()
+	if info == nil {
+		t.Fatal("Network info should not be nil")
+	}
+	if info.PeerID == "" {
+		t.Error("PeerID should not be empty")
+	}
+	if !info.IsStarted {
+		t.Error("IsStarted should be true")
+	}
+
+	t.Logf("Network info: PeerID=%s, ConnectedPeers=%d",
+		info.PeerID, info.ConnectedPeerCount)
+}
+
+// TestMDnsStats tests mDNS statistics
+func TestMDnsStats(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		RepoDir: tmpDir,
+	}
+
+	node, err := NewNode(config)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	if err := node.Start(); err != nil {
+		t.Fatalf("Failed to start node: %v", err)
+	}
+	defer stopNode(node)()
+
+	stats := node.GetMDnsStats()
+	t.Logf("mDNS stats: TotalDiscoveries=%d, LastPeerFound=%v",
+		stats.TotalDiscoveries, stats.LastPeerFound)
+}

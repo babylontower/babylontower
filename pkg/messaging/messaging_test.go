@@ -62,7 +62,7 @@ func TestBuildEnvelope(t *testing.T) {
 
 	plaintext := []byte("secret message")
 
-	envelope, err := BuildEnvelope(plaintext, recipientX25519Pub)
+	envelope, _, err := BuildEnvelope(plaintext, recipientX25519Pub)
 	if err != nil {
 		t.Fatalf("failed to build envelope: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestBuildEnvelope(t *testing.T) {
 func TestBuildEnvelope_InvalidKeyLength(t *testing.T) {
 	plaintext := []byte("test")
 
-	_, err := BuildEnvelope(plaintext, []byte("invalid"))
+	_, _, err := BuildEnvelope(plaintext, []byte("invalid"))
 	if err == nil {
 		t.Error("expected error for invalid key length")
 	}
@@ -297,7 +297,7 @@ func TestDecryptEnvelope(t *testing.T) {
 	plaintext, _ := proto.Marshal(msg)
 
 	// Build and sign envelope
-	envelope, err := BuildEnvelope(plaintext, recipientX25519Pub)
+	envelope, _, err := BuildEnvelope(plaintext, recipientX25519Pub)
 	if err != nil {
 		t.Fatalf("failed to build envelope: %v", err)
 	}

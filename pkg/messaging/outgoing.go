@@ -23,8 +23,9 @@ type SendResult struct {
 // 1. Build message
 // 2. Encrypt with recipient's X25519 public key
 // 3. Sign with sender's Ed25519 private key
-// 4. Publish signed envelope via PubSub to recipient's topic
-// 5. Store message locally
+// 4. Attempt to connect to recipient's peer (contact-aware routing)
+// 5. Publish signed envelope via PubSub to recipient's topic
+// 6. Store message locally
 //
 // Note: For PoC, we send the envelope directly via PubSub instead of storing in IPFS
 // and sending CID. This avoids the IPFS Get limitation in the PoC.
@@ -60,8 +61,8 @@ func (s *Service) SendMessage(
 		return nil, fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Build encrypted envelope
-	envelope, err := BuildEnvelope(plaintext, recipientX25519PubKey)
+	// Build encrypted envelope (includes ephemeral key pair generation)
+	envelope, ephemeralPriv, err := BuildEnvelope(plaintext, recipientX25519PubKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build envelope: %w", err)
 	}
@@ -72,21 +73,63 @@ func (s *Service) SendMessage(
 		return nil, fmt.Errorf("failed to sign envelope: %w", err)
 	}
 
-	// Serialize signed envelope
+	// Encrypt ephemeral private key for local storage only
+	// This allows the sender to decrypt their own messages from history
+	// IMPORTANT: This is NOT sent to the recipient - only stored locally
+	encryptedEphemeral, err := encryptEphemeralKey(
+		ephemeralPriv,
+		s.config.OwnX25519PrivKey,
+		recipientX25519PubKey,
+	)
+	if err != nil {
+		logger.Warnw("failed to encrypt ephemeral key", "error", err)
+		// Continue without storing encrypted key - message will still be sent
+		// but sender won't be able to decrypt from history
+	}
+
+	// Create a copy of signed envelope with encrypted ephemeral key for local storage
+	signedEnvelopeForStorage := &pb.SignedEnvelope{
+		Envelope:              signedEnvelope.Envelope,
+		Signature:             signedEnvelope.Signature,
+		SenderPubkey:          signedEnvelope.SenderPubkey,
+		EncryptedEphemeralPriv: encryptedEphemeral,
+	}
+
+	// Serialize signed envelope for transmission (WITHOUT encrypted ephemeral key)
 	envelopeBytes, err := proto.Marshal(signedEnvelope)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal signed envelope: %w", err)
 	}
 
+	// Contact-aware routing: Try to connect to recipient before sending
+	// This improves message delivery reliability
+	go func() {
+		// Add to active contacts
+		s.AddActiveContact(recipientEd25519PubKey)
+		s.UpdateContactActivity(recipientEd25519PubKey)
+
+		// Attempt connection (non-blocking, best effort)
+		if err := s.connectToPeerID(string(recipientEd25519PubKey)); err != nil {
+			logger.Debugw("pre-send connection attempt failed", "error", err)
+		}
+		
+		// Optimize pubsub mesh for better delivery
+		if err := s.OptimizePubSubMesh(recipientEd25519PubKey); err != nil {
+			logger.Debugw("pubsub mesh optimization failed", "error", err)
+		}
+	}()
+
 	// Publish envelope directly via PubSub to recipient's topic
 	// This avoids the IPFS Get limitation in PoC
+	// Note: envelopeBytes is from signedEnvelope WITHOUT encrypted ephemeral key
 	if err := s.ipfsNode.PublishTo(recipientEd25519PubKey, envelopeBytes); err != nil {
 		return nil, fmt.Errorf("failed to publish envelope: %w", err)
 	}
 
 	// Store message locally (sent messages)
 	// We store under the recipient's key so we can see our sent messages in the conversation
-	if err := s.storage.AddMessage(recipientEd25519PubKey, signedEnvelope); err != nil {
+	// Use signedEnvelopeForStorage which includes the encrypted ephemeral key for decryption
+	if err := s.storage.AddMessage(recipientEd25519PubKey, signedEnvelopeForStorage); err != nil {
 		logger.Warnw("failed to store sent message", "error", err)
 		// Don't fail the send if storage fails
 	}
@@ -129,7 +172,7 @@ func BuildMessageForTesting(
 	}
 
 	// Build encrypted envelope
-	envelope, err := BuildEnvelope(plaintext, recipientX25519PubKey)
+	envelope, _, err := BuildEnvelope(plaintext, recipientX25519PubKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build envelope: %w", err)
 	}

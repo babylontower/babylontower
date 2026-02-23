@@ -22,6 +22,7 @@ message SignedEnvelope {
   bytes envelope = 1;         // Serialized Envelope
   bytes signature = 2;        // Ed25519 signature of envelope (64 bytes)
   bytes sender_pubkey = 3;    // Ed25519 public key of sender (32 bytes)
+  bytes encrypted_ephemeral_priv = 4;  // Encrypted ephemeral X25519 private key (for sender's history only, empty when sent)
 }
 
 // Contact represents a contact stored locally (not transmitted)
@@ -30,4 +31,7 @@ message Contact {
   string display_name = 2;         // Optional nickname for the contact
   uint64 created_at = 3;           // Unix timestamp when contact was added
   bytes x25519_public_key = 4;     // Contact's X25519 public key (32 bytes) for encryption
+  string peer_id = 5;              // Contact's libp2p PeerID (for direct connection)
+  repeated string multiaddrs = 6;  // Known multiaddresses for the contact
+  uint64 last_seen = 7;            // Unix timestamp when contact was last seen online
 }

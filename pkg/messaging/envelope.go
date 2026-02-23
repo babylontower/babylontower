@@ -36,26 +36,26 @@ func BuildMessageNow(text string) *pb.Message {
 }
 
 // BuildEnvelope encrypts a message for the recipient and creates an Envelope
-// Returns the envelope, ephemeral private key (for testing), and error
-func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope, error) {
+// Returns the envelope, ephemeral private key (for local storage), and error
+func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope, []byte, error) {
 	if len(recipientX25519PubKey) != crypto.SharedSecretSize {
-		return nil, fmt.Errorf("invalid recipient public key length: %d", len(recipientX25519PubKey))
+		return nil, nil, fmt.Errorf("invalid recipient public key length: %d", len(recipientX25519PubKey))
 	}
 
-	logger.Debugw("building envelope", 
+	logger.Debugw("building envelope",
 		"recipient_pub", fmt.Sprintf("%x", recipientX25519PubKey[:8]),
 		"plaintext_len", len(plaintext))
 
 	// Generate ephemeral X25519 key pair
 	ephemeralPub, ephemeralPriv, err := generateEphemeralKeyPair()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ephemeral key: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate ephemeral key: %w", err)
 	}
 
 	// Compute shared secret: X25519(ephemeral_priv, recipient_static_pub)
 	sharedSecret, err := crypto.ComputeSharedSecret(ephemeralPriv, recipientX25519PubKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
+		return nil, nil, fmt.Errorf("failed to compute shared secret: %w", err)
 	}
 
 	logger.Debugw("computed shared secret", "secret", fmt.Sprintf("%x", sharedSecret[:8]))
@@ -63,7 +63,7 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 	// Encrypt with shared secret
 	nonce, ciphertext, err := crypto.EncryptWithSharedSecret(sharedSecret, plaintext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt: %w", err)
+		return nil, nil, fmt.Errorf("failed to encrypt: %w", err)
 	}
 
 	// Build envelope
@@ -73,12 +73,12 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 		Nonce:           nonce,
 	}
 
-	logger.Debugw("envelope built", 
+	logger.Debugw("envelope built",
 		"ephemeral_pub", fmt.Sprintf("%x", ephemeralPub[:8]),
 		"nonce_len", len(nonce),
 		"ciphertext_len", len(ciphertext))
 
-	return envelope, nil
+	return envelope, ephemeralPriv, nil
 }
 
 // SignEnvelope signs an envelope with the sender's Ed25519 private key
@@ -239,7 +239,7 @@ func generateEphemeralKeyPair() (pubKey, privKey []byte, err error) {
 }
 
 // CreateOutgoingMessage performs the complete outgoing message flow
-// Returns the signed envelope and CID string
+// Returns the signed envelope
 func CreateOutgoingMessage(
 	text string,
 	recipientX25519PubKey []byte,
@@ -253,7 +253,7 @@ func CreateOutgoingMessage(
 	}
 
 	// Build encrypted envelope
-	envelope, err := BuildEnvelope(plaintext, recipientX25519PubKey)
+	envelope, _, err := BuildEnvelope(plaintext, recipientX25519PubKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build envelope: %w", err)
 	}
@@ -304,4 +304,96 @@ func ProcessIncomingMessage(
 	senderPubKey := ed25519.PublicKey(signedEnvelope.SenderPubkey)
 
 	return msg, senderPubKey, nil
+}
+
+// encryptEphemeralKey encrypts the ephemeral private key for local storage
+// Uses XChaCha20-Poly1305 with a key derived from X25519(sender_static_priv, recipient_static_pub)
+// This allows the sender to decrypt their own messages from history
+// IMPORTANT: This encrypted key is NOT sent over the network - only stored locally
+func encryptEphemeralKey(
+	ephemeralPrivKey []byte,
+	senderX25519PrivKey []byte,
+	recipientX25519PubKey []byte,
+) ([]byte, error) {
+	// Compute shared secret for encryption key derivation
+	sharedSecret, err := crypto.ComputeSharedSecret(senderX25519PrivKey, recipientX25519PubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
+	}
+
+	// Derive encryption key from shared secret
+	encryptionKey, err := crypto.DeriveKey(sharedSecret, nil, []byte("ephemeral-key-encryption"), crypto.KeySize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive encryption key: %w", err)
+	}
+
+	// Generate nonce
+	nonce, err := crypto.GenerateNonce()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	// Encrypt ephemeral private key
+	ciphertext, err := crypto.Encrypt(encryptionKey, nonce, ephemeralPrivKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt ephemeral key: %w", err)
+	}
+
+	// Prepend nonce to ciphertext for storage
+	encrypted := make([]byte, len(nonce)+len(ciphertext))
+	copy(encrypted[:len(nonce)], nonce)
+	copy(encrypted[len(nonce):], ciphertext)
+
+	return encrypted, nil
+}
+
+// decryptEphemeralKey decrypts the ephemeral private key from local storage
+// Uses XChaCha20-Poly1305 with a key derived from X25519(sender_static_priv, recipient_static_pub)
+// This allows the sender to decrypt their own messages from history
+func decryptEphemeralKey(
+	encryptedData []byte,
+	senderX25519PrivKey []byte,
+	recipientX25519PubKey []byte,
+) ([]byte, error) {
+	if len(encryptedData) < crypto.NonceSize {
+		return nil, fmt.Errorf("encrypted data too short")
+	}
+
+	// Extract nonce and ciphertext
+	nonce := encryptedData[:crypto.NonceSize]
+	ciphertext := encryptedData[crypto.NonceSize:]
+
+	// Compute shared secret for encryption key derivation
+	sharedSecret, err := crypto.ComputeSharedSecret(senderX25519PrivKey, recipientX25519PubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
+	}
+
+	// Derive encryption key from shared secret
+	encryptionKey, err := crypto.DeriveKey(sharedSecret, nil, []byte("ephemeral-key-encryption"), crypto.KeySize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive encryption key: %w", err)
+	}
+
+	// Decrypt ephemeral private key
+	plaintext, err := crypto.Decrypt(encryptionKey, nonce, ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt ephemeral key: %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// decryptEphemeralKeyFromEnvelope decrypts the ephemeral private key stored in a SignedEnvelope
+// Returns nil if no encrypted ephemeral key is present (e.g., messages from other senders)
+func decryptEphemeralKeyFromEnvelope(
+	signedEnvelope *pb.SignedEnvelope,
+	ownX25519PrivKey []byte,
+	recipientX25519PubKey []byte,
+) ([]byte, error) {
+	if len(signedEnvelope.EncryptedEphemeralPriv) == 0 {
+		return nil, nil // No encrypted ephemeral key present
+	}
+
+	return decryptEphemeralKey(signedEnvelope.EncryptedEphemeralPriv, ownX25519PrivKey, recipientX25519PubKey)
 }
