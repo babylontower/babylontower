@@ -133,7 +133,7 @@ func (c *CLI) runLoop() error {
 				return fmt.Errorf("failed to read input: %w", err)
 			}
 
-			// Handle command
+			// Handle command (line may be empty string on empty line input)
 			shouldExit := c.handler.HandleCommand(line)
 			if shouldExit {
 				return nil
@@ -179,9 +179,13 @@ func (c *CLI) handleIncomingMessage(event *messaging.MessageEvent) {
 		c.output(FormatIncomingNotification(contactName))
 	}
 
-	// Display message
-	// For PoC, we can't decrypt without the full flow implemented
-	c.output(FormatMessageFromEnvelope(event.Envelope, contactName, false))
+	// Display message - use decrypted message from event
+	if event.Message != nil {
+		c.output(FormatMessage(event.Message, contactName, false))
+	} else {
+		// Fallback to envelope if message not decrypted
+		c.output(FormatMessageFromEnvelope(event.Envelope, contactName, false))
+	}
 
 	if !inChatWithSender {
 		c.output(FormatInfo("Type /chat to reply."))

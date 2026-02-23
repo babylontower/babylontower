@@ -137,12 +137,13 @@ func (x *Envelope) GetNonce() []byte {
 
 // SignedEnvelope is the signed and self-contained unit sent over IPFS
 type SignedEnvelope struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Envelope      []byte                 `protobuf:"bytes,1,opt,name=envelope,proto3" json:"envelope,omitempty"`                             // Serialized Envelope
-	Signature     []byte                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`                           // Ed25519 signature of envelope (64 bytes)
-	SenderPubkey  []byte                 `protobuf:"bytes,3,opt,name=sender_pubkey,json=senderPubkey,proto3" json:"sender_pubkey,omitempty"` // Ed25519 public key of sender (32 bytes)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Envelope               []byte                 `protobuf:"bytes,1,opt,name=envelope,proto3" json:"envelope,omitempty"`                                                             // Serialized Envelope
+	Signature              []byte                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`                                                           // Ed25519 signature of envelope (64 bytes)
+	SenderPubkey           []byte                 `protobuf:"bytes,3,opt,name=sender_pubkey,json=senderPubkey,proto3" json:"sender_pubkey,omitempty"`                                 // Ed25519 public key of sender (32 bytes)
+	EncryptedEphemeralPriv []byte                 `protobuf:"bytes,4,opt,name=encrypted_ephemeral_priv,json=encryptedEphemeralPriv,proto3" json:"encrypted_ephemeral_priv,omitempty"` // Encrypted ephemeral X25519 private key (for sender's history only, empty when sent)
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *SignedEnvelope) Reset() {
@@ -196,14 +197,25 @@ func (x *SignedEnvelope) GetSenderPubkey() []byte {
 	return nil
 }
 
+func (x *SignedEnvelope) GetEncryptedEphemeralPriv() []byte {
+	if x != nil {
+		return x.EncryptedEphemeralPriv
+	}
+	return nil
+}
+
 // Contact represents a contact stored locally (not transmitted)
 type Contact struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey     []byte                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`       // Contact's Ed25519 public key (32 bytes)
-	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // Optional nickname for the contact
-	CreatedAt     uint64                 `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`      // Unix timestamp when contact was added
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey       []byte                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`                     // Contact's Ed25519 public key (32 bytes)
+	DisplayName     string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`               // Optional nickname for the contact
+	CreatedAt       uint64                 `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`                    // Unix timestamp when contact was added
+	X25519PublicKey []byte                 `protobuf:"bytes,4,opt,name=x25519_public_key,json=x25519PublicKey,proto3" json:"x25519_public_key,omitempty"` // Contact's X25519 public key (32 bytes) for encryption
+	PeerId          string                 `protobuf:"bytes,5,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`                              // Contact's libp2p PeerID (for direct connection)
+	Multiaddrs      []string               `protobuf:"bytes,6,rep,name=multiaddrs,proto3" json:"multiaddrs,omitempty"`                                    // Known multiaddresses for the contact
+	LastSeen        uint64                 `protobuf:"varint,7,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`                       // Unix timestamp when contact was last seen online
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Contact) Reset() {
@@ -257,6 +269,34 @@ func (x *Contact) GetCreatedAt() uint64 {
 	return 0
 }
 
+func (x *Contact) GetX25519PublicKey() []byte {
+	if x != nil {
+		return x.X25519PublicKey
+	}
+	return nil
+}
+
+func (x *Contact) GetPeerId() string {
+	if x != nil {
+		return x.PeerId
+	}
+	return ""
+}
+
+func (x *Contact) GetMultiaddrs() []string {
+	if x != nil {
+		return x.Multiaddrs
+	}
+	return nil
+}
+
+func (x *Contact) GetLastSeen() uint64 {
+	if x != nil {
+		return x.LastSeen
+	}
+	return 0
+}
+
 var File_proto_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_proto_rawDesc = "" +
@@ -270,17 +310,24 @@ const file_proto_message_proto_rawDesc = "" +
 	"ciphertext\x18\x01 \x01(\fR\n" +
 	"ciphertext\x12)\n" +
 	"\x10ephemeral_pubkey\x18\x02 \x01(\fR\x0fephemeralPubkey\x12\x14\n" +
-	"\x05nonce\x18\x03 \x01(\fR\x05nonce\"o\n" +
+	"\x05nonce\x18\x03 \x01(\fR\x05nonce\"\xa9\x01\n" +
 	"\x0eSignedEnvelope\x12\x1a\n" +
 	"\benvelope\x18\x01 \x01(\fR\benvelope\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\fR\tsignature\x12#\n" +
-	"\rsender_pubkey\x18\x03 \x01(\fR\fsenderPubkey\"j\n" +
+	"\rsender_pubkey\x18\x03 \x01(\fR\fsenderPubkey\x128\n" +
+	"\x18encrypted_ephemeral_priv\x18\x04 \x01(\fR\x16encryptedEphemeralPriv\"\xec\x01\n" +
 	"\aContact\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\fR\tpublicKey\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\x04R\tcreatedAtB\x18Z\x16babylontower/pkg/protob\x06proto3"
+	"created_at\x18\x03 \x01(\x04R\tcreatedAt\x12*\n" +
+	"\x11x25519_public_key\x18\x04 \x01(\fR\x0fx25519PublicKey\x12\x17\n" +
+	"\apeer_id\x18\x05 \x01(\tR\x06peerId\x12\x1e\n" +
+	"\n" +
+	"multiaddrs\x18\x06 \x03(\tR\n" +
+	"multiaddrs\x12\x1b\n" +
+	"\tlast_seen\x18\a \x01(\x04R\blastSeenB\x18Z\x16babylontower/pkg/protob\x06proto3"
 
 var (
 	file_proto_message_proto_rawDescOnce sync.Once

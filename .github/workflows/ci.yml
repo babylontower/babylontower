@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  # Nightly integration tests
+  schedule:
+    - cron: '0 2 * * *'  # Run at 2 AM UTC daily
 
 jobs:
   commit-message:
@@ -51,7 +54,10 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Run tests
+      - name: Run unit tests
+        run: make test
+
+      - name: Run tests with coverage
         run: make test-coverage
 
       - name: Upload coverage report
@@ -85,3 +91,28 @@ jobs:
 
       - name: Run linter
         run: make lint
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    # Only run on main branch pushes or scheduled runs
+    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+    needs: [build]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: make build
+
+      - name: Run integration tests
+        run: make test-integration
+        timeout-minutes: 10

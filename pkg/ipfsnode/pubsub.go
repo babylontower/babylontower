@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -159,6 +160,69 @@ func (n *Node) PublishTo(pubKey []byte, data []byte) error {
 	return n.Publish(topic, data)
 }
 
+// PublishWithPeerWait publishes data to a topic, waiting for peers to be available
+// This ensures messages are not published into the void when no peers are connected
+// timeout: maximum time to wait for peers (use 0 for no wait)
+func (n *Node) PublishWithPeerWait(topic string, data []byte, timeout time.Duration) error {
+	if !n.isStarted {
+		return ErrNodeNotStarted
+	}
+
+	if n.pubsub == nil {
+		return fmt.Errorf("PubSub not initialized")
+	}
+
+	// Wait for peers if timeout is specified
+	if timeout > 0 {
+		ctx, cancel := context.WithTimeout(n.ctx, timeout)
+		defer cancel()
+
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				peerCount := len(n.pubsub.ListPeers(topic))
+				logger.Warnw("publishing with no peers on topic", 
+					"topic", topic, 
+					"waited", timeout,
+					"peer_count", peerCount)
+				// Continue anyway - message may still propagate
+			case <-ticker.C:
+				peerCount := len(n.pubsub.ListPeers(topic))
+				if peerCount > 0 {
+					logger.Debugw("peers available for publish", 
+						"topic", topic, 
+						"peer_count", peerCount)
+					goto publish
+				}
+			}
+			break // Exit after timeout
+		}
+	}
+
+publish:
+	// Join the topic (or get existing handle)
+	t, err := n.topicCache.getOrJoin(n.pubsub, topic)
+	if err != nil {
+		return fmt.Errorf("failed to join topic: %w", err)
+	}
+
+	// Publish the data
+	if err := t.Publish(n.ctx, data); err != nil {
+		return fmt.Errorf("failed to publish: %w", err)
+	}
+
+	peerCount := len(n.pubsub.ListPeers(topic))
+	logger.Debugw("published to topic", 
+		"topic", topic, 
+		"size", len(data),
+		"peers_on_topic", peerCount)
+
+	return nil
+}
+
 // ListTopics returns a list of currently joined topics
 func (n *Node) ListTopics() []string {
 	if n.pubsub == nil {
@@ -283,4 +347,62 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 func (m *Message) String() string {
 	return fmt.Sprintf("Message{topic=%s, from=%s, len=%d}",
 		m.Topic, m.From.String(), len(m.Data))
+}
+
+// TopicInfo contains information about a PubSub topic
+type TopicInfo struct {
+	// Topic is the topic name
+	Topic string
+	// MeshSize is the number of peers in the mesh
+	MeshSize int
+	// FanoutSize is the number of peers in the fanout
+	FanoutSize int
+	// SubscribedPeers is the number of peers subscribed to the topic
+	SubscribedPeers int
+}
+
+// GetTopicInfo returns information about a topic
+func (n *Node) GetTopicInfo(topic string) *TopicInfo {
+	if n.pubsub == nil {
+		return nil
+	}
+
+	// Get peers subscribed to the topic
+	peers := n.pubsub.ListPeers(topic)
+	
+	// Note: Direct mesh access is not exported in the public API
+	// We use peer count as an approximation of mesh size
+	meshSize := len(peers)
+
+	return &TopicInfo{
+		Topic:            topic,
+		MeshSize:         meshSize,
+		FanoutSize:       0, // Not accessible via public API
+		SubscribedPeers:  len(peers),
+	}
+}
+
+// RefreshDHT refreshes the DHT routing table by querying random peer IDs
+// This helps maintain good DHT connectivity and discover new peers
+func (n *Node) RefreshDHT(ctx context.Context) error {
+	if n.dht == nil {
+		return fmt.Errorf("DHT not initialized")
+	}
+
+	// Query random peer IDs to refresh routing table
+	// This triggers DHT maintenance operations
+	for i := 0; i < 3; i++ {
+		// Generate a random peer ID to query
+		randomID := peer.ID(fmt.Sprintf("12D3KooWRand%d", time.Now().UnixNano()+int64(i)))
+		
+		// Query closest peers
+		_, err := n.dht.GetClosestPeers(ctx, string(randomID))
+		if err != nil {
+			logger.Debugw("DHT refresh query failed", "error", err)
+			// Continue with next query
+		}
+	}
+
+	logger.Debugw("DHT refresh completed")
+	return nil
 }

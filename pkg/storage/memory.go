@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	pb "babylontower/pkg/proto"
 	"google.golang.org/protobuf/proto"
@@ -10,16 +11,22 @@ import (
 
 // MemoryStorage is an in-memory implementation of Storage for testing
 type MemoryStorage struct {
-	mu       sync.RWMutex
-	contacts map[string]*pb.Contact
-	messages map[string][]*pb.SignedEnvelope
+	mu         sync.RWMutex
+	contacts   map[string]*pb.Contact
+	messages   map[string][]*pb.SignedEnvelope
+	peers      map[string]*PeerRecord
+	configs    map[string]string
+	blacklist  map[string]*BlacklistEntry
 }
 
 // NewMemoryStorage creates a new in-memory storage
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
-		contacts: make(map[string]*pb.Contact),
-		messages: make(map[string][]*pb.SignedEnvelope),
+		contacts:  make(map[string]*pb.Contact),
+		messages:  make(map[string][]*pb.SignedEnvelope),
+		peers:     make(map[string]*PeerRecord),
+		configs:   make(map[string]string),
+		blacklist: make(map[string]*BlacklistEntry),
 	}
 }
 
@@ -52,6 +59,21 @@ func (s *MemoryStorage) GetContactByBase58(pubKeyBase58 string) (*pb.Contact, er
 		return nil, fmt.Errorf("failed to decode base58 public key: %w", err)
 	}
 	return s.GetContact(pubKey)
+}
+
+// GetContactX25519Key retrieves the X25519 public key for a contact
+func (s *MemoryStorage) GetContactX25519Key(pubKey []byte) ([]byte, error) {
+	contact, err := s.GetContact(pubKey)
+	if err != nil {
+		return nil, err
+	}
+	if contact == nil {
+		return nil, fmt.Errorf("contact not found")
+	}
+	if len(contact.X25519PublicKey) == 0 {
+		return nil, fmt.Errorf("contact X25519 public key not stored")
+	}
+	return contact.X25519PublicKey, nil
 }
 
 // ListContacts returns all contacts
@@ -114,6 +136,27 @@ func (s *MemoryStorage) GetMessages(contactPubKey []byte, limit, offset int) ([]
 	return result, nil
 }
 
+// GetMessagesWithTimestamps retrieves messages with timestamps
+// For in-memory storage, timestamps are generated from current time
+func (s *MemoryStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, offset int) ([]*MessageWithKey, error) {
+	envelopes, err := s.GetMessages(contactPubKey, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// For in-memory storage, we don't have real timestamps
+	// Return with zero timestamps (will be handled by caller)
+	result := make([]*MessageWithKey, len(envelopes))
+	for i, env := range envelopes {
+		result[i] = &MessageWithKey{
+			Envelope:  env,
+			Timestamp: 0,
+			Nonce:     nil,
+		}
+	}
+	return result, nil
+}
+
 // DeleteMessages removes all messages for a contact
 func (s *MemoryStorage) DeleteMessages(contactPubKey []byte) error {
 	s.mu.Lock()
@@ -157,8 +200,11 @@ func (s *MemoryStorage) Clone() *MemoryStorage {
 	defer s.mu.RUnlock()
 
 	clone := &MemoryStorage{
-		contacts: make(map[string]*pb.Contact),
-		messages: make(map[string][]*pb.SignedEnvelope),
+		contacts:  make(map[string]*pb.Contact),
+		messages:  make(map[string][]*pb.SignedEnvelope),
+		peers:     make(map[string]*PeerRecord),
+		configs:   make(map[string]string),
+		blacklist: make(map[string]*BlacklistEntry),
 	}
 
 	for k, v := range s.contacts {
@@ -172,5 +218,156 @@ func (s *MemoryStorage) Clone() *MemoryStorage {
 		}
 	}
 
+	for k, v := range s.peers {
+		peerCopy := *v
+		clone.peers[k] = &peerCopy
+	}
+
+	for k, v := range s.configs {
+		clone.configs[k] = v
+	}
+
+	for k, v := range s.blacklist {
+		entryCopy := *v
+		clone.blacklist[k] = &entryCopy
+	}
+
 	return clone
+}
+
+// AddPeer stores a peer record in memory
+func (s *MemoryStorage) AddPeer(peer *PeerRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peers[peer.PeerID] = peer
+	return nil
+}
+
+// GetPeer retrieves a peer by peer ID
+func (s *MemoryStorage) GetPeer(peerID string) (*PeerRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	peer, ok := s.peers[peerID]
+	if !ok {
+		return nil, nil
+	}
+	return peer, nil
+}
+
+// ListPeers returns all peers, limited to the specified count (0 = no limit)
+func (s *MemoryStorage) ListPeers(limit int) ([]*PeerRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	peers := make([]*PeerRecord, 0, len(s.peers))
+	for _, peer := range s.peers {
+		peers = append(peers, peer)
+		if limit > 0 && len(peers) >= limit {
+			break
+		}
+	}
+	return peers, nil
+}
+
+// ListPeersBySource returns peers filtered by their source
+func (s *MemoryStorage) ListPeersBySource(source PeerSource) ([]*PeerRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var peers []*PeerRecord
+	for _, peer := range s.peers {
+		if peer.Source == source {
+			peers = append(peers, peer)
+		}
+	}
+	return peers, nil
+}
+
+// DeletePeer removes a peer from memory
+func (s *MemoryStorage) DeletePeer(peerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.peers, peerID)
+	return nil
+}
+
+// PrunePeers removes stale peers (no-op for in-memory storage)
+func (s *MemoryStorage) PrunePeers(maxAgeDays int, keepCount int) error {
+	// No-op for testing
+	return nil
+}
+
+// GetConfig retrieves a configuration value by key
+func (s *MemoryStorage) GetConfig(key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.configs[key]
+	if !ok {
+		return "", nil
+	}
+	return value, nil
+}
+
+// SetConfig stores a configuration value
+func (s *MemoryStorage) SetConfig(key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.configs[key] = value
+	return nil
+}
+
+// DeleteConfig removes a configuration value
+func (s *MemoryStorage) DeleteConfig(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.configs, key)
+	return nil
+}
+
+// BlacklistPeer adds a peer to the blacklist
+func (s *MemoryStorage) BlacklistPeer(peerID string, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.blacklist[peerID] = &BlacklistEntry{
+		PeerID:        peerID,
+		Reason:        reason,
+		BlacklistedAt: time.Now(),
+	}
+	return nil
+}
+
+// IsBlacklisted checks if a peer is blacklisted
+func (s *MemoryStorage) IsBlacklisted(peerID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.blacklist[peerID]
+	if !ok {
+		return false, nil
+	}
+	// Check if expired
+	if entry.IsExpired() {
+		return false, nil
+	}
+	return true, nil
+}
+
+// ListBlacklisted returns all blacklisted peers
+func (s *MemoryStorage) ListBlacklisted() ([]*BlacklistEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := make([]*BlacklistEntry, 0, len(s.blacklist))
+	for _, entry := range s.blacklist {
+		if !entry.IsExpired() {
+			entries = append(entries, entry)
+		}
+	}
+	return entries, nil
+}
+
+// RemoveFromBlacklist removes a peer from the blacklist
+func (s *MemoryStorage) RemoveFromBlacklist(peerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.blacklist, peerID)
+	return nil
 }

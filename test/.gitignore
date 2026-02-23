@@ -1,0 +1,10 @@
+# Test data directory
+test-data/
+
+# Coverage reports
+coverage.out
+coverage.html
+
+# Temporary test files
+*.tmp
+*.test

@@ -12,18 +12,29 @@
       "moby": false
     },
     "ghcr.io/devcontainers/features/apt-get-packages:1": {
-      "packages": "protobuf-compiler"
+      "packages": "protobuf-compiler,avahi-daemon,libnss-mdns"
     }
   },
 
-  // Features to add to the dev container. More info: https://containers.dev/features.
-  // "features": {},
+  // Enable host network for mDNS discovery (required for peer-to-peer testing)
+  // Note: This makes the container use the host's network stack directly
+  "hostNetwork": true,
+
+  // Allow the container to access host network services
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--cap-add=NET_BIND_SERVICE"
+  ],
+
+  // Install avahi daemon for mDNS support
+  "postCreateCommand": "sudo service avahi-daemon start 2>/dev/null || true",
 
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   // "forwardPorts": [],
 
-  // Use 'postCreateCommand' to run commands after the container is created.
-  // "postCreateCommand": "go version",
+  // Use 'postStartCommand' to run commands after the container starts.
+  "postStartCommand": "sudo service avahi-daemon start 2>/dev/null || echo 'Note: avahi-daemon not available, mDNS may not work'",
 
   // Configure tool-specific properties.
   // "customizations": {},
