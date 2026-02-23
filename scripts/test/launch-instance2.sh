@@ -120,8 +120,14 @@ echo ""
 
 # Set HOME to use custom data directory
 # Babylon Tower stores identity in ~/.babylontower
+# Note: We export HOME before running the binary to ensure it's visible to the Go process
 export HOME="$DATA_DIR"
+
+# Also set USERPROFILE for Windows compatibility (Git Bash/MSYS)
+if [ "$PLATFORM" = "windows" ]; then
+    export USERPROFILE="$DATA_DIR"
+fi
 
 # Run the messenger
 cd "$PROJECT_ROOT"
-"$BINARY"
+exec "$BINARY"

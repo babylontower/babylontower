@@ -549,6 +549,66 @@ func TestRepoDirExpansion(t *testing.T) {
 	}
 }
 
+// TestExpandPathRespectsHomeEnv tests that HOME environment variable is respected
+func TestExpandPathRespectsHomeEnv(t *testing.T) {
+	// Save original HOME
+	originalHome := os.Getenv("HOME")
+	defer func() {
+		if originalHome != "" {
+			_ = os.Setenv("HOME", originalHome)
+		} else {
+			_ = os.Unsetenv("HOME")
+		}
+	}()
+
+	// Set custom HOME for test
+	customHome := "/custom/test/home"
+	_ = os.Setenv("HOME", customHome)
+
+	// Test expansion with custom HOME
+	path := "~/.babylontower/ipfs"
+	expanded, err := expandPath(path)
+	if err != nil {
+		t.Fatalf("Failed to expand path: %v", err)
+	}
+
+	expected := filepath.Join(customHome, ".babylontower/ipfs")
+	if expanded != expected {
+		t.Errorf("Expected %s, got %s", expected, expanded)
+	}
+
+	// Test that UserHomeDir is used when HOME is not set
+	_ = os.Unsetenv("HOME")
+
+	// Get user home dir BEFORE unsetting (some systems require HOME to be set)
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		// Try to get home from /etc/passwd or other means
+		// If this fails, skip the test
+		t.Logf("Cannot get user home dir without HOME set: %v", err)
+		// Re-set HOME to original value for this check
+		if originalHome != "" {
+			_ = os.Setenv("HOME", originalHome)
+			userHome, err = os.UserHomeDir()
+			if err != nil {
+				t.Skipf("Cannot get user home dir at all: %v", err)
+			}
+		} else {
+			t.Skipf("Cannot get user home dir: %v", err)
+		}
+	}
+
+	expanded2, err := expandPath(path)
+	if err != nil {
+		t.Fatalf("Failed to expand path: %v", err)
+	}
+
+	expected2 := filepath.Join(userHome, ".babylontower/ipfs")
+	if expanded2 != expected2 {
+		t.Errorf("Expected %s, got %s", expected2, expanded2)
+	}
+}
+
 // TestListTopicsAndPeers tests listing topics and peers
 func TestListTopicsAndPeers(t *testing.T) {
 	tmpDir := t.TempDir()

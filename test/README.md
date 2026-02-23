@@ -524,12 +524,12 @@ After completing manual testing:
 
 ## Reference
 
-- [Roadmap - Phase 6](../specs/roadmap.md#phase-6-integration--testing)
-- [PoC Testing Specification](../specs/PoCTesting.md)
+- [Roadmap - Phase 6](../specs/roadmap.md#phase-6-integration--testing-)
+- [Testing Specification](../specs/testing.md)
 - [Integration Test Code](./integration_test.go)
 - [Test Utilities](./testutil.go)
 
 ---
 
-*Last updated: February 21, 2026*
+*Last updated: February 23, 2026*
 *Phase 6 Testing Tools v0.1.0*

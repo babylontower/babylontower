@@ -68,10 +68,6 @@ type Service struct {
 	// Contact peer tracking (cached peer IDs for quick lookup)
 	contactPeers map[string]*ContactPeerInfo // key: hex-encoded Ed25519 pubkey
 	contactMu    sync.RWMutex
-
-	// Connection pooling for active contacts
-	connectionPool *ConnectionPool
-	poolConfig     *ConnectionPoolConfig
 }
 
 // ContactPeerInfo contains cached information about a contact's peer presence
@@ -83,62 +79,19 @@ type ContactPeerInfo struct {
 	Connected     bool
 }
 
-// ConnectionPoolConfig holds configuration for connection pooling
-type ConnectionPoolConfig struct {
-	// MaxActiveContacts is the maximum number of contacts to maintain connections to
-	MaxActiveContacts int
-	// KeepAliveInterval is how often to check connection health
-	KeepAliveInterval time.Duration
-	// MinConnectionDuration is the minimum time to keep a connection alive
-	MinConnectionDuration time.Duration
-}
-
-// DefaultConnectionPoolConfig returns default connection pool configuration
-func DefaultConnectionPoolConfig() *ConnectionPoolConfig {
-	return &ConnectionPoolConfig{
-		MaxActiveContacts:     10,
-		KeepAliveInterval:     30 * time.Second,
-		MinConnectionDuration: 5 * time.Minute,
-	}
-}
-
-// ConnectionPool manages connections to active contacts
-type ConnectionPool struct {
-	config       *ConnectionPoolConfig
-	activeContacts map[string]*ActiveContact // key: hex-encoded Ed25519 pubkey
-	mu           sync.RWMutex
-	lastCleanup  time.Time
-}
-
-// ActiveContact represents a contact with an active connection
-type ActiveContact struct {
-	PubKey       []byte
-	LastActivity time.Time
-	MessageCount int
-	PeerID       string
-}
-
 // NewService creates a new messaging service
 func NewService(config *Config, storage storage.Storage, ipfsNode *ipfsnode.Node) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	poolConfig := DefaultConnectionPoolConfig()
-
 	return &Service{
-		config:      config,
-		storage:     storage,
-		ipfsNode:    ipfsNode,
-		ctx:         ctx,
-		cancel:      cancel,
-		isStarted:   false,
-		messageChan: make(chan *MessageEvent, 100),
+		config:       config,
+		storage:      storage,
+		ipfsNode:     ipfsNode,
+		ctx:          ctx,
+		cancel:       cancel,
+		isStarted:    false,
+		messageChan:  make(chan *MessageEvent, 100),
 		contactPeers: make(map[string]*ContactPeerInfo),
-		connectionPool: &ConnectionPool{
-			config:         poolConfig,
-			activeContacts: make(map[string]*ActiveContact),
-			lastCleanup:    time.Now(),
-		},
-		poolConfig: poolConfig,
 	}
 }
 
@@ -669,213 +622,21 @@ func (s *Service) FindAndConnect(contactPubKey []byte, addrBook interface{}, mul
 	return nil, fmt.Errorf("peer not found - provide multiaddr or add contact to address book")
 }
 
-// Connection Pooling Methods
-
-// AddActiveContact adds a contact to the active connection pool
-func (s *Service) AddActiveContact(contactPubKey []byte) {
-	s.connectionPool.mu.Lock()
-	defer s.connectionPool.mu.Unlock()
-
-	key := string(contactPubKey)
-	if _, exists := s.connectionPool.activeContacts[key]; exists {
-		// Update last activity
-		s.connectionPool.activeContacts[key].LastActivity = time.Now()
-		return
-	}
-
-	// Check if we're at capacity
-	if len(s.connectionPool.activeContacts) >= s.poolConfig.MaxActiveContacts {
-		// Remove least active contact
-		s.removeLeastActiveContact()
-	}
-
-	// Get peer info if available
-	var peerID string
-	if info, ok := s.contactPeers[key]; ok && info.PeerID != "" {
-		peerID = info.PeerID
-	}
-
-	s.connectionPool.activeContacts[key] = &ActiveContact{
-		PubKey:       contactPubKey,
-		LastActivity: time.Now(),
-		MessageCount: 0,
-		PeerID:       peerID,
-	}
-
-	logger.Debugw("added contact to connection pool", "contact", fmt.Sprintf("%x", contactPubKey))
-}
-
-// RemoveActiveContact removes a contact from the active connection pool
-func (s *Service) RemoveActiveContact(contactPubKey []byte) {
-	s.connectionPool.mu.Lock()
-	defer s.connectionPool.mu.Unlock()
-
-	key := string(contactPubKey)
-	delete(s.connectionPool.activeContacts, key)
-	logger.Debugw("removed contact from connection pool", "contact", fmt.Sprintf("%x", contactPubKey))
-}
-
-// UpdateContactActivity updates the last activity time for a contact
-func (s *Service) UpdateContactActivity(contactPubKey []byte) {
-	s.connectionPool.mu.Lock()
-	defer s.connectionPool.mu.Unlock()
-
-	if contact, exists := s.connectionPool.activeContacts[string(contactPubKey)]; exists {
-		contact.LastActivity = time.Now()
-		contact.MessageCount++
-	}
-}
-
-// removeLeastActiveContact removes the least active contact from the pool
-// Must be called with connectionPool.mu held
-func (s *Service) removeLeastActiveContact() {
-	var leastActive string
-	var oldestActivity time.Time
-
-	for key, contact := range s.connectionPool.activeContacts {
-		if leastActive == "" || contact.LastActivity.Before(oldestActivity) {
-			leastActive = key
-			oldestActivity = contact.LastActivity
-		}
-	}
-
-	if leastActive != "" {
-		delete(s.connectionPool.activeContacts, leastActive)
-		logger.Debugw("removed least active contact from pool", "contact", leastActive)
-	}
-}
-
-// GetActiveContacts returns the list of active contacts
-func (s *Service) GetActiveContacts() [][]byte {
-	s.connectionPool.mu.RLock()
-	defer s.connectionPool.mu.RUnlock()
-
-	contacts := make([][]byte, 0, len(s.connectionPool.activeContacts))
-	for _, contact := range s.connectionPool.activeContacts {
-		contacts = append(contacts, contact.PubKey)
-	}
-	return contacts
-}
-
-// GetConnectionPoolStats returns statistics about the connection pool
-func (s *Service) GetConnectionPoolStats() map[string]interface{} {
-	s.connectionPool.mu.RLock()
-	defer s.connectionPool.mu.RUnlock()
-
-	stats := map[string]interface{}{
-		"active_contacts": len(s.connectionPool.activeContacts),
-		"max_contacts":    s.poolConfig.MaxActiveContacts,
-	}
-
-	contacts := make([]map[string]interface{}, 0, len(s.connectionPool.activeContacts))
-	for _, contact := range s.connectionPool.activeContacts {
-		contacts = append(contacts, map[string]interface{}{
-			"pubkey":        fmt.Sprintf("%x", contact.PubKey),
-			"last_activity": contact.LastActivity.Format(time.RFC3339),
-			"message_count": contact.MessageCount,
-			"peer_id":       contact.PeerID,
-		})
-	}
-	stats["contacts"] = contacts
-
-	return stats
-}
-
 // Message Retry Logic
 
-// SendResultWithRetry contains the result of a message send with retry information
-type SendResultWithRetry struct {
-	*SendResult
-	// Attempts is the number of attempts made
-	Attempts int
-	// Success is true if the message was sent successfully
-	Success bool
-	// LastError is the last error encountered
-	LastError error
-}
-
-// SendMessageWithRetry sends a message with retry logic
-// It attempts to send via different peers on failure
+// SendMessageWithRetry sends a message with retry logic (deprecated - use SendMessage directly)
+// This method is kept for backward compatibility but simply calls SendMessage
 func (s *Service) SendMessageWithRetry(
 	text string,
 	recipientEd25519PubKey []byte,
 	recipientX25519PubKey []byte,
 	maxAttempts int,
-) (*SendResultWithRetry, error) {
-	if maxAttempts <= 0 {
-		maxAttempts = 3
-	}
-
-	var lastResult *SendResultWithRetry
-	var lastErr error
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// Try to connect before sending
-		if attempt > 1 {
-			logger.Infow("retrying message send", "attempt", attempt, "to", fmt.Sprintf("%x", recipientEd25519PubKey))
-			
-			// Try different strategies on retry
-			switch attempt {
-			case 2:
-				// Try DHT discovery
-				if _, err := s.FindAndConnectToContact(recipientEd25519PubKey); err != nil {
-					logger.Debugw("retry via DHT failed", "error", err)
-				}
-			case 3:
-				// Try refreshing connection
-				s.refreshConnection(recipientEd25519PubKey)
-			}
-		}
-
-		// Attempt to send
-		result, err := s.SendMessage(text, recipientEd25519PubKey, recipientX25519PubKey)
-		
-		if err == nil {
-			// Success!
-			return &SendResultWithRetry{
-				SendResult: result,
-				Attempts:   attempt,
-				Success:    true,
-			}, nil
-		}
-
-		lastErr = err
-		lastResult = &SendResultWithRetry{
-			Attempts:  attempt,
-			Success:   false,
-			LastError: err,
-		}
-
-		// Wait before retry (exponential backoff)
-		if attempt < maxAttempts {
-			backoff := time.Duration(attempt*500) * time.Millisecond
-			select {
-			case <-s.ctx.Done():
-				return lastResult, s.ctx.Err()
-			case <-time.After(backoff):
-				// Continue to next attempt
-			}
-		}
-	}
-
-	return lastResult, fmt.Errorf("failed to send message after %d attempts: %w", maxAttempts, lastErr)
+) (*SendResult, error) {
+	return s.SendMessage(text, recipientEd25519PubKey, recipientX25519PubKey)
 }
 
-// refreshConnection attempts to refresh a connection to a peer
-func (s *Service) refreshConnection(contactPubKey []byte) {
-	s.contactMu.Lock()
-	if info, exists := s.contactPeers[string(contactPubKey)]; exists {
-		info.Connected = false
-	}
-	s.contactMu.Unlock()
-
-	// Try to reconnect
-	go func() {
-		if _, err := s.FindAndConnectToContact(contactPubKey); err != nil {
-			logger.Debugw("connection refresh failed", "error", err)
-		}
-	}()
-}
+// SendResultWithRetry is deprecated - use SendResult instead
+type SendResultWithRetry = SendResult
 
 // PubSub Mesh Optimization
 
@@ -934,7 +695,6 @@ type ContactStatus struct {
 
 // GetContactStatus returns detailed status for a contact
 func (s *Service) GetContactStatus(contactPubKey []byte) (*ContactStatus, error) {
-	// Get contact info
 	contact, err := s.storage.GetContact(contactPubKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contact: %w", err)
@@ -943,7 +703,6 @@ func (s *Service) GetContactStatus(contactPubKey []byte) (*ContactStatus, error)
 		return nil, ErrUnknownContact
 	}
 
-	// Get cached peer info
 	var peerID string
 	var isOnline, connected bool
 	s.contactMu.RLock()
@@ -954,15 +713,6 @@ func (s *Service) GetContactStatus(contactPubKey []byte) (*ContactStatus, error)
 	}
 	s.contactMu.RUnlock()
 
-	// Check if active
-	s.connectionPool.mu.RLock()
-	isActive := false
-	if _, exists := s.connectionPool.activeContacts[string(contactPubKey)]; exists {
-		isActive = true
-	}
-	s.connectionPool.mu.RUnlock()
-
-	// Get mesh size
 	meshSize := s.GetTopicMeshSize(contactPubKey)
 
 	return &ContactStatus{
@@ -972,7 +722,7 @@ func (s *Service) GetContactStatus(contactPubKey []byte) (*ContactStatus, error)
 		Connected:   connected,
 		PeerID:      peerID,
 		MeshSize:    meshSize,
-		IsActive:    isActive,
+		IsActive:    connected,
 	}, nil
 }
 
