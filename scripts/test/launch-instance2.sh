@@ -16,6 +16,18 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 DEFAULT_DATA_DIR="$PROJECT_ROOT/test-data/instance2"
 DATA_DIR="${1:-$DEFAULT_DATA_DIR}"
 
+# Detect current platform
+detect_platform() {
+    case "$(uname -s)" in
+        Linux*)     echo "linux" ;;
+        Darwin*)    echo "darwin" ;;
+        MINGW*|CYGWIN*|MSYS*) echo "windows" ;;
+        *)          echo "linux" ;;  # Default to linux
+    esac
+}
+
+PLATFORM=$(detect_platform)
+
 # Colors for output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -38,16 +50,51 @@ show_banner() {
     echo ""
 }
 
-# Check if binary exists
-BINARY="$PROJECT_ROOT/bin/messenger"
-if [ ! -f "$BINARY" ]; then
-    log_info "Binary not found. Building..."
+# Check if binary exists (check multiple locations)
+# Priority: 1) platform-specific, 2) standard build location
+BINARY=""
+
+# First check platform-specific binary
+PLATFORM_BINARY="$PROJECT_ROOT/bin/platform/$PLATFORM/messenger"
+if [ "$PLATFORM" = "windows" ]; then
+    PLATFORM_BINARY="$PROJECT_ROOT/bin/platform/$PLATFORM/messenger.exe"
+fi
+
+# Second check standard build location
+STANDARD_BINARY="$PROJECT_ROOT/bin/messenger"
+if [ "$PLATFORM" = "windows" ]; then
+    STANDARD_BINARY="$PROJECT_ROOT/bin/messenger.exe"
+fi
+
+# Use platform binary if exists, otherwise try standard location
+if [ -f "$PLATFORM_BINARY" ]; then
+    BINARY="$PLATFORM_BINARY"
+    log_info "Using platform binary: $BINARY"
+elif [ -f "$STANDARD_BINARY" ]; then
+    BINARY="$STANDARD_BINARY"
+    log_info "Using standard binary: $BINARY"
+else
+    log_info "Binary not found. Building for current platform ($PLATFORM)..."
     cd "$PROJECT_ROOT"
-    make build
+    case "$PLATFORM" in
+        linux)   make build-linux ;;
+        darwin)  make build-darwin ;;
+        windows) make build-windows ;;
+        *)       make build ;;
+    esac
+    
+    # Update binary path after build (prefer platform binary)
+    if [ -f "$PLATFORM_BINARY" ]; then
+        BINARY="$PLATFORM_BINARY"
+    else
+        BINARY="$STANDARD_BINARY"
+    fi
 fi
 
 # Setup data directory
 log_info "Setting up data directory: $DATA_DIR"
+log_info "Using binary: $BINARY"
+log_info "Platform: $PLATFORM"
 mkdir -p "$DATA_DIR"
 
 show_banner
@@ -77,4 +124,4 @@ export HOME="$DATA_DIR"
 
 # Run the messenger
 cd "$PROJECT_ROOT"
-./bin/messenger
+"$BINARY"

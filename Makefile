@@ -1,4 +1,4 @@
-.PHONY: build test lint clean run proto help test-integration test-e2e docker-build docker-run docker-stop docker-clean
+.PHONY: build test test-all test-integration test-coverage lint clean run proto help test-e2e docker-build docker-run docker-stop docker-clean build-all-platforms
 
 # Version
 VERSION=0.0.1
@@ -17,6 +17,7 @@ GOFMT=gofmt
 # Binary name
 BINARY_NAME=messenger
 BINARY_DIR=bin
+BINARY_PLATFORM_DIR=$(BINARY_DIR)/platform
 
 # Protobuf
 PROTO_DIR=proto
@@ -30,6 +31,10 @@ LINTER=golangci-lint
 TEST_DIR=test
 TEST_SCRIPTS_DIR=scripts/test
 
+# Platforms for cross-compilation
+PLATFORMS=linux darwin windows
+ARCHS=amd64 arm64
+
 all: build
 
 ## build: Build the application
@@ -38,15 +43,50 @@ build:
 	@mkdir -p $(BINARY_DIR)
 	@$(GOBUILD) -o $(BINARY_DIR)/$(BINARY_NAME) ./cmd/messenger
 
+## build-all: Build for all platforms (linux, macos, windows)
+build-all: build-linux build-darwin build-windows
+
+## build-linux: Build for Linux
+build-linux:
+	@echo "Building for Linux..."
+	@mkdir -p $(BINARY_PLATFORM_DIR)/linux
+	@GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_PLATFORM_DIR)/linux/$(BINARY_NAME) ./cmd/messenger
+	@echo "Linux binary: $(BINARY_PLATFORM_DIR)/linux/$(BINARY_NAME)"
+
+## build-darwin: Build for macOS
+build-darwin:
+	@echo "Building for macOS..."
+	@mkdir -p $(BINARY_PLATFORM_DIR)/darwin
+	@GOOS=darwin GOARCH=amd64 $(GOBUILD) -o $(BINARY_PLATFORM_DIR)/darwin/$(BINARY_NAME) ./cmd/messenger
+	@echo "macOS binary: $(BINARY_PLATFORM_DIR)/darwin/$(BINARY_NAME)"
+
+## build-windows: Build for Windows
+build-windows:
+	@echo "Building for Windows..."
+	@mkdir -p $(BINARY_PLATFORM_DIR)/windows
+	@GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BINARY_PLATFORM_DIR)/windows/$(BINARY_NAME).exe ./cmd/messenger
+	@echo "Windows binary: $(BINARY_PLATFORM_DIR)/windows/$(BINARY_NAME).exe"
+
 ## test: Run tests
 test:
 	@echo "Running tests..."
-	@$(GOTEST) -v ./...
+	@$(GOTEST) -short ./...
+
+## test-all: Run all tests including integration tests
+test-all:
+	@echo "Running all tests (including integration)..."
+	@$(GOTEST) ./...
+	@$(GOTEST) -tags=integration ./pkg/ipfsnode/... -timeout 5m
+
+## test-integration: Run integration tests only
+test-integration:
+	@echo "Running integration tests..."
+	@$(GOTEST) -tags=integration ./pkg/ipfsnode/... -v -timeout 5m
 
 ## test-coverage: Run tests with coverage
 test-coverage:
 	@echo "Running tests with coverage..."
-	@$(GOTEST) -v -coverprofile=coverage.out ./...
+	@$(GOTEST) -short -coverprofile=coverage.out ./...
 	@$(GOCMD) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
@@ -121,15 +161,56 @@ install-deps:
 	@echo "Installing development dependencies..."
 	@$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint/v2@latest
 
-## test-integration: Run integration tests (requires build)
-test-integration: build
-	@echo "Running integration tests..."
-	@$(GOTEST) -v -tags=integration ./$(TEST_DIR)/...
+## test-e2e: Run end-to-end tests (deprecated, use test-integration)
+test-e2e:
+	@echo "E2E tests are deprecated. Use 'make test-integration' instead."
 
-## test-e2e: Run end-to-end tests with two instances
-test-e2e: build
-	@echo "Running end-to-end tests..."
-	@$(GOTEST) -v -tags=integration ./$(TEST_DIR)/... -run TestTwoInstance
+## launch-multi-node: Launch N nodes for scale testing (default: 5)
+launch-multi-node: build-all
+	@$(TEST_SCRIPTS_DIR)/launch-multi-node.sh $(or $(NODES),5) $(or $(MODE),background)
+
+## stop-multi-node: Stop all nodes from multi-node test
+stop-multi-node:
+	@$(TEST_SCRIPTS_DIR)/stop-multi-node.sh
+
+## verify-connections: Verify node connections in multi-node test
+verify-connections:
+	@$(TEST_SCRIPTS_DIR)/verify-connections.sh $(or $(NODES),5)
+
+## test-scale: Run scale test (20 nodes, wait, verify)
+test-scale: build-all
+	@echo "Running scale test with 20 nodes..."
+	@$(TEST_SCRIPTS_DIR)/launch-multi-node.sh 20 background
+	@echo "Waiting 60 seconds for network formation..."
+	@sleep 60
+	@$(TEST_SCRIPTS_DIR)/verify-connections.sh 20
+	@echo ""
+	@echo "Scale test complete. To cleanup:"
+	@echo "  make stop-multi-node"
+	@echo "  make clean-test"
+
+## launch-test: Launch two instances locally for manual testing
+launch-test: build-all
+	@echo "Launching two instances for manual testing..."
+	@echo ""
+	@echo "Open two terminals and run:"
+	@echo "  Terminal 1: ./scripts/test/launch-instance1.sh"
+	@echo "  Terminal 2: ./scripts/test/launch-instance2.sh"
+	@echo ""
+	@echo "Binaries built for all platforms in $(BINARY_PLATFORM_DIR)/"
+
+## launch-test-docker: Launch two instances in Docker for manual testing
+launch-test-docker:
+	@echo "Launching two Docker instances for manual testing..."
+	@$(TEST_SCRIPTS_DIR)/launch-two-instances.sh docker
+
+## launch-instance1: Launch Instance 1 (Alice)
+launch-instance1: build-all
+	@$(TEST_SCRIPTS_DIR)/launch-instance1.sh
+
+## launch-instance2: Launch Instance 2 (Bob)
+launch-instance2: build-all
+	@$(TEST_SCRIPTS_DIR)/launch-instance2.sh
 
 ## docker-build: Build Docker image for testing
 docker-build:
@@ -157,27 +238,11 @@ docker-clean: docker-stop
 	@rm -rf test-data/instance1 test-data/instance2
 	@echo "Cleanup complete"
 
-## launch-test: Launch two instances locally for manual testing
-launch-test: build
-	@echo "Launching two instances for manual testing..."
-	@echo ""
-	@echo "Open two terminals and run:"
-	@echo "  Terminal 1: ./scripts/test/launch-instance1.sh"
-	@echo "  Terminal 2: ./scripts/test/launch-instance2.sh"
-	@echo ""
-
-## launch-test-docker: Launch two instances in Docker for manual testing
-launch-test-docker:
-	@echo "Launching two Docker instances for manual testing..."
-	@$(TEST_SCRIPTS_DIR)/launch-two-instances.sh docker
-
-## launch-instance1: Launch Instance 1 (Alice)
-launch-instance1: build
-	@$(TEST_SCRIPTS_DIR)/launch-instance1.sh
-
-## launch-instance2: Launch Instance 2 (Bob)
-launch-instance2: build
-	@$(TEST_SCRIPTS_DIR)/launch-instance2.sh
+## clean-platform: Clean platform-specific binaries
+clean-platform:
+	@echo "Cleaning platform-specific binaries..."
+	@rm -rf $(BINARY_PLATFORM_DIR)
+	@echo "Platform binaries cleaned"
 
 ## clean-test: Clean test data and artifacts
 clean-test:

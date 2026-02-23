@@ -1,0 +1,34 @@
+{
+  "bootstrap_peers": [
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiRNN6vEC9qmL9egu92p",
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
+    "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+    "/ip4/104.236.179.241/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
+    "/ip4/128.199.219.111/tcp/4001/p2p/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64",
+    "/ip4/104.236.76.40/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
+    "/ip4/178.62.158.147/tcp/4001/p2p/QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd",
+    "/ip4/178.62.61.185/tcp/4001/p2p/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3"
+  ],
+  "bootstrap_timeout": "60s",
+  "max_stored_peers": 100,
+  "min_peer_connections": 10,
+  "connection_timeout": "30s",
+  "dial_timeout": "15s",
+  "max_connections": 400,
+  "low_water": 50,
+  "high_water": 400,
+  "enable_relay": false,
+  "enable_hole_punching": true,
+  "enable_autonat": true,
+  "dht_mode": "auto",
+  "dht_bootstrap_timeout": "60s",
+  "listen_addrs": [
+    "/ip4/0.0.0.0/tcp/0",
+    "/ip4/0.0.0.0/tcp/0/ws",
+    "/ip6/::/tcp/0"
+  ],
+  "protocol_id": "/babylontower/1.0.0"
+}

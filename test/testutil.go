@@ -312,24 +312,24 @@ func CreateTwoInstanceSetup(binaryPath string) (*TestEnvironment, *Instance, *In
 
 	inst1, err := env.CreateInstance("alice")
 	if err != nil {
-		env.Cleanup()
+		_ = env.Cleanup()
 		return nil, nil, nil, fmt.Errorf("failed to create instance 1: %w", err)
 	}
 
 	inst2, err := env.CreateInstance("bob")
 	if err != nil {
-		env.Cleanup()
+		_ = env.Cleanup()
 		return nil, nil, nil, fmt.Errorf("failed to create instance 2: %w", err)
 	}
 
 	// Start both instances
 	if err := inst1.Start(); err != nil {
-		env.Cleanup()
+		_ = env.Cleanup()
 		return nil, nil, nil, fmt.Errorf("failed to start instance 1: %w", err)
 	}
 
 	if err := inst2.Start(); err != nil {
-		env.Cleanup()
+		_ = env.Cleanup()
 		return nil, nil, nil, fmt.Errorf("failed to start instance 2: %w", err)
 	}
 
