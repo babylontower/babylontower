@@ -139,3 +139,258 @@ message PrekeyBundle {
   repeated OneTimePrekey one_time_prekeys = 2;
   uint64 published_at = 3;  // Unix timestamp when published
 }
+
+// ============================================================================
+// Protocol v1 Wire Format (Phase 10)
+// ============================================================================
+
+// MessageType enum for all message types in Babylon Tower v1
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+
+  // Direct Messages (1-19)
+  DM_TEXT = 1;
+  DM_MEDIA = 2;
+  DM_REACTION = 3;
+  DM_EDIT = 4;
+  DM_DELETE = 5;
+  DM_READ_RECEIPT = 6;
+  DM_TYPING = 7;
+  DM_DELIVERY_RECEIPT = 8;
+
+  // Group Messages (20-39)
+  GROUP_TEXT = 20;
+  GROUP_MEDIA = 21;
+  GROUP_REACTION = 22;
+  GROUP_EDIT = 23;
+  GROUP_DELETE = 24;
+  GROUP_MEMBER_ADDED = 25;
+  GROUP_MEMBER_REMOVED = 26;
+  GROUP_KEY_ROTATION = 27;
+  GROUP_INFO_UPDATE = 28;
+
+  // Channel Messages (40-59)
+  CHANNEL_POST = 40;
+  CHANNEL_EDIT = 41;
+  CHANNEL_DELETE = 42;
+
+  // Control Messages (60-79)
+  CTRL_X3DH_INITIAL = 60;
+  CTRL_PREKEY_BUNDLE = 61;
+  CTRL_DEVICE_ANNOUNCE = 62;
+  CTRL_DEVICE_REVOKE = 63;
+  CTRL_SENDER_KEY_DIST = 64;
+  CTRL_KEY_REQUEST = 65;
+  CTRL_IDENTITY_UPDATE = 66;
+
+  // RTC Signaling (80-99)
+  RTC_OFFER = 80;
+  RTC_ANSWER = 81;
+  RTC_ICE_CANDIDATE = 82;
+  RTC_HANGUP = 83;
+}
+
+// BabylonEnvelope is the outer wire format for all Protocol v1 messages
+message BabylonEnvelope {
+  // Header (unencrypted, used for routing)
+  uint32 protocol_version = 1;   // 1 for Protocol v1
+  MessageType message_type = 2;  // Type of message
+  bytes sender_identity = 3;     // Sender's IK_sign.pub (32 bytes)
+  bytes recipient_identity = 4;  // Recipient's IK_sign.pub (32 bytes, empty for group/channel)
+  uint64 timestamp = 5;          // Unix timestamp (seconds)
+  bytes message_id = 6;          // Random 16 bytes, unique per message
+
+  // Routing (set for group/channel messages)
+  bytes group_id = 7;    // 32 bytes for group messages
+  bytes channel_id = 8;  // 32 bytes for channel messages
+
+  // Encrypted payload (interpretation depends on message_type)
+  bytes payload = 9;
+
+  // Authentication
+  bytes sender_device_id = 10;  // 16 bytes, identifies sending device
+  bytes signature = 11;  // Ed25519.Sign(DK_sign.priv, canonical(fields 1-10))
+
+  // Cipher suite used for payload encryption
+  uint32 cipher_suite_id = 12;  // 0x0001 = BT-X25519-XChaCha20Poly1305-SHA256
+
+  // X3DH header (present only for session initialization)
+  bytes x3dh_header = 13;  // Serialized X3DHHeader
+}
+
+// X3DHHeader for session initialization
+message X3DHHeader {
+  bytes initiator_identity_dh_pub = 1;  // Alice's IK_dh.pub (32 bytes)
+  bytes ephemeral_pub = 2;              // Alice's EK.pub (32 bytes)
+  uint64 signed_prekey_id = 3;          // Bob's SPK ID used
+  uint64 one_time_prekey_id = 4;        // Bob's OPK ID used (0 if none)
+  uint32 cipher_suite_id = 5;           // Negotiated suite
+}
+
+// RatchetHeader for Double Ratchet encrypted messages
+message RatchetHeader {
+  bytes dh_ratchet_pub = 1;       // Current DH ratchet public key (32 bytes)
+  uint32 previous_chain_length = 2;  // Length of previous sending chain
+  uint32 message_number = 3;         // Index in current sending chain
+}
+
+// DMPayload - Direct message payload (encrypted with Double Ratchet)
+message DMPayload {
+  RatchetHeader ratchet_header = 1;
+  oneof content {
+    TextMessage text = 10;
+    MediaMessage media = 11;
+    ReactionMessage reaction = 12;
+    EditMessage edit = 13;
+    DeleteMessage delete_msg = 14;
+    ReadReceipt read_receipt = 15;
+    TypingIndicator typing = 16;
+    DeliveryReceipt delivery_receipt = 17;
+  }
+}
+
+// TextMessage for text content
+message TextMessage {
+  string text = 1;       // UTF-8 message text
+  string language = 2;   // Optional BCP-47 language tag
+}
+
+// MediaMessage for media references (IPFS CID)
+message MediaMessage {
+  string cid = 1;           // IPFS CID of encrypted media
+  string content_type = 2;  // MIME type: "image/jpeg", "audio/opus", etc.
+  uint64 size_bytes = 3;    // Size of the plaintext media
+  string filename = 4;      // Original filename
+  bytes thumbnail = 5;      // Inline thumbnail (max 10KB, JPEG)
+  bytes media_key = 6;      // AES-256 key to decrypt the media at CID
+  bytes media_hash = 7;     // SHA256 of plaintext media (for verification)
+  uint32 width = 8;         // For images/video
+  uint32 height = 9;        // For images/video
+  uint32 duration_ms = 10;  // For audio/video
+}
+
+// ReactionMessage for emoji reactions
+message ReactionMessage {
+  bytes target_message_id = 1;  // message_id of the target message
+  string emoji = 2;             // Unicode emoji or shortcode
+  bool remove = 3;              // true = remove reaction
+}
+
+// EditMessage for editing previous messages
+message EditMessage {
+  bytes target_message_id = 1;  // message_id of target
+  string new_text = 2;          // New text content
+  uint64 edit_timestamp = 3;    // Unix timestamp of edit
+}
+
+// DeleteMessage for deleting messages
+message DeleteMessage {
+  bytes target_message_id = 1;  // message_id to delete
+}
+
+// ReadReceipt for read acknowledgments
+message ReadReceipt {
+  repeated bytes message_ids = 1;  // Messages marked as read
+  uint64 read_at = 2;              // Unix timestamp
+}
+
+// TypingIndicator for typing notifications
+message TypingIndicator {
+  bool is_typing = 1;  // true = started typing, false = stopped
+}
+
+// DeliveryReceipt for delivery confirmations
+message DeliveryReceipt {
+  repeated bytes message_ids = 1;  // Messages delivered
+  uint64 delivered_at = 2;         // Unix timestamp
+}
+
+// GroupPayload - Group message payload (encrypted with Sender Keys)
+message GroupPayload {
+  uint64 epoch = 1;                // Group epoch
+  uint32 chain_index = 2;          // Sender's chain index
+  oneof content {
+    TextMessage text = 10;
+    MediaMessage media = 11;
+    ReactionMessage reaction = 12;
+    EditMessage edit = 13;
+    DeleteMessage delete_msg = 14;
+    GroupMemberEvent member_event = 15;
+    GroupInfoUpdate info_update = 16;
+  }
+  bytes sender_group_signature = 20;  // Ed25519 signature
+}
+
+// GroupMemberEvent for member changes
+message GroupMemberEvent {
+  bytes member_pubkey = 1;   // Ed25519 pub of affected member
+  string action = 2;         // "added", "removed", "left", "promoted", "demoted"
+  string role = 3;           // "member", "admin", "owner"
+  bytes actor_pubkey = 4;    // Who performed the action
+}
+
+// GroupInfoUpdate for group metadata changes
+message GroupInfoUpdate {
+  string new_name = 1;         // Max 128 UTF-8 chars
+  string new_description = 2;  // Max 512 UTF-8 chars
+  string new_avatar_cid = 3;   // IPFS CID
+}
+
+// ChannelPayload - Channel message payload
+message ChannelPayload {
+  oneof content {
+    TextMessage text = 1;
+    MediaMessage media = 2;
+    EditMessage edit = 3;
+    DeleteMessage delete_msg = 4;
+  }
+}
+
+// DeviceAnnouncement for new device registration
+message DeviceAnnouncement {
+  DeviceCertificate device = 1;
+  uint64 identity_doc_sequence = 2;  // Current IdentityDocument sequence
+}
+
+// KeyRequest for requesting group/sender keys
+message KeyRequest {
+  bytes group_id = 1;      // For group key requests
+  bytes session_id = 2;    // For session key requests
+  string request_type = 3; // "sender_key", "session", "prekey_bundle"
+}
+
+// IdentityUpdateNotification for identity changes
+message IdentityUpdateNotification {
+  bytes identity_pub = 1;     // IK_sign.pub
+  uint64 new_sequence = 2;    // New sequence number
+  bytes document_hash = 3;    // SHA256 of new IdentityDocument
+  uint64 timestamp = 4;       // Unix timestamp
+  bytes signature = 5;        // Signed by IK_sign
+}
+
+// RTCOffer for call initiation
+message RTCOffer {
+  string sdp = 1;       // SDP offer string
+  string call_id = 2;   // Random UUID for this call session
+  bool video = 3;       // true = video call, false = audio only
+}
+
+// RTCAnswer for call acceptance
+message RTCAnswer {
+  string sdp = 1;      // SDP answer string
+  string call_id = 2;  // Call ID from offer
+}
+
+// RTCIceCandidate for ICE exchange
+message RTCIceCandidate {
+  string candidate = 1;       // ICE candidate string
+  string sdp_mid = 2;         // SDP media identifier
+  uint32 sdp_mline_idx = 3;   // Media line index
+  string call_id = 4;         // Call ID
+}
+
+// RTCHangup for call termination
+message RTCHangup {
+  string call_id = 1;  // Call ID
+  string reason = 2;   // "normal", "busy", "declined", "timeout"
+}

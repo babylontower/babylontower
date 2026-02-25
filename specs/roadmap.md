@@ -4,7 +4,7 @@
 
 **Babylon Tower** is a decentralized, secure peer-to-peer messenger that operates without central servers. This roadmap details the implementation plan and tracks progress through all phases.
 
-**Current Status:** Phase 5 Complete - CLI Interface fully functional. PoC is functional but not production-ready. Development has shifted to Protocol v1 (formerly v2) implementation.
+**Current Status:** Phase 10 Complete - Protocol v1 Wire Format implemented with BabylonEnvelope, all message types, and topic routing. Ready for Multi-Device implementation.
 
 ---
 
@@ -168,9 +168,9 @@ babylontower/
 
 | Phase | Status | Description | Dependencies |
 |-------|--------|-------------|-------------|
-| 8 | ⏹️ Pending | Identity v1 (devices, identity docs, prekeys) | — |
-| 9 | ⏹️ Pending | X3DH & Double Ratchet | Phase 8 |
-| 10 | ⏹️ Pending | Protocol v1 Wire Format | Phase 9 |
+| 8 | ✅ Complete | Identity v1 (devices, identity docs, prekeys) | — |
+| 9 | ✅ Complete | X3DH & Double Ratchet | Phase 8 |
+| 10 | ✅ Complete | Protocol v1 Wire Format | Phase 9 |
 | 11 | ⏹️ Pending | Multi-Device | Phase 10 |
 | 12 | ⏹️ Pending | Private Groups (Sender Keys) | Phase 10 |
 | 13 | ⏹️ Pending | Public Groups & Channels | Phase 12 |
@@ -718,57 +718,57 @@ See [`protocol-v2.md`](protocol-v2.md) for the complete v1 protocol specificatio
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 9.1.1 | Prekey bundle fetch from DHT | ⏹️ |
-| 9.1.2 | X3DH initiator (4-DH computation + SK derivation) | ⏹️ |
-| 9.1.3 | X3DH responder (mirror DH + OPK consumption) | ⏹️ |
-| 9.1.4 | OPK exhaustion fallback (3-DH) | ⏹️ |
-| 9.1.5 | OPK race condition handling | ⏹️ |
+| 9.1.1 | Prekey bundle fetch from DHT | ✅ |
+| 9.1.2 | X3DH initiator (4-DH computation + SK derivation) | ✅ |
+| 9.1.3 | X3DH responder (mirror DH + OPK consumption) | ✅ |
+| 9.1.4 | OPK exhaustion fallback (3-DH) | ✅ |
+| 9.1.5 | OPK race condition handling | ✅ |
 
 ### 9.2 Double Ratchet
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 9.2.1 | KDF_RK and KDF_CK functions | ⏹️ |
-| 9.2.2 | Ratchet state initialization (initiator + responder) | ⏹️ |
-| 9.2.3 | Sending: chain ratchet → encrypt → RatchetHeader | ⏹️ |
-| 9.2.4 | Receiving: DH ratchet step + chain ratchet → decrypt | ⏹️ |
-| 9.2.5 | Skipped message key caching (max 256) | ⏹️ |
-| 9.2.6 | Session state persistence in BadgerDB (dr: prefix) | ⏹️ |
+| 9.2.1 | KDF_RK and KDF_CK functions | ✅ |
+| 9.2.2 | Ratchet state initialization (initiator + responder) | ✅ |
+| 9.2.3 | Sending: chain ratchet → encrypt → RatchetHeader | ✅ |
+| 9.2.4 | Receiving: DH ratchet step + chain ratchet → decrypt | ✅ |
+| 9.2.5 | Skipped message key caching (max 256) | ✅ |
+| 9.2.6 | Session state persistence in BadgerDB (dr: prefix) | ✅ |
 
 ### 9.3 Cipher Agility
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 9.3.1 | Cipher suite registry (0x0001 mandatory) | ⏹️ |
-| 9.3.2 | Suite negotiation from IdentityDocument | ⏹️ |
+| 9.3.1 | Cipher suite registry (0x0001 mandatory) | ✅ |
+| 9.3.2 | Suite negotiation from IdentityDocument | ✅ |
 
 **Deliverables:**
-- ⏹️ X3DH session establishment working
-- ⏹️ Double Ratchet encryption/decryption working
-- ⏹️ Session persistence across restarts
-- ⏹️ Comprehensive crypto test vectors
+- ✅ X3DH session establishment working
+- ✅ Double Ratchet encryption/decryption working
+- ✅ Session persistence across restarts
+- ✅ Comprehensive crypto test vectors
 
 ---
 
-## Phase 10: Protocol v1 Wire Format ⏹️
+## Phase 10: Protocol v1 Wire Format ✅
 
 **Goal:** Implement BabylonEnvelope, all message types, and backward compatibility.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 10.1 | BabylonEnvelope protobuf definition | ⏹️ |
-| 10.2 | MessageType enum (DM, Group, Channel, Control, RTC) | ⏹️ |
-| 10.3 | DMPayload with RatchetHeader | ⏹️ |
-| 10.4 | All content types (text, media, reaction, edit, delete, receipts) | ⏹️ |
-| 10.5 | Control message payloads (X3DHHeader, DeviceAnnouncement, etc.) | ⏹️ |
-| 10.6 | v1 topic routing (babylon-dm-, babylon-grp-, etc.) | ⏹️ |
-| 10.7 | PoC backward compatibility (dual topic subscription, legacy parsing) | ⏹️ |
-| 10.8 | Version negotiation logic | ⏹️ |
+| 10.1 | BabylonEnvelope protobuf definition | ✅ |
+| 10.2 | MessageType enum (DM, Group, Channel, Control, RTC) | ✅ |
+| 10.3 | DMPayload with RatchetHeader | ✅ |
+| 10.4 | All content types (text, media, reaction, edit, delete, receipts) | ✅ |
+| 10.5 | Control message payloads (X3DHHeader, DeviceAnnouncement, etc.) | ✅ |
+| 10.6 | v1 topic routing (babylon-dm-, babylon-grp-, etc.) | ✅ |
+| 10.7 | PoC backward compatibility (dual topic subscription, legacy parsing) | ✅ |
+| 10.8 | Version negotiation logic | ✅ |
 
 **Deliverables:**
-- ⏹️ All protobuf definitions updated
-- ⏹️ v1 envelope construction/parsing
-- ⏹️ Backward-compatible with PoC messages
+- ✅ All protobuf definitions updated
+- ✅ v1 envelope construction/parsing
+- ✅ Backward-compatible with PoC messages
 
 ---
 

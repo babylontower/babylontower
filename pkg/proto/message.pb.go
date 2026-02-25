@@ -21,6 +21,148 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// MessageType enum for all message types in Babylon Tower v1
+type MessageType int32
+
+const (
+	MessageType_MESSAGE_TYPE_UNSPECIFIED MessageType = 0
+	// Direct Messages (1-19)
+	MessageType_DM_TEXT             MessageType = 1
+	MessageType_DM_MEDIA            MessageType = 2
+	MessageType_DM_REACTION         MessageType = 3
+	MessageType_DM_EDIT             MessageType = 4
+	MessageType_DM_DELETE           MessageType = 5
+	MessageType_DM_READ_RECEIPT     MessageType = 6
+	MessageType_DM_TYPING           MessageType = 7
+	MessageType_DM_DELIVERY_RECEIPT MessageType = 8
+	// Group Messages (20-39)
+	MessageType_GROUP_TEXT           MessageType = 20
+	MessageType_GROUP_MEDIA          MessageType = 21
+	MessageType_GROUP_REACTION       MessageType = 22
+	MessageType_GROUP_EDIT           MessageType = 23
+	MessageType_GROUP_DELETE         MessageType = 24
+	MessageType_GROUP_MEMBER_ADDED   MessageType = 25
+	MessageType_GROUP_MEMBER_REMOVED MessageType = 26
+	MessageType_GROUP_KEY_ROTATION   MessageType = 27
+	MessageType_GROUP_INFO_UPDATE    MessageType = 28
+	// Channel Messages (40-59)
+	MessageType_CHANNEL_POST   MessageType = 40
+	MessageType_CHANNEL_EDIT   MessageType = 41
+	MessageType_CHANNEL_DELETE MessageType = 42
+	// Control Messages (60-79)
+	MessageType_CTRL_X3DH_INITIAL    MessageType = 60
+	MessageType_CTRL_PREKEY_BUNDLE   MessageType = 61
+	MessageType_CTRL_DEVICE_ANNOUNCE MessageType = 62
+	MessageType_CTRL_DEVICE_REVOKE   MessageType = 63
+	MessageType_CTRL_SENDER_KEY_DIST MessageType = 64
+	MessageType_CTRL_KEY_REQUEST     MessageType = 65
+	MessageType_CTRL_IDENTITY_UPDATE MessageType = 66
+	// RTC Signaling (80-99)
+	MessageType_RTC_OFFER         MessageType = 80
+	MessageType_RTC_ANSWER        MessageType = 81
+	MessageType_RTC_ICE_CANDIDATE MessageType = 82
+	MessageType_RTC_HANGUP        MessageType = 83
+)
+
+// Enum value maps for MessageType.
+var (
+	MessageType_name = map[int32]string{
+		0:  "MESSAGE_TYPE_UNSPECIFIED",
+		1:  "DM_TEXT",
+		2:  "DM_MEDIA",
+		3:  "DM_REACTION",
+		4:  "DM_EDIT",
+		5:  "DM_DELETE",
+		6:  "DM_READ_RECEIPT",
+		7:  "DM_TYPING",
+		8:  "DM_DELIVERY_RECEIPT",
+		20: "GROUP_TEXT",
+		21: "GROUP_MEDIA",
+		22: "GROUP_REACTION",
+		23: "GROUP_EDIT",
+		24: "GROUP_DELETE",
+		25: "GROUP_MEMBER_ADDED",
+		26: "GROUP_MEMBER_REMOVED",
+		27: "GROUP_KEY_ROTATION",
+		28: "GROUP_INFO_UPDATE",
+		40: "CHANNEL_POST",
+		41: "CHANNEL_EDIT",
+		42: "CHANNEL_DELETE",
+		60: "CTRL_X3DH_INITIAL",
+		61: "CTRL_PREKEY_BUNDLE",
+		62: "CTRL_DEVICE_ANNOUNCE",
+		63: "CTRL_DEVICE_REVOKE",
+		64: "CTRL_SENDER_KEY_DIST",
+		65: "CTRL_KEY_REQUEST",
+		66: "CTRL_IDENTITY_UPDATE",
+		80: "RTC_OFFER",
+		81: "RTC_ANSWER",
+		82: "RTC_ICE_CANDIDATE",
+		83: "RTC_HANGUP",
+	}
+	MessageType_value = map[string]int32{
+		"MESSAGE_TYPE_UNSPECIFIED": 0,
+		"DM_TEXT":                  1,
+		"DM_MEDIA":                 2,
+		"DM_REACTION":              3,
+		"DM_EDIT":                  4,
+		"DM_DELETE":                5,
+		"DM_READ_RECEIPT":          6,
+		"DM_TYPING":                7,
+		"DM_DELIVERY_RECEIPT":      8,
+		"GROUP_TEXT":               20,
+		"GROUP_MEDIA":              21,
+		"GROUP_REACTION":           22,
+		"GROUP_EDIT":               23,
+		"GROUP_DELETE":             24,
+		"GROUP_MEMBER_ADDED":       25,
+		"GROUP_MEMBER_REMOVED":     26,
+		"GROUP_KEY_ROTATION":       27,
+		"GROUP_INFO_UPDATE":        28,
+		"CHANNEL_POST":             40,
+		"CHANNEL_EDIT":             41,
+		"CHANNEL_DELETE":           42,
+		"CTRL_X3DH_INITIAL":        60,
+		"CTRL_PREKEY_BUNDLE":       61,
+		"CTRL_DEVICE_ANNOUNCE":     62,
+		"CTRL_DEVICE_REVOKE":       63,
+		"CTRL_SENDER_KEY_DIST":     64,
+		"CTRL_KEY_REQUEST":         65,
+		"CTRL_IDENTITY_UPDATE":     66,
+		"RTC_OFFER":                80,
+		"RTC_ANSWER":               81,
+		"RTC_ICE_CANDIDATE":        82,
+		"RTC_HANGUP":               83,
+	}
+)
+
+func (x MessageType) Enum() *MessageType {
+	p := new(MessageType)
+	*p = x
+	return p
+}
+
+func (x MessageType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MessageType) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_message_proto_enumTypes[0].Descriptor()
+}
+
+func (MessageType) Type() protoreflect.EnumType {
+	return &file_proto_message_proto_enumTypes[0]
+}
+
+func (x MessageType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MessageType.Descriptor instead.
+func (MessageType) EnumDescriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{0}
+}
+
 // Message represents a plaintext message (what the user types)
 type Message struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -988,6 +1130,1825 @@ func (x *PrekeyBundle) GetPublishedAt() uint64 {
 	return 0
 }
 
+// BabylonEnvelope is the outer wire format for all Protocol v1 messages
+type BabylonEnvelope struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Header (unencrypted, used for routing)
+	ProtocolVersion   uint32      `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`                // 1 for Protocol v1
+	MessageType       MessageType `protobuf:"varint,2,opt,name=message_type,json=messageType,proto3,enum=messenger.MessageType" json:"message_type,omitempty"` // Type of message
+	SenderIdentity    []byte      `protobuf:"bytes,3,opt,name=sender_identity,json=senderIdentity,proto3" json:"sender_identity,omitempty"`                    // Sender's IK_sign.pub (32 bytes)
+	RecipientIdentity []byte      `protobuf:"bytes,4,opt,name=recipient_identity,json=recipientIdentity,proto3" json:"recipient_identity,omitempty"`           // Recipient's IK_sign.pub (32 bytes, empty for group/channel)
+	Timestamp         uint64      `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                                   // Unix timestamp (seconds)
+	MessageId         []byte      `protobuf:"bytes,6,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`                                   // Random 16 bytes, unique per message
+	// Routing (set for group/channel messages)
+	GroupId   []byte `protobuf:"bytes,7,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`       // 32 bytes for group messages
+	ChannelId []byte `protobuf:"bytes,8,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"` // 32 bytes for channel messages
+	// Encrypted payload (interpretation depends on message_type)
+	Payload []byte `protobuf:"bytes,9,opt,name=payload,proto3" json:"payload,omitempty"`
+	// Authentication
+	SenderDeviceId []byte `protobuf:"bytes,10,opt,name=sender_device_id,json=senderDeviceId,proto3" json:"sender_device_id,omitempty"` // 16 bytes, identifies sending device
+	Signature      []byte `protobuf:"bytes,11,opt,name=signature,proto3" json:"signature,omitempty"`                                   // Ed25519.Sign(DK_sign.priv, canonical(fields 1-10))
+	// Cipher suite used for payload encryption
+	CipherSuiteId uint32 `protobuf:"varint,12,opt,name=cipher_suite_id,json=cipherSuiteId,proto3" json:"cipher_suite_id,omitempty"` // 0x0001 = BT-X25519-XChaCha20Poly1305-SHA256
+	// X3DH header (present only for session initialization)
+	X3DhHeader    []byte `protobuf:"bytes,13,opt,name=x3dh_header,json=x3dhHeader,proto3" json:"x3dh_header,omitempty"` // Serialized X3DHHeader
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BabylonEnvelope) Reset() {
+	*x = BabylonEnvelope{}
+	mi := &file_proto_message_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BabylonEnvelope) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BabylonEnvelope) ProtoMessage() {}
+
+func (x *BabylonEnvelope) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BabylonEnvelope.ProtoReflect.Descriptor instead.
+func (*BabylonEnvelope) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *BabylonEnvelope) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *BabylonEnvelope) GetMessageType() MessageType {
+	if x != nil {
+		return x.MessageType
+	}
+	return MessageType_MESSAGE_TYPE_UNSPECIFIED
+}
+
+func (x *BabylonEnvelope) GetSenderIdentity() []byte {
+	if x != nil {
+		return x.SenderIdentity
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetRecipientIdentity() []byte {
+	if x != nil {
+		return x.RecipientIdentity
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetTimestamp() uint64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *BabylonEnvelope) GetMessageId() []byte {
+	if x != nil {
+		return x.MessageId
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetGroupId() []byte {
+	if x != nil {
+		return x.GroupId
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetChannelId() []byte {
+	if x != nil {
+		return x.ChannelId
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetSenderDeviceId() []byte {
+	if x != nil {
+		return x.SenderDeviceId
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *BabylonEnvelope) GetCipherSuiteId() uint32 {
+	if x != nil {
+		return x.CipherSuiteId
+	}
+	return 0
+}
+
+func (x *BabylonEnvelope) GetX3DhHeader() []byte {
+	if x != nil {
+		return x.X3DhHeader
+	}
+	return nil
+}
+
+// X3DHHeader for session initialization
+type X3DHHeader struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	InitiatorIdentityDhPub []byte                 `protobuf:"bytes,1,opt,name=initiator_identity_dh_pub,json=initiatorIdentityDhPub,proto3" json:"initiator_identity_dh_pub,omitempty"` // Alice's IK_dh.pub (32 bytes)
+	EphemeralPub           []byte                 `protobuf:"bytes,2,opt,name=ephemeral_pub,json=ephemeralPub,proto3" json:"ephemeral_pub,omitempty"`                                   // Alice's EK.pub (32 bytes)
+	SignedPrekeyId         uint64                 `protobuf:"varint,3,opt,name=signed_prekey_id,json=signedPrekeyId,proto3" json:"signed_prekey_id,omitempty"`                          // Bob's SPK ID used
+	OneTimePrekeyId        uint64                 `protobuf:"varint,4,opt,name=one_time_prekey_id,json=oneTimePrekeyId,proto3" json:"one_time_prekey_id,omitempty"`                     // Bob's OPK ID used (0 if none)
+	CipherSuiteId          uint32                 `protobuf:"varint,5,opt,name=cipher_suite_id,json=cipherSuiteId,proto3" json:"cipher_suite_id,omitempty"`                             // Negotiated suite
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *X3DHHeader) Reset() {
+	*x = X3DHHeader{}
+	mi := &file_proto_message_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *X3DHHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*X3DHHeader) ProtoMessage() {}
+
+func (x *X3DHHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use X3DHHeader.ProtoReflect.Descriptor instead.
+func (*X3DHHeader) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *X3DHHeader) GetInitiatorIdentityDhPub() []byte {
+	if x != nil {
+		return x.InitiatorIdentityDhPub
+	}
+	return nil
+}
+
+func (x *X3DHHeader) GetEphemeralPub() []byte {
+	if x != nil {
+		return x.EphemeralPub
+	}
+	return nil
+}
+
+func (x *X3DHHeader) GetSignedPrekeyId() uint64 {
+	if x != nil {
+		return x.SignedPrekeyId
+	}
+	return 0
+}
+
+func (x *X3DHHeader) GetOneTimePrekeyId() uint64 {
+	if x != nil {
+		return x.OneTimePrekeyId
+	}
+	return 0
+}
+
+func (x *X3DHHeader) GetCipherSuiteId() uint32 {
+	if x != nil {
+		return x.CipherSuiteId
+	}
+	return 0
+}
+
+// RatchetHeader for Double Ratchet encrypted messages
+type RatchetHeader struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	DhRatchetPub        []byte                 `protobuf:"bytes,1,opt,name=dh_ratchet_pub,json=dhRatchetPub,proto3" json:"dh_ratchet_pub,omitempty"`                       // Current DH ratchet public key (32 bytes)
+	PreviousChainLength uint32                 `protobuf:"varint,2,opt,name=previous_chain_length,json=previousChainLength,proto3" json:"previous_chain_length,omitempty"` // Length of previous sending chain
+	MessageNumber       uint32                 `protobuf:"varint,3,opt,name=message_number,json=messageNumber,proto3" json:"message_number,omitempty"`                     // Index in current sending chain
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *RatchetHeader) Reset() {
+	*x = RatchetHeader{}
+	mi := &file_proto_message_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RatchetHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RatchetHeader) ProtoMessage() {}
+
+func (x *RatchetHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RatchetHeader.ProtoReflect.Descriptor instead.
+func (*RatchetHeader) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RatchetHeader) GetDhRatchetPub() []byte {
+	if x != nil {
+		return x.DhRatchetPub
+	}
+	return nil
+}
+
+func (x *RatchetHeader) GetPreviousChainLength() uint32 {
+	if x != nil {
+		return x.PreviousChainLength
+	}
+	return 0
+}
+
+func (x *RatchetHeader) GetMessageNumber() uint32 {
+	if x != nil {
+		return x.MessageNumber
+	}
+	return 0
+}
+
+// DMPayload - Direct message payload (encrypted with Double Ratchet)
+type DMPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RatchetHeader *RatchetHeader         `protobuf:"bytes,1,opt,name=ratchet_header,json=ratchetHeader,proto3" json:"ratchet_header,omitempty"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*DMPayload_Text
+	//	*DMPayload_Media
+	//	*DMPayload_Reaction
+	//	*DMPayload_Edit
+	//	*DMPayload_DeleteMsg
+	//	*DMPayload_ReadReceipt
+	//	*DMPayload_Typing
+	//	*DMPayload_DeliveryReceipt
+	Content       isDMPayload_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DMPayload) Reset() {
+	*x = DMPayload{}
+	mi := &file_proto_message_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DMPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DMPayload) ProtoMessage() {}
+
+func (x *DMPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DMPayload.ProtoReflect.Descriptor instead.
+func (*DMPayload) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *DMPayload) GetRatchetHeader() *RatchetHeader {
+	if x != nil {
+		return x.RatchetHeader
+	}
+	return nil
+}
+
+func (x *DMPayload) GetContent() isDMPayload_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *DMPayload) GetText() *TextMessage {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_Text); ok {
+			return x.Text
+		}
+	}
+	return nil
+}
+
+func (x *DMPayload) GetMedia() *MediaMessage {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_Media); ok {
+			return x.Media
+		}
+	}
+	return nil
+}
+
+func (x *DMPayload) GetReaction() *ReactionMessage {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_Reaction); ok {
+			return x.Reaction
+		}
+	}
+	return nil
+}
+
+func (x *DMPayload) GetEdit() *EditMessage {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_Edit); ok {
+			return x.Edit
+		}
+	}
+	return nil
+}
+
+func (x *DMPayload) GetDeleteMsg() *DeleteMessage {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_DeleteMsg); ok {
+			return x.DeleteMsg
+		}
+	}
+	return nil
+}
+
+func (x *DMPayload) GetReadReceipt() *ReadReceipt {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_ReadReceipt); ok {
+			return x.ReadReceipt
+		}
+	}
+	return nil
+}
+
+func (x *DMPayload) GetTyping() *TypingIndicator {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_Typing); ok {
+			return x.Typing
+		}
+	}
+	return nil
+}
+
+func (x *DMPayload) GetDeliveryReceipt() *DeliveryReceipt {
+	if x != nil {
+		if x, ok := x.Content.(*DMPayload_DeliveryReceipt); ok {
+			return x.DeliveryReceipt
+		}
+	}
+	return nil
+}
+
+type isDMPayload_Content interface {
+	isDMPayload_Content()
+}
+
+type DMPayload_Text struct {
+	Text *TextMessage `protobuf:"bytes,10,opt,name=text,proto3,oneof"`
+}
+
+type DMPayload_Media struct {
+	Media *MediaMessage `protobuf:"bytes,11,opt,name=media,proto3,oneof"`
+}
+
+type DMPayload_Reaction struct {
+	Reaction *ReactionMessage `protobuf:"bytes,12,opt,name=reaction,proto3,oneof"`
+}
+
+type DMPayload_Edit struct {
+	Edit *EditMessage `protobuf:"bytes,13,opt,name=edit,proto3,oneof"`
+}
+
+type DMPayload_DeleteMsg struct {
+	DeleteMsg *DeleteMessage `protobuf:"bytes,14,opt,name=delete_msg,json=deleteMsg,proto3,oneof"`
+}
+
+type DMPayload_ReadReceipt struct {
+	ReadReceipt *ReadReceipt `protobuf:"bytes,15,opt,name=read_receipt,json=readReceipt,proto3,oneof"`
+}
+
+type DMPayload_Typing struct {
+	Typing *TypingIndicator `protobuf:"bytes,16,opt,name=typing,proto3,oneof"`
+}
+
+type DMPayload_DeliveryReceipt struct {
+	DeliveryReceipt *DeliveryReceipt `protobuf:"bytes,17,opt,name=delivery_receipt,json=deliveryReceipt,proto3,oneof"`
+}
+
+func (*DMPayload_Text) isDMPayload_Content() {}
+
+func (*DMPayload_Media) isDMPayload_Content() {}
+
+func (*DMPayload_Reaction) isDMPayload_Content() {}
+
+func (*DMPayload_Edit) isDMPayload_Content() {}
+
+func (*DMPayload_DeleteMsg) isDMPayload_Content() {}
+
+func (*DMPayload_ReadReceipt) isDMPayload_Content() {}
+
+func (*DMPayload_Typing) isDMPayload_Content() {}
+
+func (*DMPayload_DeliveryReceipt) isDMPayload_Content() {}
+
+// TextMessage for text content
+type TextMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`         // UTF-8 message text
+	Language      string                 `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"` // Optional BCP-47 language tag
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextMessage) Reset() {
+	*x = TextMessage{}
+	mi := &file_proto_message_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextMessage) ProtoMessage() {}
+
+func (x *TextMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextMessage.ProtoReflect.Descriptor instead.
+func (*TextMessage) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *TextMessage) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *TextMessage) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+// MediaMessage for media references (IPFS CID)
+type MediaMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cid           string                 `protobuf:"bytes,1,opt,name=cid,proto3" json:"cid,omitempty"`                                    // IPFS CID of encrypted media
+	ContentType   string                 `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"` // MIME type: "image/jpeg", "audio/opus", etc.
+	SizeBytes     uint64                 `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`      // Size of the plaintext media
+	Filename      string                 `protobuf:"bytes,4,opt,name=filename,proto3" json:"filename,omitempty"`                          // Original filename
+	Thumbnail     []byte                 `protobuf:"bytes,5,opt,name=thumbnail,proto3" json:"thumbnail,omitempty"`                        // Inline thumbnail (max 10KB, JPEG)
+	MediaKey      []byte                 `protobuf:"bytes,6,opt,name=media_key,json=mediaKey,proto3" json:"media_key,omitempty"`          // AES-256 key to decrypt the media at CID
+	MediaHash     []byte                 `protobuf:"bytes,7,opt,name=media_hash,json=mediaHash,proto3" json:"media_hash,omitempty"`       // SHA256 of plaintext media (for verification)
+	Width         uint32                 `protobuf:"varint,8,opt,name=width,proto3" json:"width,omitempty"`                               // For images/video
+	Height        uint32                 `protobuf:"varint,9,opt,name=height,proto3" json:"height,omitempty"`                             // For images/video
+	DurationMs    uint32                 `protobuf:"varint,10,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`  // For audio/video
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaMessage) Reset() {
+	*x = MediaMessage{}
+	mi := &file_proto_message_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaMessage) ProtoMessage() {}
+
+func (x *MediaMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaMessage.ProtoReflect.Descriptor instead.
+func (*MediaMessage) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *MediaMessage) GetCid() string {
+	if x != nil {
+		return x.Cid
+	}
+	return ""
+}
+
+func (x *MediaMessage) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *MediaMessage) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *MediaMessage) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *MediaMessage) GetThumbnail() []byte {
+	if x != nil {
+		return x.Thumbnail
+	}
+	return nil
+}
+
+func (x *MediaMessage) GetMediaKey() []byte {
+	if x != nil {
+		return x.MediaKey
+	}
+	return nil
+}
+
+func (x *MediaMessage) GetMediaHash() []byte {
+	if x != nil {
+		return x.MediaHash
+	}
+	return nil
+}
+
+func (x *MediaMessage) GetWidth() uint32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *MediaMessage) GetHeight() uint32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+func (x *MediaMessage) GetDurationMs() uint32 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
+}
+
+// ReactionMessage for emoji reactions
+type ReactionMessage struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TargetMessageId []byte                 `protobuf:"bytes,1,opt,name=target_message_id,json=targetMessageId,proto3" json:"target_message_id,omitempty"` // message_id of the target message
+	Emoji           string                 `protobuf:"bytes,2,opt,name=emoji,proto3" json:"emoji,omitempty"`                                              // Unicode emoji or shortcode
+	Remove          bool                   `protobuf:"varint,3,opt,name=remove,proto3" json:"remove,omitempty"`                                           // true = remove reaction
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ReactionMessage) Reset() {
+	*x = ReactionMessage{}
+	mi := &file_proto_message_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReactionMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReactionMessage) ProtoMessage() {}
+
+func (x *ReactionMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReactionMessage.ProtoReflect.Descriptor instead.
+func (*ReactionMessage) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ReactionMessage) GetTargetMessageId() []byte {
+	if x != nil {
+		return x.TargetMessageId
+	}
+	return nil
+}
+
+func (x *ReactionMessage) GetEmoji() string {
+	if x != nil {
+		return x.Emoji
+	}
+	return ""
+}
+
+func (x *ReactionMessage) GetRemove() bool {
+	if x != nil {
+		return x.Remove
+	}
+	return false
+}
+
+// EditMessage for editing previous messages
+type EditMessage struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TargetMessageId []byte                 `protobuf:"bytes,1,opt,name=target_message_id,json=targetMessageId,proto3" json:"target_message_id,omitempty"` // message_id of target
+	NewText         string                 `protobuf:"bytes,2,opt,name=new_text,json=newText,proto3" json:"new_text,omitempty"`                           // New text content
+	EditTimestamp   uint64                 `protobuf:"varint,3,opt,name=edit_timestamp,json=editTimestamp,proto3" json:"edit_timestamp,omitempty"`        // Unix timestamp of edit
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *EditMessage) Reset() {
+	*x = EditMessage{}
+	mi := &file_proto_message_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EditMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditMessage) ProtoMessage() {}
+
+func (x *EditMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditMessage.ProtoReflect.Descriptor instead.
+func (*EditMessage) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *EditMessage) GetTargetMessageId() []byte {
+	if x != nil {
+		return x.TargetMessageId
+	}
+	return nil
+}
+
+func (x *EditMessage) GetNewText() string {
+	if x != nil {
+		return x.NewText
+	}
+	return ""
+}
+
+func (x *EditMessage) GetEditTimestamp() uint64 {
+	if x != nil {
+		return x.EditTimestamp
+	}
+	return 0
+}
+
+// DeleteMessage for deleting messages
+type DeleteMessage struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TargetMessageId []byte                 `protobuf:"bytes,1,opt,name=target_message_id,json=targetMessageId,proto3" json:"target_message_id,omitempty"` // message_id to delete
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DeleteMessage) Reset() {
+	*x = DeleteMessage{}
+	mi := &file_proto_message_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMessage) ProtoMessage() {}
+
+func (x *DeleteMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMessage.ProtoReflect.Descriptor instead.
+func (*DeleteMessage) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DeleteMessage) GetTargetMessageId() []byte {
+	if x != nil {
+		return x.TargetMessageId
+	}
+	return nil
+}
+
+// ReadReceipt for read acknowledgments
+type ReadReceipt struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MessageIds    [][]byte               `protobuf:"bytes,1,rep,name=message_ids,json=messageIds,proto3" json:"message_ids,omitempty"` // Messages marked as read
+	ReadAt        uint64                 `protobuf:"varint,2,opt,name=read_at,json=readAt,proto3" json:"read_at,omitempty"`            // Unix timestamp
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadReceipt) Reset() {
+	*x = ReadReceipt{}
+	mi := &file_proto_message_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadReceipt) ProtoMessage() {}
+
+func (x *ReadReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadReceipt.ProtoReflect.Descriptor instead.
+func (*ReadReceipt) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ReadReceipt) GetMessageIds() [][]byte {
+	if x != nil {
+		return x.MessageIds
+	}
+	return nil
+}
+
+func (x *ReadReceipt) GetReadAt() uint64 {
+	if x != nil {
+		return x.ReadAt
+	}
+	return 0
+}
+
+// TypingIndicator for typing notifications
+type TypingIndicator struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IsTyping      bool                   `protobuf:"varint,1,opt,name=is_typing,json=isTyping,proto3" json:"is_typing,omitempty"` // true = started typing, false = stopped
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypingIndicator) Reset() {
+	*x = TypingIndicator{}
+	mi := &file_proto_message_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypingIndicator) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypingIndicator) ProtoMessage() {}
+
+func (x *TypingIndicator) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypingIndicator.ProtoReflect.Descriptor instead.
+func (*TypingIndicator) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *TypingIndicator) GetIsTyping() bool {
+	if x != nil {
+		return x.IsTyping
+	}
+	return false
+}
+
+// DeliveryReceipt for delivery confirmations
+type DeliveryReceipt struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MessageIds    [][]byte               `protobuf:"bytes,1,rep,name=message_ids,json=messageIds,proto3" json:"message_ids,omitempty"`     // Messages delivered
+	DeliveredAt   uint64                 `protobuf:"varint,2,opt,name=delivered_at,json=deliveredAt,proto3" json:"delivered_at,omitempty"` // Unix timestamp
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliveryReceipt) Reset() {
+	*x = DeliveryReceipt{}
+	mi := &file_proto_message_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliveryReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliveryReceipt) ProtoMessage() {}
+
+func (x *DeliveryReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliveryReceipt.ProtoReflect.Descriptor instead.
+func (*DeliveryReceipt) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DeliveryReceipt) GetMessageIds() [][]byte {
+	if x != nil {
+		return x.MessageIds
+	}
+	return nil
+}
+
+func (x *DeliveryReceipt) GetDeliveredAt() uint64 {
+	if x != nil {
+		return x.DeliveredAt
+	}
+	return 0
+}
+
+// GroupPayload - Group message payload (encrypted with Sender Keys)
+type GroupPayload struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Epoch      uint64                 `protobuf:"varint,1,opt,name=epoch,proto3" json:"epoch,omitempty"`                             // Group epoch
+	ChainIndex uint32                 `protobuf:"varint,2,opt,name=chain_index,json=chainIndex,proto3" json:"chain_index,omitempty"` // Sender's chain index
+	// Types that are valid to be assigned to Content:
+	//
+	//	*GroupPayload_Text
+	//	*GroupPayload_Media
+	//	*GroupPayload_Reaction
+	//	*GroupPayload_Edit
+	//	*GroupPayload_DeleteMsg
+	//	*GroupPayload_MemberEvent
+	//	*GroupPayload_InfoUpdate
+	Content              isGroupPayload_Content `protobuf_oneof:"content"`
+	SenderGroupSignature []byte                 `protobuf:"bytes,20,opt,name=sender_group_signature,json=senderGroupSignature,proto3" json:"sender_group_signature,omitempty"` // Ed25519 signature
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *GroupPayload) Reset() {
+	*x = GroupPayload{}
+	mi := &file_proto_message_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupPayload) ProtoMessage() {}
+
+func (x *GroupPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupPayload.ProtoReflect.Descriptor instead.
+func (*GroupPayload) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GroupPayload) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *GroupPayload) GetChainIndex() uint32 {
+	if x != nil {
+		return x.ChainIndex
+	}
+	return 0
+}
+
+func (x *GroupPayload) GetContent() isGroupPayload_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetText() *TextMessage {
+	if x != nil {
+		if x, ok := x.Content.(*GroupPayload_Text); ok {
+			return x.Text
+		}
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetMedia() *MediaMessage {
+	if x != nil {
+		if x, ok := x.Content.(*GroupPayload_Media); ok {
+			return x.Media
+		}
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetReaction() *ReactionMessage {
+	if x != nil {
+		if x, ok := x.Content.(*GroupPayload_Reaction); ok {
+			return x.Reaction
+		}
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetEdit() *EditMessage {
+	if x != nil {
+		if x, ok := x.Content.(*GroupPayload_Edit); ok {
+			return x.Edit
+		}
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetDeleteMsg() *DeleteMessage {
+	if x != nil {
+		if x, ok := x.Content.(*GroupPayload_DeleteMsg); ok {
+			return x.DeleteMsg
+		}
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetMemberEvent() *GroupMemberEvent {
+	if x != nil {
+		if x, ok := x.Content.(*GroupPayload_MemberEvent); ok {
+			return x.MemberEvent
+		}
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetInfoUpdate() *GroupInfoUpdate {
+	if x != nil {
+		if x, ok := x.Content.(*GroupPayload_InfoUpdate); ok {
+			return x.InfoUpdate
+		}
+	}
+	return nil
+}
+
+func (x *GroupPayload) GetSenderGroupSignature() []byte {
+	if x != nil {
+		return x.SenderGroupSignature
+	}
+	return nil
+}
+
+type isGroupPayload_Content interface {
+	isGroupPayload_Content()
+}
+
+type GroupPayload_Text struct {
+	Text *TextMessage `protobuf:"bytes,10,opt,name=text,proto3,oneof"`
+}
+
+type GroupPayload_Media struct {
+	Media *MediaMessage `protobuf:"bytes,11,opt,name=media,proto3,oneof"`
+}
+
+type GroupPayload_Reaction struct {
+	Reaction *ReactionMessage `protobuf:"bytes,12,opt,name=reaction,proto3,oneof"`
+}
+
+type GroupPayload_Edit struct {
+	Edit *EditMessage `protobuf:"bytes,13,opt,name=edit,proto3,oneof"`
+}
+
+type GroupPayload_DeleteMsg struct {
+	DeleteMsg *DeleteMessage `protobuf:"bytes,14,opt,name=delete_msg,json=deleteMsg,proto3,oneof"`
+}
+
+type GroupPayload_MemberEvent struct {
+	MemberEvent *GroupMemberEvent `protobuf:"bytes,15,opt,name=member_event,json=memberEvent,proto3,oneof"`
+}
+
+type GroupPayload_InfoUpdate struct {
+	InfoUpdate *GroupInfoUpdate `protobuf:"bytes,16,opt,name=info_update,json=infoUpdate,proto3,oneof"`
+}
+
+func (*GroupPayload_Text) isGroupPayload_Content() {}
+
+func (*GroupPayload_Media) isGroupPayload_Content() {}
+
+func (*GroupPayload_Reaction) isGroupPayload_Content() {}
+
+func (*GroupPayload_Edit) isGroupPayload_Content() {}
+
+func (*GroupPayload_DeleteMsg) isGroupPayload_Content() {}
+
+func (*GroupPayload_MemberEvent) isGroupPayload_Content() {}
+
+func (*GroupPayload_InfoUpdate) isGroupPayload_Content() {}
+
+// GroupMemberEvent for member changes
+type GroupMemberEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MemberPubkey  []byte                 `protobuf:"bytes,1,opt,name=member_pubkey,json=memberPubkey,proto3" json:"member_pubkey,omitempty"` // Ed25519 pub of affected member
+	Action        string                 `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`                                 // "added", "removed", "left", "promoted", "demoted"
+	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`                                     // "member", "admin", "owner"
+	ActorPubkey   []byte                 `protobuf:"bytes,4,opt,name=actor_pubkey,json=actorPubkey,proto3" json:"actor_pubkey,omitempty"`    // Who performed the action
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupMemberEvent) Reset() {
+	*x = GroupMemberEvent{}
+	mi := &file_proto_message_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupMemberEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupMemberEvent) ProtoMessage() {}
+
+func (x *GroupMemberEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupMemberEvent.ProtoReflect.Descriptor instead.
+func (*GroupMemberEvent) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *GroupMemberEvent) GetMemberPubkey() []byte {
+	if x != nil {
+		return x.MemberPubkey
+	}
+	return nil
+}
+
+func (x *GroupMemberEvent) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *GroupMemberEvent) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *GroupMemberEvent) GetActorPubkey() []byte {
+	if x != nil {
+		return x.ActorPubkey
+	}
+	return nil
+}
+
+// GroupInfoUpdate for group metadata changes
+type GroupInfoUpdate struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NewName        string                 `protobuf:"bytes,1,opt,name=new_name,json=newName,proto3" json:"new_name,omitempty"`                      // Max 128 UTF-8 chars
+	NewDescription string                 `protobuf:"bytes,2,opt,name=new_description,json=newDescription,proto3" json:"new_description,omitempty"` // Max 512 UTF-8 chars
+	NewAvatarCid   string                 `protobuf:"bytes,3,opt,name=new_avatar_cid,json=newAvatarCid,proto3" json:"new_avatar_cid,omitempty"`     // IPFS CID
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GroupInfoUpdate) Reset() {
+	*x = GroupInfoUpdate{}
+	mi := &file_proto_message_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupInfoUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupInfoUpdate) ProtoMessage() {}
+
+func (x *GroupInfoUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupInfoUpdate.ProtoReflect.Descriptor instead.
+func (*GroupInfoUpdate) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *GroupInfoUpdate) GetNewName() string {
+	if x != nil {
+		return x.NewName
+	}
+	return ""
+}
+
+func (x *GroupInfoUpdate) GetNewDescription() string {
+	if x != nil {
+		return x.NewDescription
+	}
+	return ""
+}
+
+func (x *GroupInfoUpdate) GetNewAvatarCid() string {
+	if x != nil {
+		return x.NewAvatarCid
+	}
+	return ""
+}
+
+// ChannelPayload - Channel message payload
+type ChannelPayload struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*ChannelPayload_Text
+	//	*ChannelPayload_Media
+	//	*ChannelPayload_Edit
+	//	*ChannelPayload_DeleteMsg
+	Content       isChannelPayload_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChannelPayload) Reset() {
+	*x = ChannelPayload{}
+	mi := &file_proto_message_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChannelPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChannelPayload) ProtoMessage() {}
+
+func (x *ChannelPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChannelPayload.ProtoReflect.Descriptor instead.
+func (*ChannelPayload) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ChannelPayload) GetContent() isChannelPayload_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *ChannelPayload) GetText() *TextMessage {
+	if x != nil {
+		if x, ok := x.Content.(*ChannelPayload_Text); ok {
+			return x.Text
+		}
+	}
+	return nil
+}
+
+func (x *ChannelPayload) GetMedia() *MediaMessage {
+	if x != nil {
+		if x, ok := x.Content.(*ChannelPayload_Media); ok {
+			return x.Media
+		}
+	}
+	return nil
+}
+
+func (x *ChannelPayload) GetEdit() *EditMessage {
+	if x != nil {
+		if x, ok := x.Content.(*ChannelPayload_Edit); ok {
+			return x.Edit
+		}
+	}
+	return nil
+}
+
+func (x *ChannelPayload) GetDeleteMsg() *DeleteMessage {
+	if x != nil {
+		if x, ok := x.Content.(*ChannelPayload_DeleteMsg); ok {
+			return x.DeleteMsg
+		}
+	}
+	return nil
+}
+
+type isChannelPayload_Content interface {
+	isChannelPayload_Content()
+}
+
+type ChannelPayload_Text struct {
+	Text *TextMessage `protobuf:"bytes,1,opt,name=text,proto3,oneof"`
+}
+
+type ChannelPayload_Media struct {
+	Media *MediaMessage `protobuf:"bytes,2,opt,name=media,proto3,oneof"`
+}
+
+type ChannelPayload_Edit struct {
+	Edit *EditMessage `protobuf:"bytes,3,opt,name=edit,proto3,oneof"`
+}
+
+type ChannelPayload_DeleteMsg struct {
+	DeleteMsg *DeleteMessage `protobuf:"bytes,4,opt,name=delete_msg,json=deleteMsg,proto3,oneof"`
+}
+
+func (*ChannelPayload_Text) isChannelPayload_Content() {}
+
+func (*ChannelPayload_Media) isChannelPayload_Content() {}
+
+func (*ChannelPayload_Edit) isChannelPayload_Content() {}
+
+func (*ChannelPayload_DeleteMsg) isChannelPayload_Content() {}
+
+// DeviceAnnouncement for new device registration
+type DeviceAnnouncement struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Device              *DeviceCertificate     `protobuf:"bytes,1,opt,name=device,proto3" json:"device,omitempty"`
+	IdentityDocSequence uint64                 `protobuf:"varint,2,opt,name=identity_doc_sequence,json=identityDocSequence,proto3" json:"identity_doc_sequence,omitempty"` // Current IdentityDocument sequence
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *DeviceAnnouncement) Reset() {
+	*x = DeviceAnnouncement{}
+	mi := &file_proto_message_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceAnnouncement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceAnnouncement) ProtoMessage() {}
+
+func (x *DeviceAnnouncement) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceAnnouncement.ProtoReflect.Descriptor instead.
+func (*DeviceAnnouncement) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *DeviceAnnouncement) GetDevice() *DeviceCertificate {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
+func (x *DeviceAnnouncement) GetIdentityDocSequence() uint64 {
+	if x != nil {
+		return x.IdentityDocSequence
+	}
+	return 0
+}
+
+// KeyRequest for requesting group/sender keys
+type KeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       []byte                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`             // For group key requests
+	SessionId     []byte                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`       // For session key requests
+	RequestType   string                 `protobuf:"bytes,3,opt,name=request_type,json=requestType,proto3" json:"request_type,omitempty"` // "sender_key", "session", "prekey_bundle"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeyRequest) Reset() {
+	*x = KeyRequest{}
+	mi := &file_proto_message_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyRequest) ProtoMessage() {}
+
+func (x *KeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyRequest.ProtoReflect.Descriptor instead.
+func (*KeyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *KeyRequest) GetGroupId() []byte {
+	if x != nil {
+		return x.GroupId
+	}
+	return nil
+}
+
+func (x *KeyRequest) GetSessionId() []byte {
+	if x != nil {
+		return x.SessionId
+	}
+	return nil
+}
+
+func (x *KeyRequest) GetRequestType() string {
+	if x != nil {
+		return x.RequestType
+	}
+	return ""
+}
+
+// IdentityUpdateNotification for identity changes
+type IdentityUpdateNotification struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IdentityPub   []byte                 `protobuf:"bytes,1,opt,name=identity_pub,json=identityPub,proto3" json:"identity_pub,omitempty"`    // IK_sign.pub
+	NewSequence   uint64                 `protobuf:"varint,2,opt,name=new_sequence,json=newSequence,proto3" json:"new_sequence,omitempty"`   // New sequence number
+	DocumentHash  []byte                 `protobuf:"bytes,3,opt,name=document_hash,json=documentHash,proto3" json:"document_hash,omitempty"` // SHA256 of new IdentityDocument
+	Timestamp     uint64                 `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                          // Unix timestamp
+	Signature     []byte                 `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`                           // Signed by IK_sign
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityUpdateNotification) Reset() {
+	*x = IdentityUpdateNotification{}
+	mi := &file_proto_message_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityUpdateNotification) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityUpdateNotification) ProtoMessage() {}
+
+func (x *IdentityUpdateNotification) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityUpdateNotification.ProtoReflect.Descriptor instead.
+func (*IdentityUpdateNotification) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *IdentityUpdateNotification) GetIdentityPub() []byte {
+	if x != nil {
+		return x.IdentityPub
+	}
+	return nil
+}
+
+func (x *IdentityUpdateNotification) GetNewSequence() uint64 {
+	if x != nil {
+		return x.NewSequence
+	}
+	return 0
+}
+
+func (x *IdentityUpdateNotification) GetDocumentHash() []byte {
+	if x != nil {
+		return x.DocumentHash
+	}
+	return nil
+}
+
+func (x *IdentityUpdateNotification) GetTimestamp() uint64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *IdentityUpdateNotification) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+// RTCOffer for call initiation
+type RTCOffer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sdp           string                 `protobuf:"bytes,1,opt,name=sdp,proto3" json:"sdp,omitempty"`                     // SDP offer string
+	CallId        string                 `protobuf:"bytes,2,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"` // Random UUID for this call session
+	Video         bool                   `protobuf:"varint,3,opt,name=video,proto3" json:"video,omitempty"`                // true = video call, false = audio only
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RTCOffer) Reset() {
+	*x = RTCOffer{}
+	mi := &file_proto_message_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RTCOffer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RTCOffer) ProtoMessage() {}
+
+func (x *RTCOffer) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RTCOffer.ProtoReflect.Descriptor instead.
+func (*RTCOffer) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *RTCOffer) GetSdp() string {
+	if x != nil {
+		return x.Sdp
+	}
+	return ""
+}
+
+func (x *RTCOffer) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *RTCOffer) GetVideo() bool {
+	if x != nil {
+		return x.Video
+	}
+	return false
+}
+
+// RTCAnswer for call acceptance
+type RTCAnswer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sdp           string                 `protobuf:"bytes,1,opt,name=sdp,proto3" json:"sdp,omitempty"`                     // SDP answer string
+	CallId        string                 `protobuf:"bytes,2,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"` // Call ID from offer
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RTCAnswer) Reset() {
+	*x = RTCAnswer{}
+	mi := &file_proto_message_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RTCAnswer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RTCAnswer) ProtoMessage() {}
+
+func (x *RTCAnswer) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RTCAnswer.ProtoReflect.Descriptor instead.
+func (*RTCAnswer) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *RTCAnswer) GetSdp() string {
+	if x != nil {
+		return x.Sdp
+	}
+	return ""
+}
+
+func (x *RTCAnswer) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+// RTCIceCandidate for ICE exchange
+type RTCIceCandidate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Candidate     string                 `protobuf:"bytes,1,opt,name=candidate,proto3" json:"candidate,omitempty"`                           // ICE candidate string
+	SdpMid        string                 `protobuf:"bytes,2,opt,name=sdp_mid,json=sdpMid,proto3" json:"sdp_mid,omitempty"`                   // SDP media identifier
+	SdpMlineIdx   uint32                 `protobuf:"varint,3,opt,name=sdp_mline_idx,json=sdpMlineIdx,proto3" json:"sdp_mline_idx,omitempty"` // Media line index
+	CallId        string                 `protobuf:"bytes,4,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`                   // Call ID
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RTCIceCandidate) Reset() {
+	*x = RTCIceCandidate{}
+	mi := &file_proto_message_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RTCIceCandidate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RTCIceCandidate) ProtoMessage() {}
+
+func (x *RTCIceCandidate) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RTCIceCandidate.ProtoReflect.Descriptor instead.
+func (*RTCIceCandidate) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *RTCIceCandidate) GetCandidate() string {
+	if x != nil {
+		return x.Candidate
+	}
+	return ""
+}
+
+func (x *RTCIceCandidate) GetSdpMid() string {
+	if x != nil {
+		return x.SdpMid
+	}
+	return ""
+}
+
+func (x *RTCIceCandidate) GetSdpMlineIdx() uint32 {
+	if x != nil {
+		return x.SdpMlineIdx
+	}
+	return 0
+}
+
+func (x *RTCIceCandidate) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+// RTCHangup for call termination
+type RTCHangup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CallId        string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"` // Call ID
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`               // "normal", "busy", "declined", "timeout"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RTCHangup) Reset() {
+	*x = RTCHangup{}
+	mi := &file_proto_message_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RTCHangup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RTCHangup) ProtoMessage() {}
+
+func (x *RTCHangup) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RTCHangup.ProtoReflect.Descriptor instead.
+func (*RTCHangup) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *RTCHangup) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *RTCHangup) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 var File_proto_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_proto_rawDesc = "" +
@@ -1092,7 +3053,186 @@ const file_proto_message_proto_rawDesc = "" +
 	"\fPrekeyBundle\x12>\n" +
 	"\x0esigned_prekeys\x18\x01 \x03(\v2\x17.messenger.SignedPrekeyR\rsignedPrekeys\x12B\n" +
 	"\x10one_time_prekeys\x18\x02 \x03(\v2\x18.messenger.OneTimePrekeyR\x0eoneTimePrekeys\x12!\n" +
-	"\fpublished_at\x18\x03 \x01(\x04R\vpublishedAtB\x18Z\x16babylontower/pkg/protob\x06proto3"
+	"\fpublished_at\x18\x03 \x01(\x04R\vpublishedAt\"\xf1\x03\n" +
+	"\x0fBabylonEnvelope\x12)\n" +
+	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x129\n" +
+	"\fmessage_type\x18\x02 \x01(\x0e2\x16.messenger.MessageTypeR\vmessageType\x12'\n" +
+	"\x0fsender_identity\x18\x03 \x01(\fR\x0esenderIdentity\x12-\n" +
+	"\x12recipient_identity\x18\x04 \x01(\fR\x11recipientIdentity\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x04R\ttimestamp\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x06 \x01(\fR\tmessageId\x12\x19\n" +
+	"\bgroup_id\x18\a \x01(\fR\agroupId\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\b \x01(\fR\tchannelId\x12\x18\n" +
+	"\apayload\x18\t \x01(\fR\apayload\x12(\n" +
+	"\x10sender_device_id\x18\n" +
+	" \x01(\fR\x0esenderDeviceId\x12\x1c\n" +
+	"\tsignature\x18\v \x01(\fR\tsignature\x12&\n" +
+	"\x0fcipher_suite_id\x18\f \x01(\rR\rcipherSuiteId\x12\x1f\n" +
+	"\vx3dh_header\x18\r \x01(\fR\n" +
+	"x3dhHeader\"\xeb\x01\n" +
+	"\n" +
+	"X3DHHeader\x129\n" +
+	"\x19initiator_identity_dh_pub\x18\x01 \x01(\fR\x16initiatorIdentityDhPub\x12#\n" +
+	"\rephemeral_pub\x18\x02 \x01(\fR\fephemeralPub\x12(\n" +
+	"\x10signed_prekey_id\x18\x03 \x01(\x04R\x0esignedPrekeyId\x12+\n" +
+	"\x12one_time_prekey_id\x18\x04 \x01(\x04R\x0foneTimePrekeyId\x12&\n" +
+	"\x0fcipher_suite_id\x18\x05 \x01(\rR\rcipherSuiteId\"\x90\x01\n" +
+	"\rRatchetHeader\x12$\n" +
+	"\x0edh_ratchet_pub\x18\x01 \x01(\fR\fdhRatchetPub\x122\n" +
+	"\x15previous_chain_length\x18\x02 \x01(\rR\x13previousChainLength\x12%\n" +
+	"\x0emessage_number\x18\x03 \x01(\rR\rmessageNumber\"\x95\x04\n" +
+	"\tDMPayload\x12?\n" +
+	"\x0eratchet_header\x18\x01 \x01(\v2\x18.messenger.RatchetHeaderR\rratchetHeader\x12,\n" +
+	"\x04text\x18\n" +
+	" \x01(\v2\x16.messenger.TextMessageH\x00R\x04text\x12/\n" +
+	"\x05media\x18\v \x01(\v2\x17.messenger.MediaMessageH\x00R\x05media\x128\n" +
+	"\breaction\x18\f \x01(\v2\x1a.messenger.ReactionMessageH\x00R\breaction\x12,\n" +
+	"\x04edit\x18\r \x01(\v2\x16.messenger.EditMessageH\x00R\x04edit\x129\n" +
+	"\n" +
+	"delete_msg\x18\x0e \x01(\v2\x18.messenger.DeleteMessageH\x00R\tdeleteMsg\x12;\n" +
+	"\fread_receipt\x18\x0f \x01(\v2\x16.messenger.ReadReceiptH\x00R\vreadReceipt\x124\n" +
+	"\x06typing\x18\x10 \x01(\v2\x1a.messenger.TypingIndicatorH\x00R\x06typing\x12G\n" +
+	"\x10delivery_receipt\x18\x11 \x01(\v2\x1a.messenger.DeliveryReceiptH\x00R\x0fdeliveryReceiptB\t\n" +
+	"\acontent\"=\n" +
+	"\vTextMessage\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\tR\blanguage\"\xa7\x02\n" +
+	"\fMediaMessage\x12\x10\n" +
+	"\x03cid\x18\x01 \x01(\tR\x03cid\x12!\n" +
+	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x03 \x01(\x04R\tsizeBytes\x12\x1a\n" +
+	"\bfilename\x18\x04 \x01(\tR\bfilename\x12\x1c\n" +
+	"\tthumbnail\x18\x05 \x01(\fR\tthumbnail\x12\x1b\n" +
+	"\tmedia_key\x18\x06 \x01(\fR\bmediaKey\x12\x1d\n" +
+	"\n" +
+	"media_hash\x18\a \x01(\fR\tmediaHash\x12\x14\n" +
+	"\x05width\x18\b \x01(\rR\x05width\x12\x16\n" +
+	"\x06height\x18\t \x01(\rR\x06height\x12\x1f\n" +
+	"\vduration_ms\x18\n" +
+	" \x01(\rR\n" +
+	"durationMs\"k\n" +
+	"\x0fReactionMessage\x12*\n" +
+	"\x11target_message_id\x18\x01 \x01(\fR\x0ftargetMessageId\x12\x14\n" +
+	"\x05emoji\x18\x02 \x01(\tR\x05emoji\x12\x16\n" +
+	"\x06remove\x18\x03 \x01(\bR\x06remove\"{\n" +
+	"\vEditMessage\x12*\n" +
+	"\x11target_message_id\x18\x01 \x01(\fR\x0ftargetMessageId\x12\x19\n" +
+	"\bnew_text\x18\x02 \x01(\tR\anewText\x12%\n" +
+	"\x0eedit_timestamp\x18\x03 \x01(\x04R\reditTimestamp\";\n" +
+	"\rDeleteMessage\x12*\n" +
+	"\x11target_message_id\x18\x01 \x01(\fR\x0ftargetMessageId\"G\n" +
+	"\vReadReceipt\x12\x1f\n" +
+	"\vmessage_ids\x18\x01 \x03(\fR\n" +
+	"messageIds\x12\x17\n" +
+	"\aread_at\x18\x02 \x01(\x04R\x06readAt\".\n" +
+	"\x0fTypingIndicator\x12\x1b\n" +
+	"\tis_typing\x18\x01 \x01(\bR\bisTyping\"U\n" +
+	"\x0fDeliveryReceipt\x12\x1f\n" +
+	"\vmessage_ids\x18\x01 \x03(\fR\n" +
+	"messageIds\x12!\n" +
+	"\fdelivered_at\x18\x02 \x01(\x04R\vdeliveredAt\"\x89\x04\n" +
+	"\fGroupPayload\x12\x14\n" +
+	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x1f\n" +
+	"\vchain_index\x18\x02 \x01(\rR\n" +
+	"chainIndex\x12,\n" +
+	"\x04text\x18\n" +
+	" \x01(\v2\x16.messenger.TextMessageH\x00R\x04text\x12/\n" +
+	"\x05media\x18\v \x01(\v2\x17.messenger.MediaMessageH\x00R\x05media\x128\n" +
+	"\breaction\x18\f \x01(\v2\x1a.messenger.ReactionMessageH\x00R\breaction\x12,\n" +
+	"\x04edit\x18\r \x01(\v2\x16.messenger.EditMessageH\x00R\x04edit\x129\n" +
+	"\n" +
+	"delete_msg\x18\x0e \x01(\v2\x18.messenger.DeleteMessageH\x00R\tdeleteMsg\x12@\n" +
+	"\fmember_event\x18\x0f \x01(\v2\x1b.messenger.GroupMemberEventH\x00R\vmemberEvent\x12=\n" +
+	"\vinfo_update\x18\x10 \x01(\v2\x1a.messenger.GroupInfoUpdateH\x00R\n" +
+	"infoUpdate\x124\n" +
+	"\x16sender_group_signature\x18\x14 \x01(\fR\x14senderGroupSignatureB\t\n" +
+	"\acontent\"\x86\x01\n" +
+	"\x10GroupMemberEvent\x12#\n" +
+	"\rmember_pubkey\x18\x01 \x01(\fR\fmemberPubkey\x12\x16\n" +
+	"\x06action\x18\x02 \x01(\tR\x06action\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12!\n" +
+	"\factor_pubkey\x18\x04 \x01(\fR\vactorPubkey\"{\n" +
+	"\x0fGroupInfoUpdate\x12\x19\n" +
+	"\bnew_name\x18\x01 \x01(\tR\anewName\x12'\n" +
+	"\x0fnew_description\x18\x02 \x01(\tR\x0enewDescription\x12$\n" +
+	"\x0enew_avatar_cid\x18\x03 \x01(\tR\fnewAvatarCid\"\xe3\x01\n" +
+	"\x0eChannelPayload\x12,\n" +
+	"\x04text\x18\x01 \x01(\v2\x16.messenger.TextMessageH\x00R\x04text\x12/\n" +
+	"\x05media\x18\x02 \x01(\v2\x17.messenger.MediaMessageH\x00R\x05media\x12,\n" +
+	"\x04edit\x18\x03 \x01(\v2\x16.messenger.EditMessageH\x00R\x04edit\x129\n" +
+	"\n" +
+	"delete_msg\x18\x04 \x01(\v2\x18.messenger.DeleteMessageH\x00R\tdeleteMsgB\t\n" +
+	"\acontent\"~\n" +
+	"\x12DeviceAnnouncement\x124\n" +
+	"\x06device\x18\x01 \x01(\v2\x1c.messenger.DeviceCertificateR\x06device\x122\n" +
+	"\x15identity_doc_sequence\x18\x02 \x01(\x04R\x13identityDocSequence\"i\n" +
+	"\n" +
+	"KeyRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\fR\agroupId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\fR\tsessionId\x12!\n" +
+	"\frequest_type\x18\x03 \x01(\tR\vrequestType\"\xc3\x01\n" +
+	"\x1aIdentityUpdateNotification\x12!\n" +
+	"\fidentity_pub\x18\x01 \x01(\fR\videntityPub\x12!\n" +
+	"\fnew_sequence\x18\x02 \x01(\x04R\vnewSequence\x12#\n" +
+	"\rdocument_hash\x18\x03 \x01(\fR\fdocumentHash\x12\x1c\n" +
+	"\ttimestamp\x18\x04 \x01(\x04R\ttimestamp\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"K\n" +
+	"\bRTCOffer\x12\x10\n" +
+	"\x03sdp\x18\x01 \x01(\tR\x03sdp\x12\x17\n" +
+	"\acall_id\x18\x02 \x01(\tR\x06callId\x12\x14\n" +
+	"\x05video\x18\x03 \x01(\bR\x05video\"6\n" +
+	"\tRTCAnswer\x12\x10\n" +
+	"\x03sdp\x18\x01 \x01(\tR\x03sdp\x12\x17\n" +
+	"\acall_id\x18\x02 \x01(\tR\x06callId\"\x85\x01\n" +
+	"\x0fRTCIceCandidate\x12\x1c\n" +
+	"\tcandidate\x18\x01 \x01(\tR\tcandidate\x12\x17\n" +
+	"\asdp_mid\x18\x02 \x01(\tR\x06sdpMid\x12\"\n" +
+	"\rsdp_mline_idx\x18\x03 \x01(\rR\vsdpMlineIdx\x12\x17\n" +
+	"\acall_id\x18\x04 \x01(\tR\x06callId\"<\n" +
+	"\tRTCHangup\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason*\x91\x05\n" +
+	"\vMessageType\x12\x1c\n" +
+	"\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\v\n" +
+	"\aDM_TEXT\x10\x01\x12\f\n" +
+	"\bDM_MEDIA\x10\x02\x12\x0f\n" +
+	"\vDM_REACTION\x10\x03\x12\v\n" +
+	"\aDM_EDIT\x10\x04\x12\r\n" +
+	"\tDM_DELETE\x10\x05\x12\x13\n" +
+	"\x0fDM_READ_RECEIPT\x10\x06\x12\r\n" +
+	"\tDM_TYPING\x10\a\x12\x17\n" +
+	"\x13DM_DELIVERY_RECEIPT\x10\b\x12\x0e\n" +
+	"\n" +
+	"GROUP_TEXT\x10\x14\x12\x0f\n" +
+	"\vGROUP_MEDIA\x10\x15\x12\x12\n" +
+	"\x0eGROUP_REACTION\x10\x16\x12\x0e\n" +
+	"\n" +
+	"GROUP_EDIT\x10\x17\x12\x10\n" +
+	"\fGROUP_DELETE\x10\x18\x12\x16\n" +
+	"\x12GROUP_MEMBER_ADDED\x10\x19\x12\x18\n" +
+	"\x14GROUP_MEMBER_REMOVED\x10\x1a\x12\x16\n" +
+	"\x12GROUP_KEY_ROTATION\x10\x1b\x12\x15\n" +
+	"\x11GROUP_INFO_UPDATE\x10\x1c\x12\x10\n" +
+	"\fCHANNEL_POST\x10(\x12\x10\n" +
+	"\fCHANNEL_EDIT\x10)\x12\x12\n" +
+	"\x0eCHANNEL_DELETE\x10*\x12\x15\n" +
+	"\x11CTRL_X3DH_INITIAL\x10<\x12\x16\n" +
+	"\x12CTRL_PREKEY_BUNDLE\x10=\x12\x18\n" +
+	"\x14CTRL_DEVICE_ANNOUNCE\x10>\x12\x16\n" +
+	"\x12CTRL_DEVICE_REVOKE\x10?\x12\x18\n" +
+	"\x14CTRL_SENDER_KEY_DIST\x10@\x12\x14\n" +
+	"\x10CTRL_KEY_REQUEST\x10A\x12\x18\n" +
+	"\x14CTRL_IDENTITY_UPDATE\x10B\x12\r\n" +
+	"\tRTC_OFFER\x10P\x12\x0e\n" +
+	"\n" +
+	"RTC_ANSWER\x10Q\x12\x15\n" +
+	"\x11RTC_ICE_CANDIDATE\x10R\x12\x0e\n" +
+	"\n" +
+	"RTC_HANGUP\x10SB\x18Z\x16babylontower/pkg/protob\x06proto3"
 
 var (
 	file_proto_message_proto_rawDescOnce sync.Once
@@ -1106,33 +3246,80 @@ func file_proto_message_proto_rawDescGZIP() []byte {
 	return file_proto_message_proto_rawDescData
 }
 
-var file_proto_message_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_proto_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_message_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_proto_message_proto_goTypes = []any{
-	(*Message)(nil),               // 0: messenger.Message
-	(*Envelope)(nil),              // 1: messenger.Envelope
-	(*SignedEnvelope)(nil),        // 2: messenger.SignedEnvelope
-	(*Contact)(nil),               // 3: messenger.Contact
-	(*FeatureFlags)(nil),          // 4: messenger.FeatureFlags
-	(*DeviceCertificate)(nil),     // 5: messenger.DeviceCertificate
-	(*SignedPrekey)(nil),          // 6: messenger.SignedPrekey
-	(*OneTimePrekey)(nil),         // 7: messenger.OneTimePrekey
-	(*RevocationCertificate)(nil), // 8: messenger.RevocationCertificate
-	(*IdentityDocument)(nil),      // 9: messenger.IdentityDocument
-	(*PrekeyBundle)(nil),          // 10: messenger.PrekeyBundle
+	(MessageType)(0),                   // 0: messenger.MessageType
+	(*Message)(nil),                    // 1: messenger.Message
+	(*Envelope)(nil),                   // 2: messenger.Envelope
+	(*SignedEnvelope)(nil),             // 3: messenger.SignedEnvelope
+	(*Contact)(nil),                    // 4: messenger.Contact
+	(*FeatureFlags)(nil),               // 5: messenger.FeatureFlags
+	(*DeviceCertificate)(nil),          // 6: messenger.DeviceCertificate
+	(*SignedPrekey)(nil),               // 7: messenger.SignedPrekey
+	(*OneTimePrekey)(nil),              // 8: messenger.OneTimePrekey
+	(*RevocationCertificate)(nil),      // 9: messenger.RevocationCertificate
+	(*IdentityDocument)(nil),           // 10: messenger.IdentityDocument
+	(*PrekeyBundle)(nil),               // 11: messenger.PrekeyBundle
+	(*BabylonEnvelope)(nil),            // 12: messenger.BabylonEnvelope
+	(*X3DHHeader)(nil),                 // 13: messenger.X3DHHeader
+	(*RatchetHeader)(nil),              // 14: messenger.RatchetHeader
+	(*DMPayload)(nil),                  // 15: messenger.DMPayload
+	(*TextMessage)(nil),                // 16: messenger.TextMessage
+	(*MediaMessage)(nil),               // 17: messenger.MediaMessage
+	(*ReactionMessage)(nil),            // 18: messenger.ReactionMessage
+	(*EditMessage)(nil),                // 19: messenger.EditMessage
+	(*DeleteMessage)(nil),              // 20: messenger.DeleteMessage
+	(*ReadReceipt)(nil),                // 21: messenger.ReadReceipt
+	(*TypingIndicator)(nil),            // 22: messenger.TypingIndicator
+	(*DeliveryReceipt)(nil),            // 23: messenger.DeliveryReceipt
+	(*GroupPayload)(nil),               // 24: messenger.GroupPayload
+	(*GroupMemberEvent)(nil),           // 25: messenger.GroupMemberEvent
+	(*GroupInfoUpdate)(nil),            // 26: messenger.GroupInfoUpdate
+	(*ChannelPayload)(nil),             // 27: messenger.ChannelPayload
+	(*DeviceAnnouncement)(nil),         // 28: messenger.DeviceAnnouncement
+	(*KeyRequest)(nil),                 // 29: messenger.KeyRequest
+	(*IdentityUpdateNotification)(nil), // 30: messenger.IdentityUpdateNotification
+	(*RTCOffer)(nil),                   // 31: messenger.RTCOffer
+	(*RTCAnswer)(nil),                  // 32: messenger.RTCAnswer
+	(*RTCIceCandidate)(nil),            // 33: messenger.RTCIceCandidate
+	(*RTCHangup)(nil),                  // 34: messenger.RTCHangup
 }
 var file_proto_message_proto_depIdxs = []int32{
-	5, // 0: messenger.IdentityDocument.devices:type_name -> messenger.DeviceCertificate
-	6, // 1: messenger.IdentityDocument.signed_prekeys:type_name -> messenger.SignedPrekey
-	7, // 2: messenger.IdentityDocument.one_time_prekeys:type_name -> messenger.OneTimePrekey
-	8, // 3: messenger.IdentityDocument.revocations:type_name -> messenger.RevocationCertificate
-	4, // 4: messenger.IdentityDocument.features:type_name -> messenger.FeatureFlags
-	6, // 5: messenger.PrekeyBundle.signed_prekeys:type_name -> messenger.SignedPrekey
-	7, // 6: messenger.PrekeyBundle.one_time_prekeys:type_name -> messenger.OneTimePrekey
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	6,  // 0: messenger.IdentityDocument.devices:type_name -> messenger.DeviceCertificate
+	7,  // 1: messenger.IdentityDocument.signed_prekeys:type_name -> messenger.SignedPrekey
+	8,  // 2: messenger.IdentityDocument.one_time_prekeys:type_name -> messenger.OneTimePrekey
+	9,  // 3: messenger.IdentityDocument.revocations:type_name -> messenger.RevocationCertificate
+	5,  // 4: messenger.IdentityDocument.features:type_name -> messenger.FeatureFlags
+	7,  // 5: messenger.PrekeyBundle.signed_prekeys:type_name -> messenger.SignedPrekey
+	8,  // 6: messenger.PrekeyBundle.one_time_prekeys:type_name -> messenger.OneTimePrekey
+	0,  // 7: messenger.BabylonEnvelope.message_type:type_name -> messenger.MessageType
+	14, // 8: messenger.DMPayload.ratchet_header:type_name -> messenger.RatchetHeader
+	16, // 9: messenger.DMPayload.text:type_name -> messenger.TextMessage
+	17, // 10: messenger.DMPayload.media:type_name -> messenger.MediaMessage
+	18, // 11: messenger.DMPayload.reaction:type_name -> messenger.ReactionMessage
+	19, // 12: messenger.DMPayload.edit:type_name -> messenger.EditMessage
+	20, // 13: messenger.DMPayload.delete_msg:type_name -> messenger.DeleteMessage
+	21, // 14: messenger.DMPayload.read_receipt:type_name -> messenger.ReadReceipt
+	22, // 15: messenger.DMPayload.typing:type_name -> messenger.TypingIndicator
+	23, // 16: messenger.DMPayload.delivery_receipt:type_name -> messenger.DeliveryReceipt
+	16, // 17: messenger.GroupPayload.text:type_name -> messenger.TextMessage
+	17, // 18: messenger.GroupPayload.media:type_name -> messenger.MediaMessage
+	18, // 19: messenger.GroupPayload.reaction:type_name -> messenger.ReactionMessage
+	19, // 20: messenger.GroupPayload.edit:type_name -> messenger.EditMessage
+	20, // 21: messenger.GroupPayload.delete_msg:type_name -> messenger.DeleteMessage
+	25, // 22: messenger.GroupPayload.member_event:type_name -> messenger.GroupMemberEvent
+	26, // 23: messenger.GroupPayload.info_update:type_name -> messenger.GroupInfoUpdate
+	16, // 24: messenger.ChannelPayload.text:type_name -> messenger.TextMessage
+	17, // 25: messenger.ChannelPayload.media:type_name -> messenger.MediaMessage
+	19, // 26: messenger.ChannelPayload.edit:type_name -> messenger.EditMessage
+	20, // 27: messenger.ChannelPayload.delete_msg:type_name -> messenger.DeleteMessage
+	6,  // 28: messenger.DeviceAnnouncement.device:type_name -> messenger.DeviceCertificate
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_proto_message_proto_init() }
@@ -1140,18 +3327,44 @@ func file_proto_message_proto_init() {
 	if File_proto_message_proto != nil {
 		return
 	}
+	file_proto_message_proto_msgTypes[14].OneofWrappers = []any{
+		(*DMPayload_Text)(nil),
+		(*DMPayload_Media)(nil),
+		(*DMPayload_Reaction)(nil),
+		(*DMPayload_Edit)(nil),
+		(*DMPayload_DeleteMsg)(nil),
+		(*DMPayload_ReadReceipt)(nil),
+		(*DMPayload_Typing)(nil),
+		(*DMPayload_DeliveryReceipt)(nil),
+	}
+	file_proto_message_proto_msgTypes[23].OneofWrappers = []any{
+		(*GroupPayload_Text)(nil),
+		(*GroupPayload_Media)(nil),
+		(*GroupPayload_Reaction)(nil),
+		(*GroupPayload_Edit)(nil),
+		(*GroupPayload_DeleteMsg)(nil),
+		(*GroupPayload_MemberEvent)(nil),
+		(*GroupPayload_InfoUpdate)(nil),
+	}
+	file_proto_message_proto_msgTypes[26].OneofWrappers = []any{
+		(*ChannelPayload_Text)(nil),
+		(*ChannelPayload_Media)(nil),
+		(*ChannelPayload_Edit)(nil),
+		(*ChannelPayload_DeleteMsg)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_message_proto_rawDesc), len(file_proto_message_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   11,
+			NumEnums:      1,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_proto_message_proto_goTypes,
 		DependencyIndexes: file_proto_message_proto_depIdxs,
+		EnumInfos:         file_proto_message_proto_enumTypes,
 		MessageInfos:      file_proto_message_proto_msgTypes,
 	}.Build()
 	File_proto_message_proto = out.File
