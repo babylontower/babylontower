@@ -297,6 +297,697 @@ func (x *Contact) GetLastSeen() uint64 {
 	return 0
 }
 
+// FeatureFlags advertises a user's capabilities
+type FeatureFlags struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	SupportsReadReceipts     bool                   `protobuf:"varint,1,opt,name=supports_read_receipts,json=supportsReadReceipts,proto3" json:"supports_read_receipts,omitempty"`
+	SupportsTypingIndicators bool                   `protobuf:"varint,2,opt,name=supports_typing_indicators,json=supportsTypingIndicators,proto3" json:"supports_typing_indicators,omitempty"`
+	SupportsReactions        bool                   `protobuf:"varint,3,opt,name=supports_reactions,json=supportsReactions,proto3" json:"supports_reactions,omitempty"`
+	SupportsEdits            bool                   `protobuf:"varint,4,opt,name=supports_edits,json=supportsEdits,proto3" json:"supports_edits,omitempty"`
+	SupportsMedia            bool                   `protobuf:"varint,5,opt,name=supports_media,json=supportsMedia,proto3" json:"supports_media,omitempty"`
+	SupportsVoiceCalls       bool                   `protobuf:"varint,6,opt,name=supports_voice_calls,json=supportsVoiceCalls,proto3" json:"supports_voice_calls,omitempty"`
+	SupportsVideoCalls       bool                   `protobuf:"varint,7,opt,name=supports_video_calls,json=supportsVideoCalls,proto3" json:"supports_video_calls,omitempty"`
+	SupportsGroups           bool                   `protobuf:"varint,8,opt,name=supports_groups,json=supportsGroups,proto3" json:"supports_groups,omitempty"`
+	SupportsChannels         bool                   `protobuf:"varint,9,opt,name=supports_channels,json=supportsChannels,proto3" json:"supports_channels,omitempty"`
+	SupportsOfflineMessages  bool                   `protobuf:"varint,10,opt,name=supports_offline_messages,json=supportsOfflineMessages,proto3" json:"supports_offline_messages,omitempty"`
+	CustomFeatures           []string               `protobuf:"bytes,20,rep,name=custom_features,json=customFeatures,proto3" json:"custom_features,omitempty"` // e.g. ["babylon.ext.stickers"]
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *FeatureFlags) Reset() {
+	*x = FeatureFlags{}
+	mi := &file_proto_message_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FeatureFlags) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FeatureFlags) ProtoMessage() {}
+
+func (x *FeatureFlags) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FeatureFlags.ProtoReflect.Descriptor instead.
+func (*FeatureFlags) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *FeatureFlags) GetSupportsReadReceipts() bool {
+	if x != nil {
+		return x.SupportsReadReceipts
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsTypingIndicators() bool {
+	if x != nil {
+		return x.SupportsTypingIndicators
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsReactions() bool {
+	if x != nil {
+		return x.SupportsReactions
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsEdits() bool {
+	if x != nil {
+		return x.SupportsEdits
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsMedia() bool {
+	if x != nil {
+		return x.SupportsMedia
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsVoiceCalls() bool {
+	if x != nil {
+		return x.SupportsVoiceCalls
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsVideoCalls() bool {
+	if x != nil {
+		return x.SupportsVideoCalls
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsGroups() bool {
+	if x != nil {
+		return x.SupportsGroups
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsChannels() bool {
+	if x != nil {
+		return x.SupportsChannels
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetSupportsOfflineMessages() bool {
+	if x != nil {
+		return x.SupportsOfflineMessages
+	}
+	return false
+}
+
+func (x *FeatureFlags) GetCustomFeatures() []string {
+	if x != nil {
+		return x.CustomFeatures
+	}
+	return nil
+}
+
+// DeviceCertificate represents a registered device for an identity
+type DeviceCertificate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      []byte                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`                  // SHA256(DK_sign.pub)[:16] — 16 bytes
+	DeviceSignPub []byte                 `protobuf:"bytes,2,opt,name=device_sign_pub,json=deviceSignPub,proto3" json:"device_sign_pub,omitempty"` // DK_sign.pub (32 bytes)
+	DeviceDhPub   []byte                 `protobuf:"bytes,3,opt,name=device_dh_pub,json=deviceDhPub,proto3" json:"device_dh_pub,omitempty"`       // DK_dh.pub (32 bytes)
+	DeviceName    string                 `protobuf:"bytes,4,opt,name=device_name,json=deviceName,proto3" json:"device_name,omitempty"`            // Human-readable, e.g. "Alice's Desktop"
+	CreatedAt     uint64                 `protobuf:"varint,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`              // Unix timestamp
+	ExpiresAt     uint64                 `protobuf:"varint,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`              // Unix timestamp, 0 = no expiry
+	IdentityPub   []byte                 `protobuf:"bytes,7,opt,name=identity_pub,json=identityPub,proto3" json:"identity_pub,omitempty"`         // IK_sign.pub (for self-contained verification)
+	Signature     []byte                 `protobuf:"bytes,8,opt,name=signature,proto3" json:"signature,omitempty"`                                // Ed25519.Sign(IK_sign.priv, canonical(fields 1-7))
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceCertificate) Reset() {
+	*x = DeviceCertificate{}
+	mi := &file_proto_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceCertificate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceCertificate) ProtoMessage() {}
+
+func (x *DeviceCertificate) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceCertificate.ProtoReflect.Descriptor instead.
+func (*DeviceCertificate) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DeviceCertificate) GetDeviceId() []byte {
+	if x != nil {
+		return x.DeviceId
+	}
+	return nil
+}
+
+func (x *DeviceCertificate) GetDeviceSignPub() []byte {
+	if x != nil {
+		return x.DeviceSignPub
+	}
+	return nil
+}
+
+func (x *DeviceCertificate) GetDeviceDhPub() []byte {
+	if x != nil {
+		return x.DeviceDhPub
+	}
+	return nil
+}
+
+func (x *DeviceCertificate) GetDeviceName() string {
+	if x != nil {
+		return x.DeviceName
+	}
+	return ""
+}
+
+func (x *DeviceCertificate) GetCreatedAt() uint64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *DeviceCertificate) GetExpiresAt() uint64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *DeviceCertificate) GetIdentityPub() []byte {
+	if x != nil {
+		return x.IdentityPub
+	}
+	return nil
+}
+
+func (x *DeviceCertificate) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+// SignedPrekey represents a rotated signed prekey
+type SignedPrekey struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      []byte                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`     // Which device owns this prekey (16 bytes)
+	PrekeyPub     []byte                 `protobuf:"bytes,2,opt,name=prekey_pub,json=prekeyPub,proto3" json:"prekey_pub,omitempty"`  // X25519 public key (32 bytes)
+	PrekeyId      uint64                 `protobuf:"varint,3,opt,name=prekey_id,json=prekeyId,proto3" json:"prekey_id,omitempty"`    // Unique monotonic ID
+	CreatedAt     uint64                 `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // Unix timestamp
+	ExpiresAt     uint64                 `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"` // Recommended: created_at + 7 days
+	Signature     []byte                 `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"`                   // Ed25519.Sign(IK_sign.priv, canonical(fields 1-5))
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignedPrekey) Reset() {
+	*x = SignedPrekey{}
+	mi := &file_proto_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignedPrekey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignedPrekey) ProtoMessage() {}
+
+func (x *SignedPrekey) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignedPrekey.ProtoReflect.Descriptor instead.
+func (*SignedPrekey) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *SignedPrekey) GetDeviceId() []byte {
+	if x != nil {
+		return x.DeviceId
+	}
+	return nil
+}
+
+func (x *SignedPrekey) GetPrekeyPub() []byte {
+	if x != nil {
+		return x.PrekeyPub
+	}
+	return nil
+}
+
+func (x *SignedPrekey) GetPrekeyId() uint64 {
+	if x != nil {
+		return x.PrekeyId
+	}
+	return 0
+}
+
+func (x *SignedPrekey) GetCreatedAt() uint64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *SignedPrekey) GetExpiresAt() uint64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *SignedPrekey) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+// OneTimePrekey represents a single-use prekey
+type OneTimePrekey struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      []byte                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`    // Which device owns this prekey (16 bytes)
+	PrekeyPub     []byte                 `protobuf:"bytes,2,opt,name=prekey_pub,json=prekeyPub,proto3" json:"prekey_pub,omitempty"` // X25519 public key (32 bytes)
+	PrekeyId      uint64                 `protobuf:"varint,3,opt,name=prekey_id,json=prekeyId,proto3" json:"prekey_id,omitempty"`   // Unique monotonic ID
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OneTimePrekey) Reset() {
+	*x = OneTimePrekey{}
+	mi := &file_proto_message_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OneTimePrekey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OneTimePrekey) ProtoMessage() {}
+
+func (x *OneTimePrekey) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OneTimePrekey.ProtoReflect.Descriptor instead.
+func (*OneTimePrekey) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *OneTimePrekey) GetDeviceId() []byte {
+	if x != nil {
+		return x.DeviceId
+	}
+	return nil
+}
+
+func (x *OneTimePrekey) GetPrekeyPub() []byte {
+	if x != nil {
+		return x.PrekeyPub
+	}
+	return nil
+}
+
+func (x *OneTimePrekey) GetPrekeyId() uint64 {
+	if x != nil {
+		return x.PrekeyId
+	}
+	return 0
+}
+
+// RevocationCertificate revokes a device or prekey
+type RevocationCertificate struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RevokedKey     []byte                 `protobuf:"bytes,1,opt,name=revoked_key,json=revokedKey,proto3" json:"revoked_key,omitempty"`             // Public key being revoked (device or prekey)
+	RevocationType string                 `protobuf:"bytes,2,opt,name=revocation_type,json=revocationType,proto3" json:"revocation_type,omitempty"` // "device" or "prekey"
+	Reason         string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`                                       // "compromised", "replaced", "expired"
+	RevokedAt      uint64                 `protobuf:"varint,4,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`               // Unix timestamp
+	Signature      []byte                 `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`                                 // Ed25519.Sign(IK_sign.priv, canonical(fields 1-4))
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RevocationCertificate) Reset() {
+	*x = RevocationCertificate{}
+	mi := &file_proto_message_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevocationCertificate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevocationCertificate) ProtoMessage() {}
+
+func (x *RevocationCertificate) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevocationCertificate.ProtoReflect.Descriptor instead.
+func (*RevocationCertificate) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RevocationCertificate) GetRevokedKey() []byte {
+	if x != nil {
+		return x.RevokedKey
+	}
+	return nil
+}
+
+func (x *RevocationCertificate) GetRevocationType() string {
+	if x != nil {
+		return x.RevocationType
+	}
+	return ""
+}
+
+func (x *RevocationCertificate) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *RevocationCertificate) GetRevokedAt() uint64 {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return 0
+}
+
+func (x *RevocationCertificate) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+// IdentityDocument is the canonical, signed, versioned record published to DHT
+type IdentityDocument struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Core identity
+	IdentitySignPub []byte `protobuf:"bytes,1,opt,name=identity_sign_pub,json=identitySignPub,proto3" json:"identity_sign_pub,omitempty"` // IK_sign.pub (32 bytes)
+	IdentityDhPub   []byte `protobuf:"bytes,2,opt,name=identity_dh_pub,json=identityDhPub,proto3" json:"identity_dh_pub,omitempty"`       // IK_dh.pub (32 bytes)
+	// Versioning (forms a hash chain)
+	Sequence     uint64 `protobuf:"varint,3,opt,name=sequence,proto3" json:"sequence,omitempty"`                            // Monotonically increasing, starts at 1
+	PreviousHash []byte `protobuf:"bytes,4,opt,name=previous_hash,json=previousHash,proto3" json:"previous_hash,omitempty"` // SHA256(previous serialized doc), empty for seq=1
+	CreatedAt    uint64 `protobuf:"varint,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`         // First publication timestamp
+	UpdatedAt    uint64 `protobuf:"varint,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`         // This version's timestamp
+	// Devices and prekeys
+	Devices        []*DeviceCertificate `protobuf:"bytes,7,rep,name=devices,proto3" json:"devices,omitempty"`
+	SignedPrekeys  []*SignedPrekey      `protobuf:"bytes,8,rep,name=signed_prekeys,json=signedPrekeys,proto3" json:"signed_prekeys,omitempty"`
+	OneTimePrekeys []*OneTimePrekey     `protobuf:"bytes,9,rep,name=one_time_prekeys,json=oneTimePrekeys,proto3" json:"one_time_prekeys,omitempty"`
+	// Protocol capabilities
+	SupportedVersions     []uint32 `protobuf:"varint,10,rep,packed,name=supported_versions,json=supportedVersions,proto3" json:"supported_versions,omitempty"`       // e.g. [1, 2]
+	SupportedCipherSuites []string `protobuf:"bytes,11,rep,name=supported_cipher_suites,json=supportedCipherSuites,proto3" json:"supported_cipher_suites,omitempty"` // e.g. ["BT-X25519-XChaCha20Poly1305-SHA256"]
+	PreferredVersion      uint32   `protobuf:"varint,12,opt,name=preferred_version,json=preferredVersion,proto3" json:"preferred_version,omitempty"`
+	// Optional profile
+	DisplayName string `protobuf:"bytes,13,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	AvatarCid   string `protobuf:"bytes,14,opt,name=avatar_cid,json=avatarCid,proto3" json:"avatar_cid,omitempty"` // IPFS CID of avatar image
+	// Revocations
+	Revocations []*RevocationCertificate `protobuf:"bytes,15,rep,name=revocations,proto3" json:"revocations,omitempty"`
+	// Feature flags
+	Features *FeatureFlags `protobuf:"bytes,16,opt,name=features,proto3" json:"features,omitempty"`
+	// Signature (covers all fields above)
+	Signature     []byte `protobuf:"bytes,17,opt,name=signature,proto3" json:"signature,omitempty"` // Ed25519.Sign(IK_sign.priv, canonical(fields 1-16))
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityDocument) Reset() {
+	*x = IdentityDocument{}
+	mi := &file_proto_message_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityDocument) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityDocument) ProtoMessage() {}
+
+func (x *IdentityDocument) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityDocument.ProtoReflect.Descriptor instead.
+func (*IdentityDocument) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *IdentityDocument) GetIdentitySignPub() []byte {
+	if x != nil {
+		return x.IdentitySignPub
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetIdentityDhPub() []byte {
+	if x != nil {
+		return x.IdentityDhPub
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *IdentityDocument) GetPreviousHash() []byte {
+	if x != nil {
+		return x.PreviousHash
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetCreatedAt() uint64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *IdentityDocument) GetUpdatedAt() uint64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+func (x *IdentityDocument) GetDevices() []*DeviceCertificate {
+	if x != nil {
+		return x.Devices
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetSignedPrekeys() []*SignedPrekey {
+	if x != nil {
+		return x.SignedPrekeys
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetOneTimePrekeys() []*OneTimePrekey {
+	if x != nil {
+		return x.OneTimePrekeys
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetSupportedVersions() []uint32 {
+	if x != nil {
+		return x.SupportedVersions
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetSupportedCipherSuites() []string {
+	if x != nil {
+		return x.SupportedCipherSuites
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetPreferredVersion() uint32 {
+	if x != nil {
+		return x.PreferredVersion
+	}
+	return 0
+}
+
+func (x *IdentityDocument) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *IdentityDocument) GetAvatarCid() string {
+	if x != nil {
+		return x.AvatarCid
+	}
+	return ""
+}
+
+func (x *IdentityDocument) GetRevocations() []*RevocationCertificate {
+	if x != nil {
+		return x.Revocations
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetFeatures() *FeatureFlags {
+	if x != nil {
+		return x.Features
+	}
+	return nil
+}
+
+func (x *IdentityDocument) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+// PrekeyBundle is a standalone prekey bundle for efficient DHT fetch
+type PrekeyBundle struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SignedPrekeys  []*SignedPrekey        `protobuf:"bytes,1,rep,name=signed_prekeys,json=signedPrekeys,proto3" json:"signed_prekeys,omitempty"`
+	OneTimePrekeys []*OneTimePrekey       `protobuf:"bytes,2,rep,name=one_time_prekeys,json=oneTimePrekeys,proto3" json:"one_time_prekeys,omitempty"`
+	PublishedAt    uint64                 `protobuf:"varint,3,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"` // Unix timestamp when published
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PrekeyBundle) Reset() {
+	*x = PrekeyBundle{}
+	mi := &file_proto_message_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrekeyBundle) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrekeyBundle) ProtoMessage() {}
+
+func (x *PrekeyBundle) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrekeyBundle.ProtoReflect.Descriptor instead.
+func (*PrekeyBundle) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *PrekeyBundle) GetSignedPrekeys() []*SignedPrekey {
+	if x != nil {
+		return x.SignedPrekeys
+	}
+	return nil
+}
+
+func (x *PrekeyBundle) GetOneTimePrekeys() []*OneTimePrekey {
+	if x != nil {
+		return x.OneTimePrekeys
+	}
+	return nil
+}
+
+func (x *PrekeyBundle) GetPublishedAt() uint64 {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return 0
+}
+
 var File_proto_message_proto protoreflect.FileDescriptor
 
 const file_proto_message_proto_rawDesc = "" +
@@ -327,7 +1018,81 @@ const file_proto_message_proto_rawDesc = "" +
 	"\n" +
 	"multiaddrs\x18\x06 \x03(\tR\n" +
 	"multiaddrs\x12\x1b\n" +
-	"\tlast_seen\x18\a \x01(\x04R\blastSeenB\x18Z\x16babylontower/pkg/protob\x06proto3"
+	"\tlast_seen\x18\a \x01(\x04R\blastSeen\"\x9e\x04\n" +
+	"\fFeatureFlags\x124\n" +
+	"\x16supports_read_receipts\x18\x01 \x01(\bR\x14supportsReadReceipts\x12<\n" +
+	"\x1asupports_typing_indicators\x18\x02 \x01(\bR\x18supportsTypingIndicators\x12-\n" +
+	"\x12supports_reactions\x18\x03 \x01(\bR\x11supportsReactions\x12%\n" +
+	"\x0esupports_edits\x18\x04 \x01(\bR\rsupportsEdits\x12%\n" +
+	"\x0esupports_media\x18\x05 \x01(\bR\rsupportsMedia\x120\n" +
+	"\x14supports_voice_calls\x18\x06 \x01(\bR\x12supportsVoiceCalls\x120\n" +
+	"\x14supports_video_calls\x18\a \x01(\bR\x12supportsVideoCalls\x12'\n" +
+	"\x0fsupports_groups\x18\b \x01(\bR\x0esupportsGroups\x12+\n" +
+	"\x11supports_channels\x18\t \x01(\bR\x10supportsChannels\x12:\n" +
+	"\x19supports_offline_messages\x18\n" +
+	" \x01(\bR\x17supportsOfflineMessages\x12'\n" +
+	"\x0fcustom_features\x18\x14 \x03(\tR\x0ecustomFeatures\"\x9c\x02\n" +
+	"\x11DeviceCertificate\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\fR\bdeviceId\x12&\n" +
+	"\x0fdevice_sign_pub\x18\x02 \x01(\fR\rdeviceSignPub\x12\"\n" +
+	"\rdevice_dh_pub\x18\x03 \x01(\fR\vdeviceDhPub\x12\x1f\n" +
+	"\vdevice_name\x18\x04 \x01(\tR\n" +
+	"deviceName\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\x04R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x06 \x01(\x04R\texpiresAt\x12!\n" +
+	"\fidentity_pub\x18\a \x01(\fR\videntityPub\x12\x1c\n" +
+	"\tsignature\x18\b \x01(\fR\tsignature\"\xc3\x01\n" +
+	"\fSignedPrekey\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\fR\bdeviceId\x12\x1d\n" +
+	"\n" +
+	"prekey_pub\x18\x02 \x01(\fR\tprekeyPub\x12\x1b\n" +
+	"\tprekey_id\x18\x03 \x01(\x04R\bprekeyId\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\x04R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\x04R\texpiresAt\x12\x1c\n" +
+	"\tsignature\x18\x06 \x01(\fR\tsignature\"h\n" +
+	"\rOneTimePrekey\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\fR\bdeviceId\x12\x1d\n" +
+	"\n" +
+	"prekey_pub\x18\x02 \x01(\fR\tprekeyPub\x12\x1b\n" +
+	"\tprekey_id\x18\x03 \x01(\x04R\bprekeyId\"\xb6\x01\n" +
+	"\x15RevocationCertificate\x12\x1f\n" +
+	"\vrevoked_key\x18\x01 \x01(\fR\n" +
+	"revokedKey\x12'\n" +
+	"\x0frevocation_type\x18\x02 \x01(\tR\x0erevocationType\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"revoked_at\x18\x04 \x01(\x04R\trevokedAt\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"\x8e\x06\n" +
+	"\x10IdentityDocument\x12*\n" +
+	"\x11identity_sign_pub\x18\x01 \x01(\fR\x0fidentitySignPub\x12&\n" +
+	"\x0fidentity_dh_pub\x18\x02 \x01(\fR\ridentityDhPub\x12\x1a\n" +
+	"\bsequence\x18\x03 \x01(\x04R\bsequence\x12#\n" +
+	"\rprevious_hash\x18\x04 \x01(\fR\fpreviousHash\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\x04R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\x04R\tupdatedAt\x126\n" +
+	"\adevices\x18\a \x03(\v2\x1c.messenger.DeviceCertificateR\adevices\x12>\n" +
+	"\x0esigned_prekeys\x18\b \x03(\v2\x17.messenger.SignedPrekeyR\rsignedPrekeys\x12B\n" +
+	"\x10one_time_prekeys\x18\t \x03(\v2\x18.messenger.OneTimePrekeyR\x0eoneTimePrekeys\x12-\n" +
+	"\x12supported_versions\x18\n" +
+	" \x03(\rR\x11supportedVersions\x126\n" +
+	"\x17supported_cipher_suites\x18\v \x03(\tR\x15supportedCipherSuites\x12+\n" +
+	"\x11preferred_version\x18\f \x01(\rR\x10preferredVersion\x12!\n" +
+	"\fdisplay_name\x18\r \x01(\tR\vdisplayName\x12\x1d\n" +
+	"\n" +
+	"avatar_cid\x18\x0e \x01(\tR\tavatarCid\x12B\n" +
+	"\vrevocations\x18\x0f \x03(\v2 .messenger.RevocationCertificateR\vrevocations\x123\n" +
+	"\bfeatures\x18\x10 \x01(\v2\x17.messenger.FeatureFlagsR\bfeatures\x12\x1c\n" +
+	"\tsignature\x18\x11 \x01(\fR\tsignature\"\xb5\x01\n" +
+	"\fPrekeyBundle\x12>\n" +
+	"\x0esigned_prekeys\x18\x01 \x03(\v2\x17.messenger.SignedPrekeyR\rsignedPrekeys\x12B\n" +
+	"\x10one_time_prekeys\x18\x02 \x03(\v2\x18.messenger.OneTimePrekeyR\x0eoneTimePrekeys\x12!\n" +
+	"\fpublished_at\x18\x03 \x01(\x04R\vpublishedAtB\x18Z\x16babylontower/pkg/protob\x06proto3"
 
 var (
 	file_proto_message_proto_rawDescOnce sync.Once
@@ -341,19 +1106,33 @@ func file_proto_message_proto_rawDescGZIP() []byte {
 	return file_proto_message_proto_rawDescData
 }
 
-var file_proto_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_message_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_proto_message_proto_goTypes = []any{
-	(*Message)(nil),        // 0: messenger.Message
-	(*Envelope)(nil),       // 1: messenger.Envelope
-	(*SignedEnvelope)(nil), // 2: messenger.SignedEnvelope
-	(*Contact)(nil),        // 3: messenger.Contact
+	(*Message)(nil),               // 0: messenger.Message
+	(*Envelope)(nil),              // 1: messenger.Envelope
+	(*SignedEnvelope)(nil),        // 2: messenger.SignedEnvelope
+	(*Contact)(nil),               // 3: messenger.Contact
+	(*FeatureFlags)(nil),          // 4: messenger.FeatureFlags
+	(*DeviceCertificate)(nil),     // 5: messenger.DeviceCertificate
+	(*SignedPrekey)(nil),          // 6: messenger.SignedPrekey
+	(*OneTimePrekey)(nil),         // 7: messenger.OneTimePrekey
+	(*RevocationCertificate)(nil), // 8: messenger.RevocationCertificate
+	(*IdentityDocument)(nil),      // 9: messenger.IdentityDocument
+	(*PrekeyBundle)(nil),          // 10: messenger.PrekeyBundle
 }
 var file_proto_message_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	5, // 0: messenger.IdentityDocument.devices:type_name -> messenger.DeviceCertificate
+	6, // 1: messenger.IdentityDocument.signed_prekeys:type_name -> messenger.SignedPrekey
+	7, // 2: messenger.IdentityDocument.one_time_prekeys:type_name -> messenger.OneTimePrekey
+	8, // 3: messenger.IdentityDocument.revocations:type_name -> messenger.RevocationCertificate
+	4, // 4: messenger.IdentityDocument.features:type_name -> messenger.FeatureFlags
+	6, // 5: messenger.PrekeyBundle.signed_prekeys:type_name -> messenger.SignedPrekey
+	7, // 6: messenger.PrekeyBundle.one_time_prekeys:type_name -> messenger.OneTimePrekey
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_proto_message_proto_init() }
@@ -367,7 +1146,7 @@ func file_proto_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_message_proto_rawDesc), len(file_proto_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -4,6 +4,10 @@ package messenger;
 
 option go_package = "babylontower/pkg/proto";
 
+// ============================================================================
+// PoC Messages (Phase 1-5)
+// ============================================================================
+
 // Message represents a plaintext message (what the user types)
 message Message {
   string text = 1;
@@ -34,4 +38,104 @@ message Contact {
   string peer_id = 5;              // Contact's libp2p PeerID (for direct connection)
   repeated string multiaddrs = 6;  // Known multiaddresses for the contact
   uint64 last_seen = 7;            // Unix timestamp when contact was last seen online
+}
+
+// ============================================================================
+// Identity v1 Messages (Phase 8)
+// ============================================================================
+
+// FeatureFlags advertises a user's capabilities
+message FeatureFlags {
+  bool supports_read_receipts = 1;
+  bool supports_typing_indicators = 2;
+  bool supports_reactions = 3;
+  bool supports_edits = 4;
+  bool supports_media = 5;
+  bool supports_voice_calls = 6;
+  bool supports_video_calls = 7;
+  bool supports_groups = 8;
+  bool supports_channels = 9;
+  bool supports_offline_messages = 10;
+  repeated string custom_features = 20;  // e.g. ["babylon.ext.stickers"]
+}
+
+// DeviceCertificate represents a registered device for an identity
+message DeviceCertificate {
+  bytes device_id = 1;       // SHA256(DK_sign.pub)[:16] — 16 bytes
+  bytes device_sign_pub = 2; // DK_sign.pub (32 bytes)
+  bytes device_dh_pub = 3;   // DK_dh.pub (32 bytes)
+  string device_name = 4;    // Human-readable, e.g. "Alice's Desktop"
+  uint64 created_at = 5;     // Unix timestamp
+  uint64 expires_at = 6;     // Unix timestamp, 0 = no expiry
+  bytes identity_pub = 7;    // IK_sign.pub (for self-contained verification)
+  bytes signature = 8;       // Ed25519.Sign(IK_sign.priv, canonical(fields 1-7))
+}
+
+// SignedPrekey represents a rotated signed prekey
+message SignedPrekey {
+  bytes device_id = 1;     // Which device owns this prekey (16 bytes)
+  bytes prekey_pub = 2;    // X25519 public key (32 bytes)
+  uint64 prekey_id = 3;    // Unique monotonic ID
+  uint64 created_at = 4;   // Unix timestamp
+  uint64 expires_at = 5;   // Recommended: created_at + 7 days
+  bytes signature = 6;     // Ed25519.Sign(IK_sign.priv, canonical(fields 1-5))
+}
+
+// OneTimePrekey represents a single-use prekey
+message OneTimePrekey {
+  bytes device_id = 1;     // Which device owns this prekey (16 bytes)
+  bytes prekey_pub = 2;    // X25519 public key (32 bytes)
+  uint64 prekey_id = 3;    // Unique monotonic ID
+}
+
+// RevocationCertificate revokes a device or prekey
+message RevocationCertificate {
+  bytes revoked_key = 1;     // Public key being revoked (device or prekey)
+  string revocation_type = 2;  // "device" or "prekey"
+  string reason = 3;           // "compromised", "replaced", "expired"
+  uint64 revoked_at = 4;       // Unix timestamp
+  bytes signature = 5;         // Ed25519.Sign(IK_sign.priv, canonical(fields 1-4))
+}
+
+// IdentityDocument is the canonical, signed, versioned record published to DHT
+message IdentityDocument {
+  // Core identity
+  bytes identity_sign_pub = 1;   // IK_sign.pub (32 bytes)
+  bytes identity_dh_pub = 2;     // IK_dh.pub (32 bytes)
+
+  // Versioning (forms a hash chain)
+  uint64 sequence = 3;           // Monotonically increasing, starts at 1
+  bytes previous_hash = 4;       // SHA256(previous serialized doc), empty for seq=1
+  uint64 created_at = 5;         // First publication timestamp
+  uint64 updated_at = 6;         // This version's timestamp
+
+  // Devices and prekeys
+  repeated DeviceCertificate devices = 7;
+  repeated SignedPrekey signed_prekeys = 8;
+  repeated OneTimePrekey one_time_prekeys = 9;
+
+  // Protocol capabilities
+  repeated uint32 supported_versions = 10;   // e.g. [1, 2]
+  repeated string supported_cipher_suites = 11;  // e.g. ["BT-X25519-XChaCha20Poly1305-SHA256"]
+  uint32 preferred_version = 12;
+
+  // Optional profile
+  string display_name = 13;
+  string avatar_cid = 14;  // IPFS CID of avatar image
+
+  // Revocations
+  repeated RevocationCertificate revocations = 15;
+
+  // Feature flags
+  FeatureFlags features = 16;
+
+  // Signature (covers all fields above)
+  bytes signature = 17;  // Ed25519.Sign(IK_sign.priv, canonical(fields 1-16))
+}
+
+// PrekeyBundle is a standalone prekey bundle for efficient DHT fetch
+message PrekeyBundle {
+  repeated SignedPrekey signed_prekeys = 1;
+  repeated OneTimePrekey one_time_prekeys = 2;
+  uint64 published_at = 3;  // Unix timestamp when published
 }
