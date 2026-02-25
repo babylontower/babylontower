@@ -22,7 +22,7 @@ import (
 var logger = log.Logger("babylontower")
 
 var (
-	Version   = "0.1.0-poc"
+	Version   = "0.1.0-unversioned-poc"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )

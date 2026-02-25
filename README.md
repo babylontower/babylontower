@@ -4,7 +4,7 @@ A decentralized, secure peer-to-peer messenger that operates without central ser
 
 ## Overview
 
-Babylon Tower is a Proof of Concept (PoC) implementation of a serverless messaging system using:
+Babylon Tower is a peer-to-peer messaging implementation using:
 
 - **End-to-end encryption** (XChaCha20-Poly1305, Ed25519 signatures)
 - **IPFS** for decentralized communication via PubSub
@@ -12,14 +12,19 @@ Babylon Tower is a Proof of Concept (PoC) implementation of a serverless messagi
 - **Go** for a single, portable binary
 - **Interactive CLI** for user interaction
 
-## ⚠️ Initial Development Phase
+## ⚠️ Development Status
 
-This project is in **early development**. The PoC is functional but:
+**Current PoC (Unversioned):** The existing implementation is a functional proof-of-concept that demonstrates the core architecture. It is **not production-ready** and will not be released as a standalone version.
 
-- Features and architecture may change significantly
-- Security has not been audited
-- Not suitable for production use
-- Some limitations (e.g., NAT traversal) are documented as known issues
+**Protocol v1 (In Planning):** Development has shifted to implementing Protocol v1 (specified in `specs/protocol-v2.md`), which adds:
+- X3DH + Double Ratchet (forward secrecy + post-compromise security)
+- Multi-device support
+- Private/public groups and channels
+- Offline message delivery (mailbox protocol)
+- Voice/video calls
+- Reputation system
+
+See [`specs/roadmap.md`](specs/roadmap.md) for the complete implementation plan.
 
 ## Quick Start
 
@@ -117,6 +122,8 @@ Exited chat mode.
 
 ## Project Status
 
+### PoC (Unversioned) - Complete
+
 | Phase | Module | Status |
 |-------|--------|--------|
 | 0 | Project Setup | ✅ Complete |
@@ -125,10 +132,24 @@ Exited chat mode.
 | 3 | IPFS Node Integration | ✅ Complete |
 | 4 | Messaging Protocol | ✅ Complete |
 | 5 | CLI Interface | ✅ Complete |
-| 6 | Integration & Testing | 🔄 In Progress |
-| 7 | Release Preparation | ⏳ Pending |
+| 6 | Integration & Testing | ❌ Skipped |
+| 7 | Release Preparation | ❌ Skipped |
 
-See [`specs/roadmap.md`](specs/roadmap.md) for the complete implementation plan.
+### Protocol v1 (Target) - Planning
+
+| Phase | Module | Status |
+|-------|--------|--------|
+| 8 | Identity v1 | ⏹️ Pending |
+| 9 | X3DH & Double Ratchet | ⏹️ Pending |
+| 10 | Protocol v1 Wire Format | ⏹️ Pending |
+| 11 | Multi-Device | ⏹️ Pending |
+| 12 | Private Groups | ⏹️ Pending |
+| 13 | Public Groups & Channels | ⏹️ Pending |
+| 14 | Offline Delivery | ⏹️ Pending |
+| 15 | Voice & Video Calls | ⏹️ Pending |
+| 16 | Group Calls | ⏹️ Pending |
+| 17 | Reputation System | ⏹️ Pending |
+| 18 | Integration & Hardening | ⏹️ Pending |
 
 ## Architecture
 
@@ -150,13 +171,42 @@ See [`specs/roadmap.md`](specs/roadmap.md) for the complete implementation plan.
                           └─────────────────┘
 ```
 
-## Known Limitations (PoC)
+### Protocol v1 (Target)
+
+```
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│   CLI    │  │  Groups  │  │   RTC    │  │  Mailbox │
+│  (REPL)  │  │ Channels │  │Voice/Vid │  │  Relay   │
+└────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
+     │             │              │              │
+┌────▼─────────────▼──────────────▼──────────────▼─────┐
+│                   Messaging Service                    │
+│  (X3DH · Double Ratchet · Sender Keys · Multi-Device) │
+└──────────────────────────┬───────────────────────────┘
+                           │
+┌──────────────────────────┬───────────────────────────┐
+│                   Identity v1                         │
+│  (Master Key · Device Keys · IdentityDocument · DHT)  │
+└──────────────────────────┬───────────────────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │      libp2p Node        │
+              │  GossipSub · DHT · Relay│
+              └────────────┬────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │     Storage (BadgerDB)   │
+              │  Sessions · Groups · Rep │
+              └─────────────────────────┘
+```
+
+## Known Limitations (Current PoC)
 
 - **NAT traversal**: Not implemented; assumes direct connectivity
 - **Local storage encryption**: Not encrypted (future enhancement)
 - **Offline messages**: No queuing (both parties must be online)
 - **Group chat**: Not supported (1:1 messaging only)
-- **Forward secrecy**: Uses static keys only (no Double Ratchet)
+- **Forward secrecy**: Uses static keys only (no Double Ratchet) - **Protocol v1 will add X3DH + Double Ratchet**
 - **Contact X25519 keys**: Not stored with contacts (requires manual exchange)
 
 ## Testing
