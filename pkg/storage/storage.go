@@ -1,10 +1,17 @@
 package storage
 
 import (
+	"errors"
 	"time"
 
 	pb "babylontower/pkg/proto"
 	"github.com/mr-tron/base58"
+)
+
+// Storage errors
+var (
+	ErrGroupNotFound      = errors.New("group not found")
+	ErrSenderKeyNotFound  = errors.New("sender key not found")
 )
 
 // PeerSource indicates where a peer was discovered
@@ -95,6 +102,28 @@ type Storage interface {
 	GetConfig(key string) (string, error)
 	SetConfig(key, value string) error
 	DeleteConfig(key string) error
+
+	// Group operations
+	SaveGroup(group *pb.GroupState) error
+	GetGroup(groupID []byte) (*pb.GroupState, error)
+	ListGroups() ([]*pb.GroupState, error)
+	DeleteGroup(groupID []byte) error
+
+	// Sender key operations
+	SaveSenderKey(sk *pb.SenderKeyDistribution) error
+	GetSenderKey(groupID, senderPubkey []byte) (*pb.SenderKeyDistribution, error)
+	ListSenderKeys(groupID []byte) ([]*pb.SenderKeyDistribution, error)
+	DeleteSenderKey(groupID, senderPubkey []byte) error
+	DeleteAllSenderKeys(groupID []byte) error
+
+	// Channel operations
+	SaveChannel(channel *pb.ChannelState) error
+	GetChannel(channelID []byte) (*pb.ChannelState, error)
+	ListChannels() ([]*pb.ChannelState, error)
+	DeleteChannel(channelID []byte) error
+	SaveChannelPost(post *pb.ChannelPost) error
+	GetChannelPosts(channelID []byte, limit, offset int) ([]*pb.ChannelPost, error)
+	GetLatestChannelPostCID(channelID []byte) ([]byte, error)
 
 	// Lifecycle
 	Close() error

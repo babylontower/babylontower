@@ -23,6 +23,9 @@ const (
 	SignatureSize = 64
 )
 
+// SecureRandom is the random reader for cryptographic operations
+var SecureRandom = rand.Reader
+
 var (
 	// ErrDecryptionFailed is returned when decryption fails
 	ErrDecryptionFailed = errors.New("decryption failed")

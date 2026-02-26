@@ -10,6 +10,7 @@ import (
 
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
+	"babylontower/pkg/reputation"
 	"babylontower/pkg/storage"
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
@@ -68,6 +69,9 @@ type Service struct {
 	// Contact peer tracking (cached peer IDs for quick lookup)
 	contactPeers map[string]*ContactPeerInfo // key: hex-encoded Ed25519 pubkey
 	contactMu    sync.RWMutex
+
+	// Reputation tracker
+	reputationTracker *reputation.Tracker
 }
 
 // ContactPeerInfo contains cached information about a contact's peer presence
@@ -744,4 +748,14 @@ func (s *Service) GetAllContactStatuses() ([]*ContactStatus, error) {
 	}
 
 	return statuses, nil
+}
+
+// ReputationTracker returns the reputation tracker instance
+func (s *Service) ReputationTracker() *reputation.Tracker {
+	return s.reputationTracker
+}
+
+// SetReputationTracker sets the reputation tracker instance
+func (s *Service) SetReputationTracker(tracker *reputation.Tracker) {
+	s.reputationTracker = tracker
 }

@@ -9,6 +9,7 @@ import (
 
 	"babylontower/pkg/cli"
 	"babylontower/pkg/config"
+	"babylontower/pkg/groups"
 	"babylontower/pkg/identity"
 	"babylontower/pkg/ipfsnode"
 	"babylontower/pkg/messaging"
@@ -180,7 +181,9 @@ func run() error {
 
 	logger.Info("messaging service started")
 
-	cliApp, err := createCLIApp(Version, dataDir, identityPath, ident, store, ipfsNode, msgService)
+	groupsService := createGroupsService(ident, store)
+
+	cliApp, err := createCLIApp(Version, dataDir, identityPath, ident, store, ipfsNode, msgService, groupsService)
 	if err != nil {
 		return fmt.Errorf("failed to create CLI: %w", err)
 	}
@@ -272,7 +275,11 @@ func createMessagingService(ident *identity.Identity, store storage.Storage, nod
 	return messaging.NewService(msgConfig, store, node)
 }
 
-func createCLIApp(version, dataDir, identityPath string, ident *identity.Identity, store storage.Storage, node *ipfsnode.Node, msgService *messaging.Service) (*cli.CLI, error) {
+func createGroupsService(ident *identity.Identity, store *storage.BadgerStorage) *groups.Service {
+	return groups.NewService(store, ident.Ed25519PubKey, ident.Ed25519PrivKey)
+}
+
+func createCLIApp(version, dataDir, identityPath string, ident *identity.Identity, store storage.Storage, node *ipfsnode.Node, msgService *messaging.Service, groupsService *groups.Service) (*cli.CLI, error) {
 	cliConfig := &cli.Config{
 		Version:      version,
 		DataDir:      dataDir,
@@ -286,7 +293,7 @@ func createCLIApp(version, dataDir, identityPath string, ident *identity.Identit
 		X25519PrivKey:  ident.X25519PrivKey,
 	}
 
-	return cli.New(cliConfig, cliIdentity, store, node, msgService)
+	return cli.New(cliConfig, cliIdentity, store, node, msgService, groupsService)
 }
 
 func loadOrCreateIdentity(identityPath string) (*identity.Identity, error) {
