@@ -7,6 +7,7 @@ A decentralized, secure peer-to-peer messenger that operates without central ser
 Babylon Tower is a peer-to-peer messaging implementation using:
 
 - **End-to-end encryption** (XChaCha20-Poly1305, Ed25519 signatures)
+- **X3DH + Double Ratchet** (forward secrecy + post-compromise security)
 - **IPFS** for decentralized communication via PubSub
 - **BadgerDB** for local message and contact storage
 - **Go** for a single, portable binary
@@ -14,17 +15,28 @@ Babylon Tower is a peer-to-peer messaging implementation using:
 
 ## ⚠️ Development Status
 
-**Current PoC (Unversioned):** The existing implementation is a functional proof-of-concept that demonstrates the core architecture. It is **not production-ready** and will not be released as a standalone version.
+**Current Status:** Phase 18 (Integration & Hardening) In Progress
 
-**Protocol v1 (In Planning):** Development has shifted to implementing Protocol v1 (specified in `specs/protocol-v2.md`), which adds:
-- X3DH + Double Ratchet (forward secrecy + post-compromise security)
-- Multi-device support
-- Private/public groups and channels
-- Offline message delivery (mailbox protocol)
-- Voice/video calls
-- Reputation system
+**Protocol v1 Implementation Complete:**
+- ✅ X3DH + Double Ratchet (forward secrecy + post-compromise security)
+- ✅ Multi-device support with sync and revocation
+- ✅ Private groups with Sender Keys
+- ✅ Public groups & channels with moderation
+- ✅ Offline message delivery (mailbox protocol)
+- ✅ Voice/video calls (WebRTC signaling)
+- ✅ Reputation system (trust scores, attestations)
 
-See [`specs/roadmap.md`](specs/roadmap.md) for the complete implementation plan.
+**Current Focus:** Testing, bug fixes, performance optimization, and addressing known limitations.
+
+### Documentation
+
+| Document | Description |
+|----------|-------------|
+| [`specs/roadmap.md`](specs/roadmap.md) | Main implementation roadmap (Phases 0-18) |
+| [`specs/limitations-roadmap.md`](specs/limitations-roadmap.md) | Known limitations & UX improvements |
+| [`specs/security-roadmap.md`](specs/security-roadmap.md) | Censorship resistance & security (10 phases) |
+| [`specs/testing.md`](specs/testing.md) | Testing strategy & test plans |
+| [`specs/protocol-v2.md`](specs/protocol-v2.md) | Protocol v1 specification |
 
 ## Quick Start
 
@@ -132,24 +144,40 @@ Exited chat mode.
 | 3 | IPFS Node Integration | ✅ Complete |
 | 4 | Messaging Protocol | ✅ Complete |
 | 5 | CLI Interface | ✅ Complete |
-| 6 | Integration & Testing | ❌ Skipped |
-| 7 | Release Preparation | ❌ Skipped |
+| 6-7 | Integration & Release | ❌ Skipped (moved to Protocol v1) |
 
-### Protocol v1 (Target) - Planning
+### Protocol v1 - Implementation Complete
 
 | Phase | Module | Status |
 |-------|--------|--------|
-| 8 | Identity v1 | ⏹️ Pending |
-| 9 | X3DH & Double Ratchet | ⏹️ Pending |
-| 10 | Protocol v1 Wire Format | ⏹️ Pending |
-| 11 | Multi-Device | ⏹️ Pending |
-| 12 | Private Groups | ⏹️ Pending |
-| 13 | Public Groups & Channels | ⏹️ Pending |
-| 14 | Offline Delivery | ⏹️ Pending |
-| 15 | Voice & Video Calls | ⏹️ Pending |
-| 16 | Group Calls | ⏹️ Pending |
-| 17 | Reputation System | ⏹️ Pending |
-| 18 | Integration & Hardening | ⏹️ Pending |
+| 8 | Identity v1 | ✅ Complete |
+| 9 | X3DH & Double Ratchet | ✅ Complete |
+| 10 | Protocol v1 Wire Format | ✅ Complete |
+| 11 | Multi-Device | ✅ Complete |
+| 12 | Private Groups | ✅ Complete |
+| 13 | Public Groups & Channels | ✅ Complete |
+| 14 | Offline Delivery | ✅ Complete |
+| 15 | Voice & Video Calls | ✅ Complete |
+| 16 | Group Calls | ✅ Complete |
+| 17 | Reputation System | ✅ Complete |
+| 18 | Integration & Hardening | 🔄 In Progress |
+
+### Security Roadmap - Censorship Resistance
+
+| Phase | Module | Status |
+|-------|--------|--------|
+| 1 | Configurable Bootstrap | ⏹️ Pending |
+| 2 | Peer Exchange Protocol | ⏹️ Pending |
+| 3 | Transport Obfuscation | ⏹️ Pending |
+| 4 | Peer Scoring & Anti-Eclipse | ⏹️ Pending |
+| 5 | DHT Privacy | ⏹️ Pending |
+| 6 | User-Hosted Peer Lists | ⏹️ Pending |
+| 7 | Social Network Bootstrap | ⏹️ Pending |
+| 8 | Mesh Networking | ⏹️ Pending |
+| 9 | User-Run Relay Infrastructure | ⏹️ Pending |
+| 10 | Private Relay Networks | ⏹️ Pending |
+
+**See [`specs/roadmap.md`](specs/roadmap.md) for detailed status.**
 
 ## Architecture
 
@@ -200,14 +228,40 @@ Exited chat mode.
               └─────────────────────────┘
 ```
 
-## Known Limitations (Current PoC)
+## Known Limitations
 
-- **NAT traversal**: Not implemented; assumes direct connectivity
-- **Local storage encryption**: Not encrypted (future enhancement)
-- **Offline messages**: No queuing (both parties must be online)
-- **Group chat**: Not supported (1:1 messaging only)
-- **Forward secrecy**: Uses static keys only (no Double Ratchet) - **Protocol v1 will add X3DH + Double Ratchet**
-- **Contact X25519 keys**: Not stored with contacts (requires manual exchange)
+### Current Limitations
+
+| Category | Limitation | Status |
+|----------|-----------|--------|
+| **Security** | Local storage unencrypted | ⏹️ Phase 19 |
+| **Security** | Metadata privacy (traffic analysis) | ⏹️ Security Phases 3, 5 |
+| **Connectivity** | NAT traversal (symmetric NATs) | ⏹️ Security Phase 9 |
+| **UX** | Contact verification (safety numbers) | ⏹️ Phase 19 |
+| **UX** | Message search | ⏹️ Phase 19 |
+| **UX** | GUI (desktop/mobile) | ⏹️ Future |
+| **UX** | Backup/restore | ⏹️ Phase 19 |
+
+### Resolved in Protocol v1
+
+- ✅ **Forward secrecy**: X3DH + Double Ratchet implemented
+- ✅ **Group chat**: Private groups with Sender Keys
+- ✅ **Offline messages**: Mailbox protocol implemented
+- ✅ **Multi-device**: Full support with sync and revocation
+- ✅ **Group calls**: Mesh + SFU architecture
+- ✅ **Reputation**: Trust scores and attestations
+
+### Censorship Resistance Strategy
+
+Babylon Tower maintains **node equality** - no special infrastructure required:
+
+- **No bridge nodes**: Any node can perform any function
+- **User-run relays**: Voluntary infrastructure, no special privileges
+- **Configurable bootstrap**: Multiple discovery channels (env, file, URL, DNS, QR)
+- **Mesh networking**: Works without internet via Bluetooth/WiFi Direct
+- **Transport obfuscation**: Defeats DPI fingerprinting
+
+**See [`specs/limitations-roadmap.md`](specs/limitations-roadmap.md) for comprehensive limitations and [`specs/security-roadmap.md`](specs/security-roadmap.md) for censorship resistance roadmap.**
 
 ## Testing
 
