@@ -355,6 +355,25 @@ For tmux users, auto-connect instances:
 
 ## Troubleshooting
 
+### Issue: Failed to Negotiate Security Protocol
+
+**Error:**
+```
+❌ Error: Failed to connect: failed to negotiate security protocol: 
+   wsarecv: An existing connection was forcibly closed by the remote host.
+```
+
+**Cause:** Both instances are using the same PeerID (sharing the same peer.key file).
+
+**Solution:** This was a known issue fixed in the latest version. The scripts now properly
+set the `HOME` environment variable to isolate instances. If you still see this error:
+
+1. Clean test data: `make clean-test`
+2. Ensure you're using the latest build: `make build`
+3. Check that instances have different PeerIDs by running `/myid` in each
+
+See `FIX-MULTI-INSTANCE.md` for technical details.
+
 ### Issue: Binary Not Found
 
 ```bash
@@ -464,13 +483,13 @@ go test -v -tags=integration ./test/... -run TestTwoInstanceCommunication
 
 ## Reference
 
-- [Phase 6 Action Plan](../specs/phase6-action-plan.md)
-- [Phase 4-5 Review](../specs/phase4-5-review.md)
-- [IPFS Roadmap](../specs/ipfs_roadmap.md)
+- [Roadmap](../specs/roadmap.md)
+- [Testing Specification](../specs/testing.md)
+- [Technical Specification (PoC)](../specs/poc.md)
 - [Integration Test Code](../test/integration_test.go)
 - [Test Utilities](../test/testutil.go)
 
 ---
 
-*Last updated: February 23, 2026*  
-*Version: 2.0 - Multi-Node Testing Support*
+*Last updated: February 23, 2026*
+*Version: 2.0 - Consolidated Specs*

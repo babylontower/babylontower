@@ -11,22 +11,30 @@ import (
 
 // MemoryStorage is an in-memory implementation of Storage for testing
 type MemoryStorage struct {
-	mu         sync.RWMutex
-	contacts   map[string]*pb.Contact
-	messages   map[string][]*pb.SignedEnvelope
-	peers      map[string]*PeerRecord
-	configs    map[string]string
-	blacklist  map[string]*BlacklistEntry
+	mu           sync.RWMutex
+	contacts     map[string]*pb.Contact
+	messages     map[string][]*pb.SignedEnvelope
+	peers        map[string]*PeerRecord
+	configs      map[string]string
+	blacklist    map[string]*BlacklistEntry
+	groups       map[string]*pb.GroupState
+	senderKeys   map[string]map[string]*pb.SenderKeyDistribution
+	channels     map[string]*pb.ChannelState
+	channelPosts map[string]map[string]*pb.ChannelPost
 }
 
 // NewMemoryStorage creates a new in-memory storage
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
-		contacts:  make(map[string]*pb.Contact),
-		messages:  make(map[string][]*pb.SignedEnvelope),
-		peers:     make(map[string]*PeerRecord),
-		configs:   make(map[string]string),
-		blacklist: make(map[string]*BlacklistEntry),
+		contacts:     make(map[string]*pb.Contact),
+		messages:     make(map[string][]*pb.SignedEnvelope),
+		peers:        make(map[string]*PeerRecord),
+		configs:      make(map[string]string),
+		blacklist:    make(map[string]*BlacklistEntry),
+		groups:       make(map[string]*pb.GroupState),
+		senderKeys:   make(map[string]map[string]*pb.SenderKeyDistribution),
+		channels:     make(map[string]*pb.ChannelState),
+		channelPosts: make(map[string]map[string]*pb.ChannelPost),
 	}
 }
 
@@ -370,4 +378,208 @@ func (s *MemoryStorage) RemoveFromBlacklist(peerID string) error {
 	defer s.mu.Unlock()
 	delete(s.blacklist, peerID)
 	return nil
+}
+
+// SaveGroup stores a group state
+func (s *MemoryStorage) SaveGroup(group *pb.GroupState) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := string(group.GroupId)
+	s.groups[key] = group
+	return nil
+}
+
+// GetGroup retrieves a group state
+func (s *MemoryStorage) GetGroup(groupID []byte) (*pb.GroupState, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	group, ok := s.groups[string(groupID)]
+	if !ok {
+		return nil, ErrGroupNotFound
+	}
+	return group, nil
+}
+
+// ListGroups returns all groups
+func (s *MemoryStorage) ListGroups() ([]*pb.GroupState, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	groups := make([]*pb.GroupState, 0, len(s.groups))
+	for _, group := range s.groups {
+		groups = append(groups, group)
+	}
+	return groups, nil
+}
+
+// DeleteGroup removes a group
+func (s *MemoryStorage) DeleteGroup(groupID []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := string(groupID)
+	delete(s.groups, key)
+	return nil
+}
+
+// SaveSenderKey stores a sender key distribution
+func (s *MemoryStorage) SaveSenderKey(sk *pb.SenderKeyDistribution) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	groupKey := string(sk.GroupId)
+	senderKey := string(sk.SenderPub)
+	
+	if _, ok := s.senderKeys[groupKey]; !ok {
+		s.senderKeys[groupKey] = make(map[string]*pb.SenderKeyDistribution)
+	}
+	s.senderKeys[groupKey][senderKey] = sk
+	return nil
+}
+
+// GetSenderKey retrieves a sender key
+func (s *MemoryStorage) GetSenderKey(groupID, senderPubkey []byte) (*pb.SenderKeyDistribution, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	skMap, ok := s.senderKeys[string(groupID)]
+	if !ok {
+		return nil, ErrSenderKeyNotFound
+	}
+
+	sk, ok := skMap[string(senderPubkey)]
+	if !ok {
+		return nil, ErrSenderKeyNotFound
+	}
+	return sk, nil
+}
+
+// ListSenderKeys returns all sender keys for a group
+func (s *MemoryStorage) ListSenderKeys(groupID []byte) ([]*pb.SenderKeyDistribution, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	skMap, ok := s.senderKeys[string(groupID)]
+	if !ok {
+		return nil, nil
+	}
+
+	keys := make([]*pb.SenderKeyDistribution, 0, len(skMap))
+	for _, sk := range skMap {
+		keys = append(keys, sk)
+	}
+	return keys, nil
+}
+
+// DeleteSenderKey removes a sender key
+func (s *MemoryStorage) DeleteSenderKey(groupID, senderPubkey []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.senderKeys[string(groupID)], string(senderPubkey))
+	return nil
+}
+
+// DeleteAllSenderKeys removes all sender keys for a group
+func (s *MemoryStorage) DeleteAllSenderKeys(groupID []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	groupKey := string(groupID)
+	delete(s.senderKeys, groupKey)
+	return nil
+}
+
+// Channel storage methods
+
+// SaveChannel stores a channel state
+func (s *MemoryStorage) SaveChannel(channel *pb.ChannelState) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.channels[string(channel.ChannelId)] = channel
+	return nil
+}
+
+// GetChannel retrieves a channel state
+func (s *MemoryStorage) GetChannel(channelID []byte) (*pb.ChannelState, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	channel, ok := s.channels[string(channelID)]
+	if !ok {
+		return nil, ErrGroupNotFound
+	}
+	return channel, nil
+}
+
+// ListChannels returns all channels
+func (s *MemoryStorage) ListChannels() ([]*pb.ChannelState, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	channels := make([]*pb.ChannelState, 0, len(s.channels))
+	for _, ch := range s.channels {
+		channels = append(channels, ch)
+	}
+	return channels, nil
+}
+
+// DeleteChannel removes a channel
+func (s *MemoryStorage) DeleteChannel(channelID []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.channels, string(channelID))
+	return nil
+}
+
+// SaveChannelPost stores a channel post
+func (s *MemoryStorage) SaveChannelPost(post *pb.ChannelPost) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	channelKey := string(post.ChannelId)
+	postKey := string(post.PostId)
+
+	if _, ok := s.channelPosts[channelKey]; !ok {
+		s.channelPosts[channelKey] = make(map[string]*pb.ChannelPost)
+	}
+	s.channelPosts[channelKey][postKey] = post
+
+	// Update channel's latest_post_cid
+	if channel, ok := s.channels[channelKey]; ok {
+		channel.LatestPostCid = post.PreviousPostCid
+		channel.UpdatedAt = post.Timestamp
+	}
+	return nil
+}
+
+// GetChannelPosts retrieves posts from a channel
+func (s *MemoryStorage) GetChannelPosts(channelID []byte, limit, offset int) ([]*pb.ChannelPost, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	postsMap, ok := s.channelPosts[string(channelID)]
+	if !ok {
+		return []*pb.ChannelPost{}, nil
+	}
+
+	posts := make([]*pb.ChannelPost, 0, len(postsMap))
+	for _, post := range postsMap {
+		posts = append(posts, post)
+	}
+
+	// Apply offset and limit
+	if offset >= len(posts) {
+		return []*pb.ChannelPost{}, nil
+	}
+	posts = posts[offset:]
+	if limit > 0 && len(posts) > limit {
+		posts = posts[:limit]
+	}
+
+	return posts, nil
+}
+
+// GetLatestChannelPostCID retrieves the latest post CID for a channel
+func (s *MemoryStorage) GetLatestChannelPostCID(channelID []byte) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	channel, ok := s.channels[string(channelID)]
+	if !ok {
+		return nil, nil
+	}
+	return channel.LatestPostCid, nil
 }

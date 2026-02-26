@@ -4,6 +4,10 @@ package messenger;
 
 option go_package = "babylontower/pkg/proto";
 
+// ============================================================================
+// PoC Messages (Phase 1-5)
+// ============================================================================
+
 // Message represents a plaintext message (what the user types)
 message Message {
   string text = 1;
@@ -34,4 +38,980 @@ message Contact {
   string peer_id = 5;              // Contact's libp2p PeerID (for direct connection)
   repeated string multiaddrs = 6;  // Known multiaddresses for the contact
   uint64 last_seen = 7;            // Unix timestamp when contact was last seen online
+}
+
+// ============================================================================
+// Identity v1 Messages (Phase 8)
+// ============================================================================
+
+// FeatureFlags advertises a user's capabilities
+message FeatureFlags {
+  bool supports_read_receipts = 1;
+  bool supports_typing_indicators = 2;
+  bool supports_reactions = 3;
+  bool supports_edits = 4;
+  bool supports_media = 5;
+  bool supports_voice_calls = 6;
+  bool supports_video_calls = 7;
+  bool supports_groups = 8;
+  bool supports_channels = 9;
+  bool supports_offline_messages = 10;
+  repeated string custom_features = 20;  // e.g. ["babylon.ext.stickers"]
+}
+
+// DeviceCertificate represents a registered device for an identity
+message DeviceCertificate {
+  bytes device_id = 1;       // SHA256(DK_sign.pub)[:16] — 16 bytes
+  bytes device_sign_pub = 2; // DK_sign.pub (32 bytes)
+  bytes device_dh_pub = 3;   // DK_dh.pub (32 bytes)
+  string device_name = 4;    // Human-readable, e.g. "Alice's Desktop"
+  uint64 created_at = 5;     // Unix timestamp
+  uint64 expires_at = 6;     // Unix timestamp, 0 = no expiry
+  bytes identity_pub = 7;    // IK_sign.pub (for self-contained verification)
+  bytes signature = 8;       // Ed25519.Sign(IK_sign.priv, canonical(fields 1-7))
+}
+
+// SignedPrekey represents a rotated signed prekey
+message SignedPrekey {
+  bytes device_id = 1;     // Which device owns this prekey (16 bytes)
+  bytes prekey_pub = 2;    // X25519 public key (32 bytes)
+  uint64 prekey_id = 3;    // Unique monotonic ID
+  uint64 created_at = 4;   // Unix timestamp
+  uint64 expires_at = 5;   // Recommended: created_at + 7 days
+  bytes signature = 6;     // Ed25519.Sign(IK_sign.priv, canonical(fields 1-5))
+}
+
+// OneTimePrekey represents a single-use prekey
+message OneTimePrekey {
+  bytes device_id = 1;     // Which device owns this prekey (16 bytes)
+  bytes prekey_pub = 2;    // X25519 public key (32 bytes)
+  uint64 prekey_id = 3;    // Unique monotonic ID
+}
+
+// RevocationCertificate revokes a device or prekey
+message RevocationCertificate {
+  bytes revoked_key = 1;     // Public key being revoked (device or prekey)
+  string revocation_type = 2;  // "device" or "prekey"
+  string reason = 3;           // "compromised", "replaced", "expired"
+  uint64 revoked_at = 4;       // Unix timestamp
+  bytes signature = 5;         // Ed25519.Sign(IK_sign.priv, canonical(fields 1-4))
+}
+
+// IdentityDocument is the canonical, signed, versioned record published to DHT
+message IdentityDocument {
+  // Core identity
+  bytes identity_sign_pub = 1;   // IK_sign.pub (32 bytes)
+  bytes identity_dh_pub = 2;     // IK_dh.pub (32 bytes)
+
+  // Versioning (forms a hash chain)
+  uint64 sequence = 3;           // Monotonically increasing, starts at 1
+  bytes previous_hash = 4;       // SHA256(previous serialized doc), empty for seq=1
+  uint64 created_at = 5;         // First publication timestamp
+  uint64 updated_at = 6;         // This version's timestamp
+
+  // Devices and prekeys
+  repeated DeviceCertificate devices = 7;
+  repeated SignedPrekey signed_prekeys = 8;
+  repeated OneTimePrekey one_time_prekeys = 9;
+
+  // Protocol capabilities
+  repeated uint32 supported_versions = 10;   // e.g. [1, 2]
+  repeated string supported_cipher_suites = 11;  // e.g. ["BT-X25519-XChaCha20Poly1305-SHA256"]
+  uint32 preferred_version = 12;
+
+  // Optional profile
+  string display_name = 13;
+  string avatar_cid = 14;  // IPFS CID of avatar image
+
+  // Revocations
+  repeated RevocationCertificate revocations = 15;
+
+  // Feature flags
+  FeatureFlags features = 16;
+
+  // Signature (covers all fields above)
+  bytes signature = 17;  // Ed25519.Sign(IK_sign.priv, canonical(fields 1-16))
+}
+
+// PrekeyBundle is a standalone prekey bundle for efficient DHT fetch
+message PrekeyBundle {
+  repeated SignedPrekey signed_prekeys = 1;
+  repeated OneTimePrekey one_time_prekeys = 2;
+  uint64 published_at = 3;  // Unix timestamp when published
+}
+
+// ============================================================================
+// Protocol v1 Wire Format (Phase 10)
+// ============================================================================
+
+// MessageType enum for all message types in Babylon Tower v1
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+
+  // Direct Messages (1-19)
+  DM_TEXT = 1;
+  DM_MEDIA = 2;
+  DM_REACTION = 3;
+  DM_EDIT = 4;
+  DM_DELETE = 5;
+  DM_READ_RECEIPT = 6;
+  DM_TYPING = 7;
+  DM_DELIVERY_RECEIPT = 8;
+
+  // Group Messages (20-39)
+  GROUP_TEXT = 20;
+  GROUP_MEDIA = 21;
+  GROUP_REACTION = 22;
+  GROUP_EDIT = 23;
+  GROUP_DELETE = 24;
+  GROUP_MEMBER_ADDED = 25;
+  GROUP_MEMBER_REMOVED = 26;
+  GROUP_KEY_ROTATION = 27;
+  GROUP_INFO_UPDATE = 28;
+
+  // Channel Messages (40-59)
+  CHANNEL_POST = 40;
+  CHANNEL_EDIT = 41;
+  CHANNEL_DELETE = 42;
+
+  // Control Messages (60-79)
+  CTRL_X3DH_INITIAL = 60;
+  CTRL_PREKEY_BUNDLE = 61;
+  CTRL_DEVICE_ANNOUNCE = 62;
+  CTRL_DEVICE_REVOKE = 63;
+  CTRL_SENDER_KEY_DIST = 64;
+  CTRL_KEY_REQUEST = 65;
+  CTRL_IDENTITY_UPDATE = 66;
+
+  // RTC Signaling (80-99)
+  RTC_OFFER = 80;
+  RTC_ANSWER = 81;
+  RTC_ICE_CANDIDATE = 82;
+  RTC_HANGUP = 83;
+}
+
+// BabylonEnvelope is the outer wire format for all Protocol v1 messages
+message BabylonEnvelope {
+  // Header (unencrypted, used for routing)
+  uint32 protocol_version = 1;   // 1 for Protocol v1
+  MessageType message_type = 2;  // Type of message
+  bytes sender_identity = 3;     // Sender's IK_sign.pub (32 bytes)
+  bytes recipient_identity = 4;  // Recipient's IK_sign.pub (32 bytes, empty for group/channel)
+  uint64 timestamp = 5;          // Unix timestamp (seconds)
+  bytes message_id = 6;          // Random 16 bytes, unique per message
+
+  // Routing (set for group/channel messages)
+  bytes group_id = 7;    // 32 bytes for group messages
+  bytes channel_id = 8;  // 32 bytes for channel messages
+
+  // Encrypted payload (interpretation depends on message_type)
+  bytes payload = 9;
+
+  // Authentication
+  bytes sender_device_id = 10;  // 16 bytes, identifies sending device
+  bytes signature = 11;  // Ed25519.Sign(DK_sign.priv, canonical(fields 1-10))
+
+  // Cipher suite used for payload encryption
+  uint32 cipher_suite_id = 12;  // 0x0001 = BT-X25519-XChaCha20Poly1305-SHA256
+
+  // X3DH header (present only for session initialization)
+  bytes x3dh_header = 13;  // Serialized X3DHHeader
+}
+
+// X3DHHeader for session initialization
+message X3DHHeader {
+  bytes initiator_identity_dh_pub = 1;  // Alice's IK_dh.pub (32 bytes)
+  bytes ephemeral_pub = 2;              // Alice's EK.pub (32 bytes)
+  uint64 signed_prekey_id = 3;          // Bob's SPK ID used
+  uint64 one_time_prekey_id = 4;        // Bob's OPK ID used (0 if none)
+  uint32 cipher_suite_id = 5;           // Negotiated suite
+}
+
+// RatchetHeader for Double Ratchet encrypted messages
+message RatchetHeader {
+  bytes dh_ratchet_pub = 1;       // Current DH ratchet public key (32 bytes)
+  uint32 previous_chain_length = 2;  // Length of previous sending chain
+  uint32 message_number = 3;         // Index in current sending chain
+}
+
+// DMPayload - Direct message payload (encrypted with Double Ratchet)
+message DMPayload {
+  RatchetHeader ratchet_header = 1;
+  oneof content {
+    TextMessage text = 10;
+    MediaMessage media = 11;
+    ReactionMessage reaction = 12;
+    EditMessage edit = 13;
+    DeleteMessage delete_msg = 14;
+    ReadReceipt read_receipt = 15;
+    TypingIndicator typing = 16;
+    DeliveryReceipt delivery_receipt = 17;
+  }
+}
+
+// TextMessage for text content
+message TextMessage {
+  string text = 1;       // UTF-8 message text
+  string language = 2;   // Optional BCP-47 language tag
+}
+
+// MediaMessage for media references (IPFS CID)
+message MediaMessage {
+  string cid = 1;           // IPFS CID of encrypted media
+  string content_type = 2;  // MIME type: "image/jpeg", "audio/opus", etc.
+  uint64 size_bytes = 3;    // Size of the plaintext media
+  string filename = 4;      // Original filename
+  bytes thumbnail = 5;      // Inline thumbnail (max 10KB, JPEG)
+  bytes media_key = 6;      // AES-256 key to decrypt the media at CID
+  bytes media_hash = 7;     // SHA256 of plaintext media (for verification)
+  uint32 width = 8;         // For images/video
+  uint32 height = 9;        // For images/video
+  uint32 duration_ms = 10;  // For audio/video
+}
+
+// ReactionMessage for emoji reactions
+message ReactionMessage {
+  bytes target_message_id = 1;  // message_id of the target message
+  string emoji = 2;             // Unicode emoji or shortcode
+  bool remove = 3;              // true = remove reaction
+}
+
+// EditMessage for editing previous messages
+message EditMessage {
+  bytes target_message_id = 1;  // message_id of target
+  string new_text = 2;          // New text content
+  uint64 edit_timestamp = 3;    // Unix timestamp of edit
+}
+
+// DeleteMessage for deleting messages
+message DeleteMessage {
+  bytes target_message_id = 1;  // message_id to delete
+}
+
+// ReadReceipt for read acknowledgments
+message ReadReceipt {
+  repeated bytes message_ids = 1;  // Messages marked as read
+  uint64 read_at = 2;              // Unix timestamp
+}
+
+// TypingIndicator for typing notifications
+message TypingIndicator {
+  bool is_typing = 1;  // true = started typing, false = stopped
+}
+
+// DeliveryReceipt for delivery confirmations
+message DeliveryReceipt {
+  repeated bytes message_ids = 1;  // Messages delivered
+  uint64 delivered_at = 2;         // Unix timestamp
+}
+
+// GroupPayload - Group message payload (encrypted with Sender Keys)
+message GroupPayload {
+  uint64 epoch = 1;                // Group epoch
+  uint32 chain_index = 2;          // Sender's chain index
+  oneof content {
+    TextMessage text = 10;
+    MediaMessage media = 11;
+    ReactionMessage reaction = 12;
+    EditMessage edit = 13;
+    DeleteMessage delete_msg = 14;
+    GroupMemberEvent member_event = 15;
+    GroupInfoUpdate info_update = 16;
+    ModerationAction moderation = 18;  // Moderation action (public groups)
+    bytes ciphertext = 17;         // Raw encrypted content for PoC
+  }
+  bytes sender_group_signature = 20;  // Ed25519 signature
+}
+
+// ModerationAction for public group moderation
+message ModerationAction {
+  bytes target_member_pubkey = 1;  // Member being moderated
+  string action_type = 2;          // "ban", "mute", "delete_message"
+  string reason = 3;               // Reason for moderation
+  uint64 duration_seconds = 4;     // For mutes: duration in seconds (0 = permanent)
+  bytes target_message_id = 5;     // For delete_message: message to delete
+  bytes moderator_pubkey = 6;      // Ed25519 pub of moderator
+  uint64 timestamp = 7;            // Unix timestamp
+  bytes signature = 8;             // Ed25519.Sign(moderator_priv, canonical(fields 1-7))
+}
+
+// ChannelState represents the state of a channel
+message ChannelState {
+  bytes channel_id = 1;            // Random 32-byte identifier
+  string name = 2;                 // Max 128 UTF-8 chars
+  string description = 3;          // Max 512 UTF-8 chars
+  string avatar_cid = 4;           // IPFS CID of channel avatar
+  GroupType type = 5;              // PRIVATE_CHANNEL or PUBLIC_CHANNEL
+  bytes owner_pubkey = 6;          // Ed25519 pub of the channel owner
+  uint64 created_at = 7;           // Channel creation timestamp
+  uint64 updated_at = 8;           // Last update timestamp
+  bytes latest_post_cid = 9;       // CID of the latest post (for linked-list)
+  uint64 subscriber_count = 10;    // Approximate subscriber count
+  bytes state_signature = 11;      // Signature of this state
+}
+
+// ChannelPost represents a post in a channel
+message ChannelPost {
+  bytes post_id = 1;               // Random 16-byte identifier
+  bytes channel_id = 2;            // Channel this post belongs to
+  bytes author_pubkey = 3;         // Ed25519 pub of the author (owner for private channels)
+  uint64 timestamp = 4;            // Unix timestamp
+  oneof content {
+    TextMessage text = 10;
+    MediaMessage media = 11;
+    EditMessage edit = 12;
+    DeleteMessage delete_msg = 13;
+  }
+  bytes previous_post_cid = 14;    // CID of previous post (for linked-list)
+  bytes signature = 15;            // Ed25519 signature of author
+}
+
+// GroupMemberEvent for member changes
+message GroupMemberEvent {
+  bytes member_pubkey = 1;   // Ed25519 pub of affected member
+  string action = 2;         // "added", "removed", "left", "promoted", "demoted"
+  string role = 3;           // "member", "admin", "owner"
+  bytes actor_pubkey = 4;    // Who performed the action
+}
+
+// GroupInfoUpdate for group metadata changes
+message GroupInfoUpdate {
+  string new_name = 1;         // Max 128 UTF-8 chars
+  string new_description = 2;  // Max 512 UTF-8 chars
+  string new_avatar_cid = 3;   // IPFS CID
+}
+
+// GroupState represents the current state of a group
+message GroupState {
+  bytes group_id = 1;               // Random 32-byte identifier
+  uint64 epoch = 2;                 // Incremented on every membership change
+  string name = 3;                  // Max 128 UTF-8 chars
+  string description = 4;           // Max 512 UTF-8 chars
+  string avatar_cid = 5;            // IPFS CID of group avatar
+  GroupType type = 6;               // Type of group
+  repeated GroupMember members = 7; // List of group members
+  bytes creator_pubkey = 8;         // Ed25519 pub of the group creator
+  uint64 created_at = 9;            // Group creation timestamp
+  uint64 updated_at = 10;           // Last update timestamp
+  bytes state_signature = 11;       // Signature of this state update
+  bytes previous_hash = 12;         // SHA256 of previous serialized state
+}
+
+// GroupType represents the type of group
+enum GroupType {
+  GROUP_TYPE_PRIVATE_GROUP = 0;
+  GROUP_TYPE_PUBLIC_GROUP = 1;
+  GROUP_TYPE_PRIVATE_CHANNEL = 2;
+  GROUP_TYPE_PUBLIC_CHANNEL = 3;
+}
+
+// GroupMember represents a member of a group
+message GroupMember {
+  bytes ed25519_pubkey = 1;    // Member's Ed25519 public key
+  bytes x25519_pubkey = 2;     // Member's X25519 public key
+  string display_name = 3;     // Display name in the group
+  uint64 joined_at = 4;        // Timestamp when member joined
+  GroupRole role = 5;          // Role in the group
+}
+
+// GroupRole represents a member's role in a group
+enum GroupRole {
+  GROUP_ROLE_MEMBER = 0;
+  GROUP_ROLE_ADMIN = 1;
+  GROUP_ROLE_OWNER = 2;
+}
+
+// SenderKeyDistribution for distributing sender keys to group members
+message SenderKeyDistribution {
+  bytes group_id = 1;       // 32-byte group identifier
+  uint64 epoch = 2;         // Key epoch (incremented on rotation)
+  bytes sender_pub = 3;     // Ed25519 pub of the sender
+  bytes chain_key = 4;      // 32-byte initial chain key
+  bytes signing_key = 5;    // Ed25519 pub for message authentication
+  uint32 chain_index = 6;   // Starting chain index
+}
+
+// ChannelPayload - Channel message payload
+message ChannelPayload {
+  oneof content {
+    TextMessage text = 1;
+    MediaMessage media = 2;
+    EditMessage edit = 3;
+    DeleteMessage delete_msg = 4;
+  }
+}
+
+// DeviceAnnouncement for new device registration
+message DeviceAnnouncement {
+  DeviceCertificate device = 1;
+  uint64 identity_doc_sequence = 2;  // Current IdentityDocument sequence
+}
+
+// KeyRequest for requesting group/sender keys
+message KeyRequest {
+  bytes group_id = 1;      // For group key requests
+  bytes session_id = 2;    // For session key requests
+  string request_type = 3; // "sender_key", "session", "prekey_bundle"
+}
+
+// IdentityUpdateNotification for identity changes
+message IdentityUpdateNotification {
+  bytes identity_pub = 1;     // IK_sign.pub
+  uint64 new_sequence = 2;    // New sequence number
+  bytes document_hash = 3;    // SHA256 of new IdentityDocument
+  uint64 timestamp = 4;       // Unix timestamp
+  bytes signature = 5;        // Signed by IK_sign
+}
+
+// RTCOffer for call initiation
+message RTCOffer {
+  string sdp = 1;       // SDP offer string
+  string call_id = 2;   // Random UUID for this call session
+  bool video = 3;       // true = video call, false = audio only
+}
+
+// RTCAnswer for call acceptance
+message RTCAnswer {
+  string sdp = 1;      // SDP answer string
+  string call_id = 2;  // Call ID from offer
+}
+
+// RTCIceCandidate for ICE exchange
+message RTCIceCandidate {
+  string candidate = 1;       // ICE candidate string
+  string sdp_mid = 2;         // SDP media identifier
+  uint32 sdp_mline_idx = 3;   // Media line index
+  string call_id = 4;         // Call ID
+}
+
+// RTCHangup for call termination
+message RTCHangup {
+  string call_id = 1;  // Call ID
+  string reason = 2;   // "normal", "busy", "declined", "timeout"
+}
+
+// ============================================================================
+// Multi-Device Messages (Phase 11)
+// ============================================================================
+
+// SyncType enum for device sync message types
+enum SyncType {
+  SYNC_TYPE_UNSPECIFIED = 0;
+  CONTACT_ADDED = 1;
+  CONTACT_REMOVED = 2;
+  CONTACT_UPDATED = 3;
+  MESSAGE_READ = 4;
+  GROUP_JOINED = 5;
+  GROUP_LEFT = 6;
+  SETTINGS_CHANGED = 7;
+  HISTORY_REQUEST = 8;
+  HISTORY_BATCH = 9;
+}
+
+// VectorClock for conflict resolution in multi-device sync
+message VectorClock {
+  // Map of device_id to counter (device_id is SHA256(DK_sign.pub)[:16])
+  map<string, uint64> clocks = 1;
+}
+
+// DeviceSyncMessage for cross-device state synchronization
+message DeviceSyncMessage {
+  uint32 source_device_id = 1;  // Device ID of sender (for display)
+  SyncType type = 2;            // Type of sync event
+  bytes encrypted_payload = 3;  // Encrypted with device-group key
+  bytes nonce = 4;              // 24-byte nonce for XChaCha20-Poly1305
+  uint64 timestamp = 5;         // Unix timestamp
+  VectorClock vector_clock = 6; // Vector clock for conflict resolution
+}
+
+// ContactSync for syncing contact additions/updates/removals
+message ContactSync {
+  bytes contact_pubkey = 1;      // Contact's Ed25519 public key
+  string display_name = 2;       // Contact's display name
+  bytes x25519_pubkey = 3;       // Contact's X25519 public key
+  string peer_id = 4;            // Contact's libp2p PeerID
+  repeated string multiaddrs = 5;  // Known multiaddresses
+  uint64 created_at = 6;         // When contact was added
+  uint64 updated_at = 7;         // When contact was last updated
+  bool is_removed = 8;           // true = contact was removed
+}
+
+// ReadReceiptSync for syncing read receipts across devices
+message ReadReceiptSync {
+  bytes contact_pubkey = 1;      // Contact's Ed25519 public key
+  repeated bytes message_ids = 2;  // Message IDs marked as read
+  uint64 read_at = 3;            // Unix timestamp
+}
+
+// GroupSync for syncing group membership
+message GroupSync {
+  bytes group_id = 1;            // 32-byte group identifier
+  string name = 2;               // Group name
+  uint64 epoch = 3;              // Group epoch
+  bool joined = 4;               // true = joined, false = left
+  uint64 timestamp = 5;          // When the event occurred
+}
+
+// SettingsSync for syncing user settings
+message SettingsSync {
+  string key = 1;                // Settings key
+  bytes value = 2;               // Settings value (JSON encoded)
+  uint64 updated_at = 3;         // When settings were updated
+}
+
+// HistoryRequest for requesting message history from other devices
+message HistoryRequest {
+  bytes contact_pubkey = 1;      // Contact's Ed25519 public key (empty for all)
+  uint64 start_time = 2;         // Start of time range (Unix timestamp)
+  uint64 end_time = 3;           // End of time range (Unix timestamp)
+  uint32 max_messages = 4;       // Maximum messages to return
+}
+
+// HistoryBatch for sending message history in batches
+message HistoryBatch {
+  bytes contact_pubkey = 1;      // Contact's Ed25519 public key
+  repeated HistoryMessage messages = 2;  // Batch of messages
+  uint32 batch_number = 3;       // Batch number (starts at 1)
+  bool is_last_batch = 4;        // true if this is the last batch
+}
+
+// HistoryMessage for syncing historical messages
+message HistoryMessage {
+  bytes message_id = 1;          // Unique message identifier
+  string text = 2;               // Message text
+  uint64 timestamp = 3;          // Unix timestamp
+  bool is_sent = 4;              // true = sent by user, false = received
+  bytes recipient_pubkey = 5;    // Recipient's Ed25519 public key (if sent)
+  bytes sender_pubkey = 6;       // Sender's Ed25519 public key (if received)
+}
+
+// DeviceRevocation for revoking a device
+message DeviceRevocation {
+  bytes revoked_device_id = 1;   // 16-byte device ID being revoked
+  bytes revoker_pubkey = 2;      // IK_sign.pub of revoker
+  uint64 revoked_at = 3;         // Unix timestamp
+  string reason = 4;             // "compromised", "lost", "replaced"
+  bytes identity_signature = 5;  // Signed by IK_sign
+}
+
+// MultiDeviceEnvelope for optimized multi-device messaging (5+ devices)
+message MultiDeviceEnvelope {
+  // Header (unencrypted, used for routing)
+  uint32 protocol_version = 1;   // 1 for Protocol v1
+  MessageType message_type = 2;  // Type of message
+  bytes sender_identity = 3;     // Sender's IK_sign.pub (32 bytes)
+  bytes recipient_identity = 4;  // Recipient's IK_sign.pub (32 bytes)
+  uint64 timestamp = 5;          // Unix timestamp (seconds)
+  bytes message_id = 6;          // Random 16 bytes, unique per message
+
+  // Encrypted payload (encrypted with symmetric key)
+  bytes payload = 7;             // XChaCha20-Poly1305 encrypted
+  bytes nonce = 8;               // 24-byte nonce for payload encryption
+
+  // Authentication
+  bytes sender_device_id = 9;    // 16 bytes, identifies sending device
+  bytes signature = 10;          // Ed25519.Sign(DK_sign.priv, canonical(fields 1-9))
+
+  // Cipher suite
+  uint32 cipher_suite_id = 11;   // 0x0001 = BT-X25519-XChaCha20Poly1305-SHA256
+
+  // Encrypted symmetric keys for each recipient device
+  repeated EncryptedDeviceKey encrypted_keys = 12;
+}
+
+// EncryptedDeviceKey contains a symmetric key encrypted for a specific device
+message EncryptedDeviceKey {
+  bytes device_id = 1;           // 16-byte device ID
+  bytes encrypted_key = 2;       // Symmetric key encrypted with device's session
+  bytes encrypted_nonce = 3;     // Nonce used for key encryption
+  bytes ephemeral_pub = 4;       // Ephemeral X25519 public key for key agreement
+}
+
+// ============================================================================
+// Offline Delivery / Mailbox Protocol (Phase 14)
+// ============================================================================
+
+// MailboxAnnouncement - volunteered mailbox node advertising service for a target peer
+message MailboxAnnouncement {
+  bytes mailbox_peer_id = 1;     // libp2p PeerID of the mailbox node
+  bytes target_pubkey = 2;       // Ed25519 pub of the peer this mailbox serves (32 bytes)
+  uint64 capacity_bytes = 3;     // Remaining storage capacity
+  uint64 max_message_size = 4;   // Max single message size accepted (bytes)
+  uint32 max_messages = 5;       // Max messages stored for this target
+  uint64 ttl_seconds = 6;        // How long messages are retained
+  uint64 announced_at = 7;       // Unix timestamp
+  bytes signature = 8;           // Signed by mailbox node's device key
+  repeated string capabilities = 9;  // e.g. ["content-route", "relay-v2"]
+  uint64 reputation_score = 10;  // Optional reputation score (0-1000)
+}
+
+// DepositRequest - sender requesting to deposit a message
+message DepositRequest {
+  bytes target_pubkey = 1;       // Recipient's Ed25519 pub (32 bytes)
+  bytes envelope = 2;            // Serialized BabylonEnvelope
+  uint64 request_id = 3;         // Unique request identifier
+  uint64 timestamp = 4;          // Unix timestamp
+  bytes sender_signature = 5;    // Sender's signature over fields 1-4
+}
+
+// DepositResponse - mailbox response to deposit request
+message DepositResponse {
+  uint64 request_id = 1;         // Matches DepositRequest.request_id
+  bool accepted = 2;             // true = accepted, false = rejected
+  string rejection_reason = 3;   // Reason if rejected
+  uint64 stored_until = 4;       // Unix timestamp when message will expire
+  bytes mailbox_signature = 5;   // Mailbox's signature over fields 1-4
+}
+
+// RetrievalRequest - recipient requesting to retrieve messages
+message RetrievalRequest {
+  bytes recipient_pubkey = 1;    // Recipient's Ed25519 pub (32 bytes)
+  bytes nonce = 2;               // Random 32-byte challenge
+  uint64 timestamp = 3;          // Unix timestamp
+  bytes recipient_signature = 4; // Recipient's signature over fields 1-3
+}
+
+// RetrievalResponse - mailbox response with messages
+message RetrievalResponse {
+  bytes nonce = 1;               // Challenge from RetrievalRequest
+  repeated bytes message_ids = 2;  // List of message_id values
+  repeated bytes envelopes = 3;  // List of serialized BabylonEnvelope
+  uint64 count = 4;              // Number of messages returned
+  bytes mailbox_signature = 5;   // Mailbox's signature over fields 1-4
+}
+
+// AcknowledgmentRequest - recipient acknowledging receipt
+message AcknowledgmentRequest {
+  bytes recipient_pubkey = 1;    // Recipient's Ed25519 pub (32 bytes)
+  repeated bytes message_ids = 2;  // Message IDs being acknowledged
+  uint64 timestamp = 3;          // Unix timestamp
+  bytes recipient_signature = 4; // Recipient's signature over fields 1-3
+}
+
+// AcknowledgmentResponse - mailbox confirming deletion
+message AcknowledgmentResponse {
+  repeated bytes message_ids = 1;  // Acknowledged message IDs
+  bool success = 2;              // true = all deleted
+  string failure_reason = 3;     // Reason if partial/complete failure
+  bytes mailbox_signature = 4;   // Mailbox's signature
+}
+
+// MailboxStats - statistics about mailbox storage
+message MailboxStats {
+  bytes target_pubkey = 1;       // Target peer's pubkey
+  uint32 stored_count = 2;       // Number of messages stored
+  uint64 used_bytes = 3;         // Bytes used
+  uint64 capacity_bytes = 4;     // Total capacity
+  uint64 oldest_timestamp = 5;   // Timestamp of oldest message
+  uint64 newest_timestamp = 6;   // Timestamp of newest message
+}
+
+// MailboxConfig - configuration for mailbox behavior
+message MailboxConfig {
+  uint32 max_messages_per_target = 1;  // Default: 500
+  uint64 max_message_size = 2;         // Default: 262144 (256 KB)
+  uint64 max_total_bytes_per_target = 3;  // Default: 67108864 (64 MB)
+  uint64 default_ttl_seconds = 4;    // Default: 604800 (7 days)
+  uint32 deposit_rate_limit = 5;     // Messages per sender per target per hour (default: 100)
+  bool enable_content_routing = 6;   // Whether to pin IPFS CIDs
+}
+
+// StoredMailboxMessage - internal storage format for mailbox messages
+message StoredMailboxMessage {
+  bytes message_id = 1;        // Unique message identifier
+  bytes sender_pubkey = 2;     // Sender's Ed25519 public key (32 bytes)
+  bytes envelope = 3;          // Serialized BabylonEnvelope
+  uint64 stored_at = 4;        // Unix timestamp when stored
+  uint64 expires_at = 5;       // Unix timestamp when this message expires
+  uint64 size = 6;             // Size of the envelope in bytes
+}
+
+// ============================================================================
+// RTC Call Session Storage (Phase 15)
+// ============================================================================
+
+// CallSession - persisted call session state
+message CallSession {
+  string call_id = 1;                // UUID of the call session
+  bytes local_identity = 2;          // Our IK_sign.pub (32 bytes)
+  bytes remote_identity = 3;         // Remote IK_sign.pub (32 bytes)
+  string call_type = 4;              // "audio" or "video"
+  string state = 5;                  // Call state (idle, offered, accepted, etc.)
+  uint64 created_at = 6;             // Unix timestamp
+  uint64 updated_at = 7;             // Unix timestamp
+  uint64 expires_at = 8;             // Unix timestamp (for offers)
+  string local_sdp = 9;              // Local SDP offer/answer
+  string remote_sdp = 10;            // Remote SDP offer/answer
+  repeated string local_ice_candidates = 11;   // Local ICE candidates
+  repeated string remote_ice_candidates = 12;  // Remote ICE candidates
+  bytes media_key = 13;              // Derived media encryption key (32 bytes)
+  uint32 ssrc_local = 14;            // Our SSRC
+  uint32 ssrc_remote = 15;           // Remote SSRC
+  uint64 connected_at = 16;          // Unix timestamp when connected (optional)
+  uint64 ended_at = 17;              // Unix timestamp when ended (optional)
+  string hangup_reason = 18;         // Reason for call termination
+}
+
+// ============================================================================
+// Group Call Messages (Phase 16)
+// ============================================================================
+
+// GroupCallType - topology type for group calls
+enum GroupCallType {
+  GROUP_CALL_TYPE_MESH = 0;  // Full mesh (2-6 participants)
+  GROUP_CALL_TYPE_SFU = 1;   // SFU topology (7-25 participants)
+}
+
+// GroupCallState - state of a group call
+enum GroupCallState {
+  GROUP_CALL_STATE_IDLE = 0;
+  GROUP_CALL_STATE_INITIATING = 1;
+  GROUP_CALL_STATE_WAITING_FOR_PARTICIPANTS = 2;
+  GROUP_CALL_STATE_ACTIVE = 3;
+  GROUP_CALL_STATE_ENDED = 4;
+}
+
+// ParticipantState - state of a participant in a group call
+enum ParticipantState {
+  PARTICIPANT_STATE_JOINING = 0;
+  PARTICIPANT_STATE_CONNECTED = 1;
+  PARTICIPANT_STATE_PUBLISHING = 2;
+  PARTICIPANT_STATE_SUBSCRIBED = 3;
+  PARTICIPANT_STATE_LEAVING = 4;
+  PARTICIPANT_STATE_DISCONNECTED = 5;
+}
+
+// ParticipantInfo - information about a group call participant
+message ParticipantInfo {
+  bytes identity_pubkey = 1;     // Participant's IK_sign.pub (32 bytes)
+  bytes device_id = 2;           // Participant's device ID (16 bytes)
+  string display_name = 3;       // Display name in the call
+  ParticipantState state = 4;    // Current state
+  uint64 joined_at = 5;          // Unix timestamp when joined
+  bool is_sfu = 6;               // true if this participant is the SFU
+  bool is_owner = 7;             // true if this participant owns the call
+  string sdp = 8;                // SDP offer/answer
+  repeated string ice_candidates = 9;  // ICE candidates
+  uint32 ssrc = 10;              // SSRC for media stream
+}
+
+// GroupCallSession - group call session state
+message GroupCallSession {
+  string call_id = 1;                // UUID of the group call
+  bytes group_id = 2;                // Group/channel ID (32 bytes)
+  GroupCallType call_type = 3;       // Mesh or SFU topology
+  GroupCallState state = 4;          // Call state
+  bytes owner_identity = 5;          // Call owner's IK_sign.pub
+  bytes sfu_identity = 6;            // Current SFU's IK_sign.pub (if SFU mode)
+  repeated ParticipantInfo participants = 7;  // All participants
+  uint64 created_at = 8;             // Unix timestamp
+  uint64 started_at = 9;             // Unix timestamp when call started
+  uint64 ended_at = 10;              // Unix timestamp when ended
+  string hangup_reason = 11;         // Reason for call ending
+  bool is_video = 12;                // true = video call, false = audio only
+  uint64 max_participants = 13;      // Maximum participants (default: 25)
+}
+
+// GroupCallOffer - invitation to join a group call
+message GroupCallOffer {
+  string call_id = 1;            // Group call ID
+  bytes group_id = 2;            // Group/channel ID
+  bytes owner_identity = 3;      // Owner's IK_sign.pub
+  GroupCallType call_type = 4;   // Mesh or SFU
+  bool is_video = 5;             // Video call flag
+  uint64 timestamp = 6;          // Unix timestamp
+  bytes signature = 7;           // Owner's signature
+}
+
+// GroupCallJoin - request to join a group call
+message GroupCallJoin {
+  string call_id = 1;            // Group call ID
+  bytes participant_identity = 2;  // Joining participant's IK_sign.pub
+  bytes device_id = 3;           // Device ID
+  string display_name = 4;       // Display name
+  string sdp = 5;                // SDP offer
+  repeated string ice_candidates = 6;  // ICE candidates
+  uint64 timestamp = 7;          // Unix timestamp
+  bytes signature = 8;           // Participant's signature
+}
+
+// GroupCallAccept - acceptance of a join request
+message GroupCallAccept {
+  string call_id = 1;            // Group call ID
+  bytes participant_identity = 2;  // Participant's IK_sign.pub
+  string sdp = 3;                // SDP answer (if SFU) or empty (if mesh)
+  repeated string ice_candidates = 4;  // ICE candidates
+  GroupCallType call_type = 5;   // Current topology
+  bytes sfu_identity = 6;        // SFU identity (if SFU mode)
+  repeated ParticipantInfo participants = 7;  // Current participant list
+  uint64 timestamp = 8;          // Unix timestamp
+  bytes signature = 9;           // Owner/SFU signature
+}
+
+// GroupCallLeave - notification that a participant is leaving
+message GroupCallLeave {
+  string call_id = 1;            // Group call ID
+  bytes participant_identity = 2;  // Leaving participant's IK_sign.pub
+  string reason = 3;             // Reason for leaving
+  uint64 timestamp = 4;          // Unix timestamp
+  bytes signature = 5;           // Participant's signature
+}
+
+// GroupCallSFUElection - SFU election message
+message GroupCallSFUElection {
+  string call_id = 1;            // Group call ID
+  bytes candidate_identity = 2;  // SFU candidate's IK_sign.pub
+  uint64 timestamp = 3;          // Unix timestamp
+  bytes signature = 4;           // Candidate's signature
+}
+
+// GroupCallSFUAck - acknowledgment of SFU election
+message GroupCallSFUAck {
+  string call_id = 1;            // Group call ID
+  bytes sfu_identity = 2;        // Elected SFU's IK_sign.pub
+  bytes voter_identity = 3;      // Voter's IK_sign.pub
+  uint64 timestamp = 4;          // Unix timestamp
+  bytes signature = 5;           // Voter's signature
+}
+
+// GroupCallMediaPacket - media packet forwarded by SFU
+message GroupCallMediaPacket {
+  string call_id = 1;            // Group call ID
+  bytes sender_identity = 2;     // Media sender's IK_sign.pub
+  uint32 ssrc = 3;               // SSRC of media stream
+  bytes payload = 4;             // Encrypted media payload (SRTP)
+  uint64 timestamp = 5;          // Unix timestamp
+  uint32 sequence = 6;           // Sequence number
+}
+
+// GroupCallStateUpdate - broadcast of group call state changes
+message GroupCallStateUpdate {
+  string call_id = 1;            // Group call ID
+  GroupCallState state = 2;      // New state
+  repeated ParticipantInfo participants = 3;  // Current participants
+  GroupCallType call_type = 4;   // Current topology
+  bytes sfu_identity = 5;        // Current SFU (if SFU mode)
+  uint64 timestamp = 6;          // Unix timestamp
+  bytes signature = 7;           // Owner/SFU signature
+}
+
+// ============================================================================
+// Reputation System (Phase 17)
+// ============================================================================
+
+// PeerReputationMetrics tracks the 5 dimensions of peer reputation
+message PeerReputationMetrics {
+  // Relay reliability: messages successfully relayed / total relay requests
+  float relay_reliability = 1;   // Range [0.0, 1.0]
+  uint64 relay_success_count = 2;  // Successful relay operations
+  uint64 relay_total_count = 3;    // Total relay requests
+
+  // Uptime consistency: hours online in last 7 days / 168
+  float uptime_consistency = 4;  // Range [0.0, 1.0]
+  uint64 hours_online_7d = 5;    // Hours observed online in last 7 days
+  uint64 last_seen = 6;          // Unix timestamp of last observation
+
+  // Mailbox reliability: messages retrievable / messages deposited
+  float mailbox_reliability = 7; // Range [0.0, 1.0]
+  uint64 mailbox_retrieved_count = 8;  // Successfully retrieved messages
+  uint64 mailbox_deposited_count = 9;  // Messages deposited
+
+  // DHT responsiveness: 1 - (avg_response_ms / 5000), clamped to [0, 1]
+  float dht_responsiveness = 10; // Range [0.0, 1.0]
+  float avg_response_ms = 11;    // Average DHT response time in milliseconds
+  uint64 dht_query_count = 12;   // Number of DHT queries made
+
+  // Content serving: IPFS blocks served / blocks requested
+  float content_serving = 13;    // Range [0.0, 1.0]
+  uint64 blocks_served_count = 14;   // Blocks served to network
+  uint64 blocks_requested_count = 15; // Blocks requested from this peer
+
+  // Metadata
+  uint64 first_observed = 16;    // Unix timestamp of first observation
+  uint64 last_updated = 17;      // Unix timestamp of last metric update
+  uint64 observation_count = 18; // Total number of observations
+}
+
+// PeerReputationRecord combines metrics with composite score and tier
+message PeerReputationRecord {
+  bytes peer_id = 1;                    // libp2p PeerID (binary format)
+  PeerReputationMetrics metrics = 2;    // Detailed metrics
+
+  // Composite score: weighted sum of metrics, range [0.0, 1.0]
+  float composite_score = 3;
+
+  // Reputation tier derived from composite score
+  ReputationTier tier = 4;
+
+  // Attestations received from other peers (optional)
+  repeated ReputationAttestation attestations = 5;
+
+  // Local trust adjustments (user-defined)
+  float trust_adjustment = 6;  // Range [-0.5, 0.5], added to composite score
+}
+
+// ReputationTier represents the tier classification based on composite score
+enum ReputationTier {
+  REPUTATION_TIER_BASIC = 0;       // 0.0 - 0.3: Standard service
+  REPUTATION_TIER_CONTRIBUTOR = 1; // 0.3 - 0.6: Preferred relay, mailbox priority
+  REPUTATION_TIER_RELIABLE = 2;    // 0.6 - 0.8: Priority mesh, prekey cache priority
+  REPUTATION_TIER_TRUSTED = 3;     // 0.8 - 1.0: First choice SFU, extended mailbox TTL
+}
+
+// ReputationAttestation is a signed attestation about a peer's reputation
+message ReputationAttestation {
+  bytes attester_peer_id = 1;      // libp2p PeerID of the attester
+  bytes subject_peer_id = 2;       // libp2p PeerID of the subject
+  float score = 3;                 // Attester's computed score for subject [0.0, 1.0]
+  uint64 observation_period_hours = 4;  // Hours of observation
+  uint64 timestamp = 5;            // Unix timestamp of attestation
+  bytes signature = 6;             // Ed25519 signature by attester
+  string attester_identity_pub = 7;  // IK_sign.pub of attester (32 bytes, hex)
+}
+
+// ReputationAttestationEnvelope wraps attestation for DHT publication
+message ReputationAttestationEnvelope {
+  ReputationAttestation attestation = 1;
+  bytes attester_signature = 2;    // Signature over attestation
+}
+
+// ReputationQuery for requesting reputation information
+message ReputationQuery {
+  bytes target_peer_id = 1;        // PeerID to query reputation for
+  uint64 timestamp = 2;            // Query timestamp
+  bytes querier_pubkey = 3;        // Querier's public key
+}
+
+// ReputationResponse for returning reputation information
+message ReputationResponse {
+  bytes target_peer_id = 1;        // PeerID queried
+  PeerReputationRecord record = 2; // Local reputation record
+  repeated ReputationAttestation attestations = 3;  // Collected attestations
+  uint64 timestamp = 4;            // Response timestamp
+  bytes responder_pubkey = 5;      // Responder's public key
+}
+
+// ReputationConfig for configuring reputation system behavior
+message ReputationConfig {
+  // Weights for composite score computation
+  float relay_reliability_weight = 1;     // Default: 0.25
+  float uptime_consistency_weight = 2;    // Default: 0.20
+  float mailbox_reliability_weight = 3;   // Default: 0.25
+  float dht_responsiveness_weight = 4;    // Default: 0.15
+  float content_serving_weight = 5;       // Default: 0.15
+
+  // Anti-gaming thresholds
+  uint64 min_connection_hours = 6;        // Min hours before attestation accepted (default: 24)
+  float max_attestation_influence = 7;    // Max influence per attestation (default: 0.1)
+  uint64 attestation_expiry_hours = 8;    // Hours before attestation expires (default: 168)
+  uint32 max_attestations_per_peer = 9;   // Max attestations to consider (default: 50)
+
+  // Tier thresholds
+  float tier_contributor_threshold = 10;  // Default: 0.3
+  float tier_reliable_threshold = 11;     // Default: 0.6
+  float tier_trusted_threshold = 12;      // Default: 0.8
+
+  // Update intervals
+  uint64 metric_update_interval_seconds = 13;  // Default: 300 (5 minutes)
+  uint64 attestation_publish_interval_hours = 14;  // Default: 24
 }

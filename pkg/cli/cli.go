@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"babylontower/pkg/groups"
 	"babylontower/pkg/ipfsnode"
 	"babylontower/pkg/messaging"
 	"babylontower/pkg/storage"
@@ -35,23 +36,24 @@ type CLI struct {
 	storage     storage.Storage
 	ipfsNode    *ipfsnode.Node
 	messaging   *messaging.Service
+	groups      *groups.Service
 	handler     *CommandHandler
 	rl          *readline.Instance
 	outputMu    sync.Mutex
-	
+
 	// Identity keys
 	ed25519PubKey  ed25519.PublicKey
 	ed25519PrivKey ed25519.PrivateKey
 	x25519PubKey   []byte
 	x25519PrivKey  []byte
-	
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
 // New creates a new CLI instance
-func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode *ipfsnode.Node, messaging *messaging.Service) (*CLI, error) {
+func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode *ipfsnode.Node, messaging *messaging.Service, groupsSvc *groups.Service) (*CLI, error) {
 	// Create readline instance
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          ">>> ",
@@ -70,6 +72,7 @@ func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode *
 		storage:        storage,
 		ipfsNode:       ipfsNode,
 		messaging:      messaging,
+		groups:         groupsSvc,
 		rl:             rl,
 		ed25519PubKey:  identity.Ed25519PubKey,
 		ed25519PrivKey: identity.Ed25519PrivKey,
@@ -84,6 +87,7 @@ func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode *
 		storage,
 		ipfsNode,
 		messaging,
+		groupsSvc,
 		identity.Ed25519PubKey,
 		identity.Ed25519PrivKey,
 		identity.X25519PubKey,

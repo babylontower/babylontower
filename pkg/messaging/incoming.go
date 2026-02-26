@@ -6,6 +6,7 @@ import (
 
 	"babylontower/pkg/crypto"
 	pb "babylontower/pkg/proto"
+	"babylontower/pkg/storage"
 )
 
 // ReceiveResult contains the result of processing a received message
@@ -180,8 +181,6 @@ type MessageWithMeta struct {
 }
 
 // GetDecryptedMessagesWithMeta retrieves and decrypts message history with direction metadata
-// It handles both incoming messages (encrypted with our X25519 public key)
-// and outgoing messages (encrypted with contact's X25519 public key)
 func (s *Service) GetDecryptedMessagesWithMeta(contactPubKey []byte, limit, offset int) ([]*MessageWithMeta, error) {
 	s.mu.RLock()
 	if !s.isStarted {
@@ -197,126 +196,134 @@ func (s *Service) GetDecryptedMessagesWithMeta(contactPubKey []byte, limit, offs
 
 	messages := make([]*MessageWithMeta, 0, len(msgsWithKeys))
 	for _, mwk := range msgsWithKeys {
-		env := mwk.Envelope
-
-		// Verify signature
-		valid, err := VerifyEnvelope(env)
-		if err != nil || !valid {
-			logger.Warnw("invalid envelope in history", "error", err)
-			continue
-		}
-
-		// Parse envelope
-		envelope, err := ParseEnvelope(env)
+		msgMeta, err := s.decryptMessageWithMeta(mwk, contactPubKey)
 		if err != nil {
-			logger.Warnw("failed to parse envelope", "error", err)
+			logger.Debugw("failed to decrypt message", "error", err)
 			continue
 		}
-
-		// Determine if this is an outgoing message (we sent it)
-		// Compare sender's Ed25519 public key with our own
-		isOutgoing := string(env.SenderPubkey) == string(s.config.OwnEd25519PubKey)
-		
-		// Debug logging for sender detection
-		logger.Debugw("message direction check",
-			"sender_pub", fmt.Sprintf("%x", env.SenderPubkey[:8]),
-			"own_pub", fmt.Sprintf("%x", s.config.OwnEd25519PubKey[:8]),
-			"isOutgoing", isOutgoing,
-			"timestamp", mwk.Timestamp)
-
-		var msg *pb.Message
-		var timestamp uint64
-
-		if isOutgoing {
-			// For outgoing messages, try to decrypt using stored encrypted ephemeral key
-			// The ephemeral key is encrypted with our X25519 key for local storage only
-			ephemeralPriv, err := decryptEphemeralKeyFromEnvelope(
-				env,
-				s.config.OwnX25519PrivKey,
-				contactPubKey,
-			)
-			if err != nil {
-				logger.Warnw("failed to decrypt ephemeral key", "error", err)
-			}
-
-			if ephemeralPriv != nil {
-				// Successfully decrypted ephemeral key - now decrypt the message
-				// Compute shared secret: X25519(ephemeral_priv, recipient_static_pub)
-				// We need the recipient's X25519 public key
-				recipientX25519PubKey, err := s.storage.GetContactX25519Key(contactPubKey)
-				if err != nil {
-					logger.Warnw("failed to get contact X25519 key", "error", err)
-				} else {
-					sharedSecret, err := crypto.ComputeSharedSecret(ephemeralPriv, recipientX25519PubKey)
-					if err != nil {
-						logger.Warnw("failed to compute shared secret", "error", err)
-					} else {
-						// Derive encryption key from shared secret
-						encryptionKey, err := crypto.DeriveKey(sharedSecret, nil, []byte("encryption"), crypto.KeySize)
-						if err != nil {
-							logger.Warnw("failed to derive encryption key", "error", err)
-						} else {
-							// Decrypt with stored key
-							plaintext, err := crypto.Decrypt(encryptionKey, envelope.Nonce, envelope.Ciphertext)
-							if err != nil {
-								logger.Warnw("failed to decrypt message with ephemeral key", "error", err)
-							} else {
-								// Parse message
-								msg, err = ParseMessage(plaintext)
-								if err != nil {
-									logger.Warnw("failed to parse message", "error", err)
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// If we couldn't decrypt, use placeholder
-			if msg == nil {
-				timestamp = mwk.Timestamp
-				msg = &pb.Message{
-					Text:      "[Sent message]",
-					Timestamp: timestamp,
-				}
-			} else {
-				// Use message timestamp if available
-				if msg.Timestamp > 0 {
-					timestamp = msg.Timestamp
-				} else {
-					timestamp = mwk.Timestamp
-				}
-			}
-		} else {
-			// For incoming messages, decrypt with our X25519 private key
-			plaintext, err := DecryptEnvelope(envelope, s.config.OwnX25519PrivKey)
-			if err != nil {
-				logger.Warnw("failed to decrypt envelope", "error", err)
-				continue
-			}
-
-			// Parse message
-			msg, err = ParseMessage(plaintext)
-			if err != nil {
-				logger.Warnw("failed to parse message", "error", err)
-				continue
-			}
-			// Use message timestamp if available, otherwise use storage timestamp
-			if msg.Timestamp > 0 {
-				timestamp = msg.Timestamp
-			} else {
-				timestamp = mwk.Timestamp
-			}
+		if msgMeta != nil {
+			messages = append(messages, msgMeta)
 		}
-
-		messages = append(messages, &MessageWithMeta{
-			Message:    msg,
-			IsOutgoing: isOutgoing,
-			Timestamp:  timestamp,
-		})
 	}
 
 	return messages, nil
+}
+
+// decryptMessageWithMeta decrypts a single message and returns it with metadata
+func (s *Service) decryptMessageWithMeta(mwk *storage.MessageWithKey, contactPubKey []byte) (*MessageWithMeta, error) {
+	signedEnv := mwk.Envelope
+
+	valid, err := VerifyEnvelope(signedEnv)
+	if err != nil || !valid {
+		logger.Warnw("invalid envelope in history", "error", err)
+		return nil, nil
+	}
+
+	envelope, err := ParseEnvelope(signedEnv)
+	if err != nil {
+		logger.Warnw("failed to parse envelope", "error", err)
+		return nil, nil
+	}
+
+	isOutgoing := s.isOutgoingMessage(signedEnv.SenderPubkey)
+	msg, timestamp := s.decryptMessageContent(signedEnv, envelope, mwk.Timestamp, isOutgoing, contactPubKey)
+
+	return &MessageWithMeta{
+		Message:    msg,
+		IsOutgoing: isOutgoing,
+		Timestamp:  timestamp,
+	}, nil
+}
+
+// isOutgoingMessage determines if a message was sent by us
+func (s *Service) isOutgoingMessage(senderPubKey []byte) bool {
+	if len(senderPubKey) != len(s.config.OwnEd25519PubKey) {
+		return false
+	}
+	return string(senderPubKey) == string(s.config.OwnEd25519PubKey)
+}
+
+// decryptMessageContent decrypts the message content based on direction
+func (s *Service) decryptMessageContent(signedEnv *pb.SignedEnvelope, envelope *pb.Envelope, storageTimestamp uint64, isOutgoing bool, contactPubKey []byte) (*pb.Message, uint64) {
+	if isOutgoing {
+		return s.decryptOutgoingMessage(signedEnv, envelope, storageTimestamp, contactPubKey)
+	}
+	return s.decryptIncomingMessage(envelope, storageTimestamp)
+}
+
+// decryptOutgoingMessage decrypts a message we sent (using stored ephemeral key)
+func (s *Service) decryptOutgoingMessage(signedEnv *pb.SignedEnvelope, envelope *pb.Envelope, storageTimestamp uint64, contactPubKey []byte) (*pb.Message, uint64) {
+	recipientX25519PubKey, err := s.storage.GetContactX25519Key(contactPubKey)
+	if err != nil {
+		logger.Warnw("failed to get contact X25519 key for decryption", "error", err)
+		return s.placeholderMessage(storageTimestamp, "[Sent message]"), storageTimestamp
+	}
+
+	ephemeralPriv, err := decryptEphemeralKeyFromEnvelope(signedEnv, s.config.OwnX25519PrivKey, recipientX25519PubKey)
+	if err != nil || ephemeralPriv == nil {
+		logger.Warnw("failed to decrypt ephemeral key", "error", err)
+		return s.placeholderMessage(storageTimestamp, "[Sent message]"), storageTimestamp
+	}
+
+	msg, err := s.decryptWithEphemeralKey(envelope, ephemeralPriv, recipientX25519PubKey)
+	if err != nil {
+		return s.placeholderMessage(storageTimestamp, "[Sent message]"), storageTimestamp
+	}
+
+	timestamp := msg.Timestamp
+	if timestamp == 0 {
+		timestamp = storageTimestamp
+	}
+	return msg, timestamp
+}
+
+// decryptWithEphemeralKey decrypts a message using the ephemeral private key
+func (s *Service) decryptWithEphemeralKey(envelope *pb.Envelope, ephemeralPriv, recipientX25519PubKey []byte) (*pb.Message, error) {
+	sharedSecret, err := crypto.ComputeSharedSecret(ephemeralPriv, recipientX25519PubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
+	}
+
+	encryptionKey, err := crypto.DeriveKey(sharedSecret, nil, []byte("encryption"), crypto.KeySize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive encryption key: %w", err)
+	}
+
+	plaintext, err := crypto.Decrypt(encryptionKey, envelope.Nonce, envelope.Ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+
+	return ParseMessage(plaintext)
+}
+
+// decryptIncomingMessage decrypts a message we received
+func (s *Service) decryptIncomingMessage(envelope *pb.Envelope, storageTimestamp uint64) (*pb.Message, uint64) {
+	plaintext, err := DecryptEnvelope(envelope, s.config.OwnX25519PrivKey)
+	if err != nil {
+		logger.Warnw("failed to decrypt envelope", "error", err)
+		return s.placeholderMessage(storageTimestamp, "[Undecryptable message]"), storageTimestamp
+	}
+
+	msg, err := ParseMessage(plaintext)
+	if err != nil {
+		logger.Warnw("failed to parse message", "error", err)
+		return s.placeholderMessage(storageTimestamp, "[Corrupted message]"), storageTimestamp
+	}
+
+	timestamp := msg.Timestamp
+	if timestamp == 0 {
+		timestamp = storageTimestamp
+	}
+	return msg, timestamp
+}
+
+// placeholderMessage creates a placeholder message when decryption fails
+func (s *Service) placeholderMessage(timestamp uint64, text string) *pb.Message {
+	return &pb.Message{
+		Text:      text,
+		Timestamp: timestamp,
+	}
 }
 
 // GetDecryptedMessages retrieves and decrypts message history for a contact

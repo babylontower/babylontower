@@ -102,17 +102,12 @@ func (s *Service) SendMessage(
 	}
 
 	// Contact-aware routing: Try to connect to recipient before sending
-	// This improves message delivery reliability
 	go func() {
-		// Add to active contacts
-		s.AddActiveContact(recipientEd25519PubKey)
-		s.UpdateContactActivity(recipientEd25519PubKey)
-
 		// Attempt connection (non-blocking, best effort)
 		if err := s.connectToPeerID(string(recipientEd25519PubKey)); err != nil {
 			logger.Debugw("pre-send connection attempt failed", "error", err)
 		}
-		
+
 		// Optimize pubsub mesh for better delivery
 		if err := s.OptimizePubSubMesh(recipientEd25519PubKey); err != nil {
 			logger.Debugw("pubsub mesh optimization failed", "error", err)

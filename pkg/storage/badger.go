@@ -18,10 +18,13 @@ var logger = log.Logger("babylontower/storage")
 
 const (
 	// Key prefixes
-	contactPrefix = "c:"
-	messagePrefix = "m:"
-	peerPrefix    = "p:"
-	configPrefix  = "cfg:"
+	contactPrefix    = "c:"
+	messagePrefix    = "m:"
+	peerPrefix       = "p:"
+	configPrefix     = "cfg:"
+	groupPrefix      = "g:"
+	senderKeyPrefix  = "sk:"
+	blacklistPrefix  = "bl:"
 
 	// Key component sizes
 	pubKeySize    = 32
@@ -705,8 +708,6 @@ func (s *BadgerStorage) DeleteConfig(key string) error {
 
 // blacklistKey creates a key for blacklist storage
 // Format: blacklistPrefix + peer_id
-const blacklistPrefix = "bl:"
-
 func blacklistKey(peerID string) []byte {
 	key := make([]byte, 0, len(blacklistPrefix)+len(peerID))
 	key = append(key, blacklistPrefix...)

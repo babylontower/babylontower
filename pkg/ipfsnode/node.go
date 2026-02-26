@@ -948,11 +948,15 @@ func (n *Node) bootstrapDHT() error {
 	}
 
 	// Stage 2: Try config bootstrap peers (if needed)
-	// Only attempt if we have fewer than 3 connections from stored peers
+	// Attempt if we have fewer than 3 connections OR if stored peers failed completely
 	currentPeers := len(n.host.Network().Peers())
-	if currentPeers < 3 && len(n.config.BootstrapPeers) > 0 {
+	storedPeersFailed := result.StoredPeersAttempted > 0 && result.StoredPeersConnected == 0
+	
+	if (currentPeers < 3 || storedPeersFailed) && len(n.config.BootstrapPeers) > 0 {
 		logger.Infow("bootstrap stage 2: connecting to config peers",
 			"current_connections", currentPeers,
+			"stored_peers_connected", result.StoredPeersConnected,
+			"stored_peers_failed", storedPeersFailed,
 			"config_peers", len(n.config.BootstrapPeers))
 		result.ConfigPeersAttempted = len(n.config.BootstrapPeers)
 		result.ConfigPeersConnected = n.connectToBootstrapPeersWithDNS(ctx)
@@ -990,11 +994,35 @@ func (n *Node) bootstrapDHT() error {
 			"verified", result.VerifiedPeers,
 			"total_connected", result.TotalConnected)
 	} else {
-		logger.Warn("no bootstrap peers connected - DHT will have limited functionality")
-		logger.Warn("try:")
-		logger.Warn("  - Check your internet connection")
-		logger.Warn("  - Check firewall settings (TCP port 4001)")
-		logger.Warn("  - Use /connect <multiaddr> for direct peer connection")
+		// Both Stage 1 and Stage 2 failed - try passive DHT bootstrap
+		logger.Warn("no bootstrap peers connected - attempting passive DHT bootstrap")
+		logger.Warn("this may take longer and requires incoming connections from other peers")
+		
+		// Give DHT more time to find peers passively
+		passiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		
+		select {
+		case <-n.dht.RefreshRoutingTable():
+			routingTableSize := len(n.dht.RoutingTable().ListPeers())
+			result.RoutingTableSize = routingTableSize
+			if routingTableSize > 0 {
+				logger.Infow("DHT routing table populated via passive discovery",
+					"routing_table_size", routingTableSize)
+			}
+		case <-passiveCtx.Done():
+			logger.Warn("passive DHT bootstrap timeout")
+		}
+		
+		if result.RoutingTableSize == 0 {
+			logger.Error("DHT bootstrap completely failed - no peers in routing table")
+			logger.Error("the node will have limited functionality until peers are discovered")
+			logger.Warn("try:")
+			logger.Warn("  - Check your internet connection")
+			logger.Warn("  - Check firewall settings (TCP port 4001)")
+			logger.Warn("  - Ensure NAT traversal is enabled (UPnP/IGD)")
+			logger.Warn("  - Use /connect <multiaddr> for direct peer connection")
+		}
 	}
 
 	// Log bootstrap summary
@@ -1637,15 +1665,22 @@ type MDnsStats struct {
 }
 
 // expandPath expands ~ to home directory
+// Respects HOME environment variable for container/test isolation
 func expandPath(path string) (string, error) {
 	if len(path) == 0 {
 		return "", fmt.Errorf("empty path")
 	}
 
 	if path[0] == '~' {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get home dir: %w", err)
+		// Check HOME environment variable first (for test isolation)
+		// This allows multiple instances to run with different HOME dirs
+		home := os.Getenv("HOME")
+		if home == "" {
+			var err error
+			home, err = os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("failed to get home dir: %w", err)
+			}
 		}
 		if len(path) > 1 {
 			path = filepath.Join(home, path[1:])
