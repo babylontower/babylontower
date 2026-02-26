@@ -35,16 +35,6 @@ func channelPostKey(channelID, postID []byte) []byte {
 	return key
 }
 
-// channelPostsIndexKey creates a key for channel posts index
-// Format: channelPostPrefix + channel_id (hex) + ":idx"
-func channelPostsIndexKey(channelID []byte) []byte {
-	key := make([]byte, 0, 4+hex.EncodedLen(len(channelID))+4)
-	key = append(key, channelPostPrefix...)
-	key = append(key, []byte(hex.EncodeToString(channelID))...)
-	key = append(key, []byte(":idx")...)
-	return key
-}
-
 // SaveChannel stores a channel state in the database
 func (s *BadgerStorage) SaveChannel(channel *pb.ChannelState) error {
 	s.mu.Lock()
@@ -186,7 +176,9 @@ func (s *BadgerStorage) SaveChannelPost(post *pb.ChannelPost) error {
 			channel.UpdatedAt = post.Timestamp
 			channelData, marshalErr := proto.Marshal(channel)
 			if marshalErr == nil {
-				txn.Set(channelKey(post.ChannelId), channelData)
+				if err := txn.Set(channelKey(post.ChannelId), channelData); err != nil {
+					return fmt.Errorf("failed to update channel: %w", err)
+				}
 			}
 		}
 

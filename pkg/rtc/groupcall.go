@@ -48,11 +48,7 @@ type GroupCallSession struct {
 	sfuState *SFUState
 
 	// Callbacks
-	onParticipantJoined   func(session *GroupCallSession, participant *pb.ParticipantInfo)
-	onParticipantLeft     func(session *GroupCallSession, participant *pb.ParticipantInfo, reason string)
-	onSFUElected          func(session *GroupCallSession, sfuIdentity []byte)
-	onStateChanged        func(session *GroupCallSession, oldState, newState pb.GroupCallState)
-	onMediaPacketReceived func(session *GroupCallSession, senderIdentity []byte, packet []byte)
+	onSFUElected func(session *GroupCallSession, sfuIdentity []byte)
 }
 
 // SFUState holds the state for SFU mode

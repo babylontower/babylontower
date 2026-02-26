@@ -666,11 +666,3 @@ func UnmarshalCallSession(data []byte) (*CallSession, error) {
 func unixTime(secs uint64) time.Time {
 	return time.Unix(int64(secs), 0)
 }
-
-func unixTimePtr(t *time.Time) *uint64 {
-	if t == nil {
-		return nil
-	}
-	secs := uint64(t.Unix())
-	return &secs
-}

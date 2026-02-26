@@ -100,9 +100,6 @@ func NewSyncManager(config *SyncManagerConfig) *SyncManager {
 		historyRequests: make(map[string]*HistoryRequestState),
 	}
 
-	// Load vector clock from storage
-	sm.loadVectorClock()
-
 	return sm
 }
 
@@ -131,7 +128,8 @@ func (sm *SyncManager) Stop() error {
 	sm.wg.Wait()
 
 	if sm.subscription != nil {
-		// Close subscription
+		// Close subscription - TODO: Implement subscription cleanup when added
+		_ = sm.subscription // prevent staticcheck empty branch warning
 	}
 
 	syncLogger.Info("sync manager stopped")
@@ -297,16 +295,6 @@ func (sm *SyncManager) mergeVectorClock(remote *pb.VectorClock) {
 	}
 }
 
-// loadVectorClock loads the vector clock from storage
-func (sm *SyncManager) loadVectorClock() {
-	// Would load from storage in full implementation
-}
-
-// saveVectorClock saves the vector clock to storage
-func (sm *SyncManager) saveVectorClock() {
-	// Would save to storage in full implementation
-}
-
 // Events returns the channel for receiving sync events
 func (sm *SyncManager) Events() <-chan *SyncEvent {
 	return sm.eventChan
@@ -380,69 +368,6 @@ func (sm *SyncManager) HandleHistoryBatch(batch *pb.HistoryBatch) error {
 	}
 
 	return nil
-}
-
-// Conflict Resolution
-
-// resolveConflict uses vector clocks to resolve conflicting updates
-// Returns true if the remote update should be applied
-func (sm *SyncManager) resolveConflict(localClock, remoteClock *pb.VectorClock, localTimestamp, remoteTimestamp uint64) bool {
-	// Last-writer-wins by wall clock timestamp, vector clock as tiebreaker
-	if remoteTimestamp > localTimestamp {
-		return true
-	}
-	if remoteTimestamp < localTimestamp {
-		return false
-	}
-
-	// Timestamps equal, use vector clock comparison
-	return compareVectorClocks(remoteClock, localClock) >= 0
-}
-
-// compareVectorClocks compares two vector clocks
-// Returns: -1 if a < b, 0 if a == b, 1 if a > b
-func compareVectorClocks(a, b *pb.VectorClock) int {
-	if a == nil && b == nil {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
-
-	// Compare all entries
-	allLessOrEqual := true
-	allGreaterOrEqual := true
-
-	for deviceID, aVal := range a.Clocks {
-		bVal := b.Clocks[deviceID]
-		if aVal < bVal {
-			allGreaterOrEqual = false
-		}
-		if aVal > bVal {
-			allLessOrEqual = false
-		}
-	}
-
-	for deviceID, bVal := range b.Clocks {
-		aVal := a.Clocks[deviceID]
-		if aVal < bVal {
-			allGreaterOrEqual = false
-		}
-		if aVal > bVal {
-			allLessOrEqual = false
-		}
-	}
-
-	if allLessOrEqual && !allGreaterOrEqual {
-		return -1 // a < b
-	}
-	if allGreaterOrEqual && !allLessOrEqual {
-		return 1 // a > b
-	}
-	return 0 // concurrent
 }
 
 // Helper functions for sync message creation

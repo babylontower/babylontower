@@ -164,8 +164,7 @@ type MediaSection struct {
 
 // CodecNegotiator handles codec negotiation between peers
 type CodecNegotiator struct {
-	localCaps  *CodecCapabilities
-	remoteCaps *CodecCapabilities
+	localCaps *CodecCapabilities
 }
 
 // NewCodecNegotiator creates a new codec negotiator
@@ -268,9 +267,13 @@ func (n *CodecNegotiator) parseRTPMap(line string) *Codec {
 
 	name := codecParts[0]
 	var clockRate, channels int
-	fmt.Sscanf(codecParts[1], "%d", &clockRate)
+	if _, err := fmt.Sscanf(codecParts[1], "%d", &clockRate); err != nil {
+		return nil
+	}
 	if len(codecParts) >= 3 {
-		fmt.Sscanf(codecParts[2], "%d", &channels)
+		if _, err := fmt.Sscanf(codecParts[2], "%d", &channels); err != nil {
+			channels = 0
+		}
 	}
 
 	mediaType := MediaAudio
@@ -470,7 +473,9 @@ func isVideoCodec(name string) bool {
 // parseUint8 parses a string to uint8
 func parseUint8(s string) uint8 {
 	var v uint8
-	fmt.Sscanf(s, "%d", &v)
+	if _, err := fmt.Sscanf(s, "%d", &v); err != nil {
+		return 0
+	}
 	return v
 }
 

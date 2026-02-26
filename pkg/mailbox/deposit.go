@@ -54,7 +54,9 @@ func NewDepositHandler(h host.Host, id *identity.Identity, storage *Storage, con
 
 // handleStream handles incoming libp2p streams for mailbox operations
 func (dh *DepositHandler) handleStream(s network.Stream) {
-	defer s.Close()
+	defer func() {
+		_ = s.Close()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -280,7 +282,7 @@ func (dh *DepositHandler) writeErrorResponse(writer *bufio.Writer, requestID uin
 		Accepted:        false,
 		RejectionReason: reason,
 	}
-	dh.writeResponse(writer, 0x01, resp)
+	_ = dh.writeResponse(writer, 0x01, resp)
 }
 
 // signResponse signs a deposit response
@@ -353,7 +355,9 @@ func DepositToMailbox(ctx context.Context, h host.Host, mailboxPeerID string, ta
 	if err != nil {
 		return nil, fmt.Errorf("failed to open stream: %w", err)
 	}
-	defer s.Close()
+	defer func() {
+		_ = s.Close()
+	}()
 
 	writer := bufio.NewWriter(s)
 	reader := bufio.NewReader(s)

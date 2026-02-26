@@ -308,7 +308,10 @@ func KDF_RK(rootKey, dhOutput []byte) ([]byte, []byte) {
 	// HKDF-SHA256 with root key as salt
 	hkdfReader := hkdf.New(sha256.New, dhOutput, rootKey, []byte("BabylonTowerRatchet"))
 	output := make([]byte, 64)
-	io.ReadFull(hkdfReader, output)
+	if _, err := io.ReadFull(hkdfReader, output); err != nil {
+		// This should never fail as hkdfReader is an infinite reader
+		return make([]byte, 32), make([]byte, 32)
+	}
 
 	newRootKey := output[:32]
 	newChainKey := output[32:64]

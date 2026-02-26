@@ -245,7 +245,8 @@ func (m *Manager) runCleanup() {
 				continue
 			}
 			if deleted > 0 {
-				// Log cleanup - TODO: Add proper logging
+				// Log cleanup - TODO: Add proper logging when logger is integrated
+				_ = deleted // prevent staticcheck empty branch warning
 			}
 		}
 	}

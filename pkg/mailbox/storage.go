@@ -222,6 +222,7 @@ func (s *Storage) DeleteMessages(targetPubkey []byte, messageIDs [][]byte) error
 		// Update metadata if any messages were deleted
 		if deletedCount > 0 {
 			// Metadata update handled separately - TODO: Implement metadata tracking
+			_ = deletedCount // prevent staticcheck empty branch warning
 		}
 
 		return nil

@@ -30,7 +30,7 @@ func setupTestStorage(t *testing.T) (*Storage, func()) {
 	require.NoError(t, err)
 
 	cleanup := func() {
-		db.Close()
+		_ = db.Close()
 	}
 
 	return storage, cleanup
@@ -109,7 +109,9 @@ func TestStorage_QuotaExceeded(t *testing.T) {
 	opts.InMemory = true
 	db, err := badger.Open(opts)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	config := &pb.MailboxConfig{
 		MaxMessagesPerTarget:    3, // Very low limit for testing
@@ -192,7 +194,9 @@ func TestStorage_CleanupExpired(t *testing.T) {
 	opts.InMemory = true
 	db, err := badger.Open(opts)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	config := &pb.MailboxConfig{
 		MaxMessagesPerTarget:    100,

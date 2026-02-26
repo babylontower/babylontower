@@ -2,7 +2,6 @@ package ratchet
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"crypto/rand"
 	"io"
 	"testing"
@@ -12,20 +11,13 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-// generateTestKeyPair generates an Ed25519 key pair for testing
-func generateTestKeyPair(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("Failed to generate key pair: %v", err)
-	}
-	return pub, priv
-}
-
 // generateX25519TestKey generates an X25519 key pair for testing
 func generateX25519TestKey(t *testing.T) (*[32]byte, *[32]byte) {
 	priv := new([32]byte)
 	pub := new([32]byte)
-	io.ReadFull(rand.Reader, priv[:])
+	if _, err := io.ReadFull(rand.Reader, priv[:]); err != nil {
+		t.Fatalf("Failed to read random bytes: %v", err)
+	}
 	result, err := curve25519.X25519(priv[:], curve25519.Basepoint)
 	if err != nil {
 		t.Fatalf("X25519 derivation failed: %v", err)
@@ -123,8 +115,12 @@ func TestX3DH_3DH(t *testing.T) {
 func TestKDF_RK(t *testing.T) {
 	rootKey := make([]byte, 32)
 	dhOutput := make([]byte, 32)
-	io.ReadFull(rand.Reader, rootKey)
-	io.ReadFull(rand.Reader, dhOutput)
+	if _, err := io.ReadFull(rand.Reader, rootKey); err != nil {
+		t.Fatalf("Failed to read random bytes: %v", err)
+	}
+	if _, err := io.ReadFull(rand.Reader, dhOutput); err != nil {
+		t.Fatalf("Failed to read random bytes: %v", err)
+	}
 
 	newRK, newCK := KDF_RK(rootKey, dhOutput)
 
@@ -149,7 +145,9 @@ func TestKDF_RK(t *testing.T) {
 // TestKDF_CK tests chain key KDF
 func TestKDF_CK(t *testing.T) {
 	chainKey := make([]byte, 32)
-	io.ReadFull(rand.Reader, chainKey)
+	if _, err := io.ReadFull(rand.Reader, chainKey); err != nil {
+		t.Fatalf("Failed to read random bytes: %v", err)
+	}
 
 	newCK, mk := KDF_CK(chainKey)
 
@@ -246,8 +244,12 @@ func TestSessionState_Serialization(t *testing.T) {
 
 	rootKey := make([]byte, 32)
 	chainKey := make([]byte, 32)
-	io.ReadFull(rand.Reader, rootKey)
-	io.ReadFull(rand.Reader, chainKey)
+	if _, err := io.ReadFull(rand.Reader, rootKey); err != nil {
+		t.Fatalf("Failed to read random bytes: %v", err)
+	}
+	if _, err := io.ReadFull(rand.Reader, chainKey); err != nil {
+		t.Fatalf("Failed to read random bytes: %v", err)
+	}
 
 	state := &DoubleRatchetState{
 		SessionID:           "test",
@@ -289,7 +291,9 @@ func TestZeroBytes(t *testing.T) {
 // TestDeriveNonce tests nonce derivation
 func TestDeriveNonce(t *testing.T) {
 	messageKey := make([]byte, 32)
-	io.ReadFull(rand.Reader, messageKey)
+	if _, err := io.ReadFull(rand.Reader, messageKey); err != nil {
+		t.Fatalf("Failed to read random bytes: %v", err)
+	}
 
 	nonce1, err := DeriveNonce(messageKey, 0)
 	if err != nil {

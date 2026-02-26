@@ -334,7 +334,9 @@ func (s *Service) DecryptGroupMessage(groupID []byte, senderPubkey []byte, paylo
 	nonce := make([]byte, chacha20poly1305.NonceSizeX)
 	chainIndexBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(chainIndexBytes, payload.ChainIndex)
-	hkdf.New(sha256.New, messageKey, []byte("nonce"), chainIndexBytes).Read(nonce)
+	if _, err := hkdf.New(sha256.New, messageKey, []byte("nonce"), chainIndexBytes).Read(nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
 
 	// Decrypt
 	aead, err := chacha20poly1305.NewX(messageKey)

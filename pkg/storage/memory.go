@@ -393,8 +393,7 @@ func (s *MemoryStorage) SaveGroup(group *pb.GroupState) error {
 func (s *MemoryStorage) GetGroup(groupID []byte) (*pb.GroupState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	key := string(groupID)
-	group, ok := s.groups[key]
+	group, ok := s.groups[string(groupID)]
 	if !ok {
 		return nil, ErrGroupNotFound
 	}
@@ -439,15 +438,13 @@ func (s *MemoryStorage) SaveSenderKey(sk *pb.SenderKeyDistribution) error {
 func (s *MemoryStorage) GetSenderKey(groupID, senderPubkey []byte) (*pb.SenderKeyDistribution, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	groupKey := string(groupID)
-	senderKey := string(senderPubkey)
-	
-	skMap, ok := s.senderKeys[groupKey]
+
+	skMap, ok := s.senderKeys[string(groupID)]
 	if !ok {
 		return nil, ErrSenderKeyNotFound
 	}
-	
-	sk, ok := skMap[senderKey]
+
+	sk, ok := skMap[string(senderPubkey)]
 	if !ok {
 		return nil, ErrSenderKeyNotFound
 	}
@@ -458,13 +455,12 @@ func (s *MemoryStorage) GetSenderKey(groupID, senderPubkey []byte) (*pb.SenderKe
 func (s *MemoryStorage) ListSenderKeys(groupID []byte) ([]*pb.SenderKeyDistribution, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	groupKey := string(groupID)
-	
-	skMap, ok := s.senderKeys[groupKey]
+
+	skMap, ok := s.senderKeys[string(groupID)]
 	if !ok {
 		return nil, nil
 	}
-	
+
 	keys := make([]*pb.SenderKeyDistribution, 0, len(skMap))
 	for _, sk := range skMap {
 		keys = append(keys, sk)
@@ -476,10 +472,8 @@ func (s *MemoryStorage) ListSenderKeys(groupID []byte) ([]*pb.SenderKeyDistribut
 func (s *MemoryStorage) DeleteSenderKey(groupID, senderPubkey []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	groupKey := string(groupID)
-	senderKey := string(senderPubkey)
-	
-	delete(s.senderKeys[groupKey], senderKey)
+
+	delete(s.senderKeys[string(groupID)], string(senderPubkey))
 	return nil
 }
 
@@ -556,9 +550,8 @@ func (s *MemoryStorage) SaveChannelPost(post *pb.ChannelPost) error {
 func (s *MemoryStorage) GetChannelPosts(channelID []byte, limit, offset int) ([]*pb.ChannelPost, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	channelKey := string(channelID)
 
-	postsMap, ok := s.channelPosts[channelKey]
+	postsMap, ok := s.channelPosts[string(channelID)]
 	if !ok {
 		return []*pb.ChannelPost{}, nil
 	}

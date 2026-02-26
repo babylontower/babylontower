@@ -286,7 +286,9 @@ func RetrieveFromMailbox(ctx context.Context, h host.Host, mailboxPeerID string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to open stream: %w", err)
 	}
-	defer s.Close()
+	defer func() {
+		_ = s.Close()
+	}()
 
 	writer := bufio.NewWriter(s)
 	reader := bufio.NewReader(s)
@@ -350,7 +352,9 @@ func AcknowledgeMessages(ctx context.Context, h host.Host, mailboxPeerID string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to open stream: %w", err)
 	}
-	defer s.Close()
+	defer func() {
+		_ = s.Close()
+	}()
 
 	writer := bufio.NewWriter(s)
 	reader := bufio.NewReader(s)
