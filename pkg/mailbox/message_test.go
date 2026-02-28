@@ -12,7 +12,7 @@ func TestMailboxAnnouncement(t *testing.T) {
 	// Test basic announcement structure
 	announcement := &pb.MailboxAnnouncement{
 		MailboxPeerId:   []byte("QmTestPeerID"),
-		TargetPubkey:    []byte("target_pubkey_32_bytes____________"),
+		TargetPubkey:    []byte("target_pubkey_32_bytes__________"),
 		CapacityBytes:   67108864,
 		MaxMessageSize:  262144,
 		MaxMessages:     500,
@@ -30,7 +30,7 @@ func TestMailboxAnnouncement(t *testing.T) {
 
 func TestDepositRequest(t *testing.T) {
 	req := &pb.DepositRequest{
-		TargetPubkey: []byte("target_pubkey_32_bytes____________"),
+		TargetPubkey: []byte("target_pubkey_32_bytes__________"),
 		Envelope:     []byte("test envelope data"),
 		RequestId:    12345,
 		Timestamp:    1234567890,
@@ -53,7 +53,7 @@ func TestDepositResponse(t *testing.T) {
 
 func TestRetrievalRequest(t *testing.T) {
 	req := &pb.RetrievalRequest{
-		RecipientPubkey: []byte("recipient_pubkey_32_bytes_________"),
+		RecipientPubkey: make([]byte, 32),
 		Nonce:           make([]byte, 32),
 		Timestamp:       1234567890,
 	}
@@ -76,7 +76,7 @@ func TestRetrievalResponse(t *testing.T) {
 
 func TestAcknowledgmentRequest(t *testing.T) {
 	req := &pb.AcknowledgmentRequest{
-		RecipientPubkey: []byte("recipient_pubkey_32_bytes_________"),
+		RecipientPubkey: make([]byte, 32),
 		MessageIds:      [][]byte{[]byte("msg1"), []byte("msg2")},
 		Timestamp:       1234567890,
 	}
@@ -96,7 +96,7 @@ func TestAcknowledgmentResponse(t *testing.T) {
 
 func TestMailboxStats(t *testing.T) {
 	stats := &pb.MailboxStats{
-		TargetPubkey:    []byte("target_pubkey_32_bytes____________"),
+		TargetPubkey:    []byte("target_pubkey_32_bytes__________"),
 		StoredCount:     42,
 		UsedBytes:       1024 * 1024,
 		CapacityBytes:   64 * 1024 * 1024,
@@ -129,7 +129,7 @@ func TestMailboxConfig(t *testing.T) {
 func TestStoredMailboxMessage(t *testing.T) {
 	msg := &pb.StoredMailboxMessage{
 		MessageId:    []byte("message_id_16_by"),
-		SenderPubkey: []byte("sender_pubkey_32_bytes____________"),
+		SenderPubkey: []byte("sender_pubkey_32_bytes__________"),
 		Envelope:     []byte("test envelope data"),
 		StoredAt:     1234567890,
 		ExpiresAt:    1234567890 + 604800,

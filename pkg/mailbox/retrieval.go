@@ -178,13 +178,15 @@ func (dh *DepositHandler) validateRetrievalRequest(req *pb.RetrievalRequest) err
 		Nonce:           req.Nonce,
 		Timestamp:       req.Timestamp,
 	}
-	_, err := proto.Marshal(canonical)
+	dataForSigning, err := proto.Marshal(canonical)
 	if err != nil {
 		return fmt.Errorf("failed to marshal for verification")
 	}
 
-	// Note: In PoC we skip actual signature verification
-	// TODO: Verify Ed25519 signature against req.RecipientPubkey
+	// Verify Ed25519 signature against recipient pubkey
+	if !crypto.Verify(req.RecipientPubkey, dataForSigning, req.RecipientSignature) {
+		return fmt.Errorf("invalid recipient signature")
+	}
 
 	return nil
 }
@@ -205,13 +207,15 @@ func (dh *DepositHandler) validateAckRequest(req *pb.AcknowledgmentRequest) erro
 		MessageIds:      req.MessageIds,
 		Timestamp:       req.Timestamp,
 	}
-	_, err := proto.Marshal(canonical)
+	dataForSigning, err := proto.Marshal(canonical)
 	if err != nil {
 		return fmt.Errorf("failed to marshal for verification")
 	}
 
-	// Note: In PoC we skip actual signature verification
-	// TODO: Verify Ed25519 signature against req.RecipientPubkey
+	// Verify Ed25519 signature against recipient pubkey
+	if !crypto.Verify(req.RecipientPubkey, dataForSigning, req.RecipientSignature) {
+		return fmt.Errorf("invalid recipient signature")
+	}
 
 	return nil
 }

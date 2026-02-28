@@ -37,6 +37,8 @@ type Service struct {
 	// Identity keys for signing
 	identitySignPub  ed25519.PublicKey
 	identitySignPriv ed25519.PrivateKey
+	// X25519 public key for group membership
+	identityX25519Pub []byte
 	// Cache of active groups
 	groups map[string]*GroupState
 	// Cache of sender keys: groupID -> senderPubkey -> SenderKey
@@ -49,13 +51,28 @@ func NewService(
 	storage *storage.BadgerStorage,
 	identitySignPub ed25519.PublicKey,
 	identitySignPriv ed25519.PrivateKey,
+	opts ...ServiceOption,
 ) *Service {
-	return &Service{
+	s := &Service{
 		storage:          storage,
 		identitySignPub:  identitySignPub,
 		identitySignPriv: identitySignPriv,
 		groups:           make(map[string]*GroupState),
 		senderKeys:       make(map[string]map[string]*SenderKey),
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// ServiceOption configures a Service
+type ServiceOption func(*Service)
+
+// WithX25519PublicKey sets the X25519 public key used for group membership
+func WithX25519PublicKey(x25519Pub []byte) ServiceOption {
+	return func(s *Service) {
+		s.identityX25519Pub = x25519Pub
 	}
 }
 
@@ -64,10 +81,11 @@ func (s *Service) CreateGroup(name, description string, groupType GroupType) (*G
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Get creator's X25519 pubkey from storage or identity
-	// For now, we'll need to get this from the identity system
-	// This is a limitation - we need to integrate with identity v1
-	x25519Pubkey := make([]byte, 32) // Placeholder - should come from identity
+	// Use the configured X25519 public key; fall back to zero key if not set
+	x25519Pubkey := s.identityX25519Pub
+	if len(x25519Pubkey) == 0 {
+		x25519Pubkey = make([]byte, 32)
+	}
 
 	state, err := NewGroupState(name, description, groupType, s.identitySignPub, x25519Pubkey)
 	if err != nil {

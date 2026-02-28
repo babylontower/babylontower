@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p"
@@ -288,7 +289,7 @@ func (n *Node) Start() error {
 	}
 
 	n.host = h
-	logger.Infow("libp2p host created", "id", h.ID(), "addrs", h.Addrs())
+	logger.Debugw("libp2p host created", "id", h.ID(), "addrs", h.Addrs())
 
 	// Create DHT
 	// Note: We don't use ProtocolPrefix to allow connection to public bootstrap peers
@@ -324,7 +325,7 @@ func (n *Node) Start() error {
 	// Use a valid DNS-SD service name (alphanumeric + hyphens, no slashes)
 	mdnsServiceName := "babylontower"
 	n.mdns = mdns.NewMdnsService(n.host, mdnsServiceName, n)
-	logger.Infow("mDNS discovery enabled", "service_name", mdnsServiceName)
+	logger.Debugw("mDNS discovery enabled", "service_name", mdnsServiceName)
 
 	// Bootstrap DHT (for wider network discovery)
 	if err := n.bootstrapDHT(); err != nil {
@@ -334,13 +335,13 @@ func (n *Node) Start() error {
 
 	// Advertise self to DHT after bootstrap
 	// This makes our node discoverable by other peers
-	go func() {
+	bterrors.SafeGo("ipfs-self-advertise", func() {
 		ctx, cancel := context.WithTimeout(n.ctx, 30*time.Second)
 		defer cancel()
 		if err := n.AdvertiseSelf(ctx); err != nil {
 			logger.Debugw("initial self-advertisement failed", "error", err)
 		}
-	}()
+	})
 
 	// Start peer discovery via DHT
 	n.startPeerDiscovery()
@@ -395,7 +396,7 @@ func (n *Node) Stop() error {
 	select {
 	case <-n.dhtMaintenanceDone:
 	case <-time.After(2 * time.Second):
-		logger.Warn("DHT maintenance did not stop gracefully")
+		logger.Warnw("DHT maintenance did not stop gracefully", "timeout", "2s")
 	}
 
 	// Close DHT
@@ -500,7 +501,7 @@ func (n *Node) HandlePeerFound(peerInfo peer.AddrInfo) {
 	n.lastPeerFound = time.Now()
 	n.peerMu.Unlock()
 
-	logger.Infow("mDNS discovered peer",
+	logger.Debugw("mDNS discovered peer",
 		"peer", peerInfo.ID,
 		"addrs", peerInfo.Addrs,
 		"total_mdns_discoveries", n.mdnsCount.Load())
@@ -515,7 +516,7 @@ func (n *Node) HandlePeerFound(peerInfo peer.AddrInfo) {
 			"error", err,
 			"addrs", peerInfo.Addrs)
 	} else {
-		logger.Infow("connected to mDNS discovered peer", "peer", peerInfo.ID)
+		logger.Debugw("connected to mDNS discovered peer", "peer", peerInfo.ID)
 	}
 }
 
@@ -685,7 +686,7 @@ func (n *Node) ConnectToPeer(maddr string) error {
 		return fmt.Errorf("failed to connect to peer: %w", err)
 	}
 
-	logger.Infow("connected to peer", "peer", peerInfo.ID)
+	logger.Debugw("connected to peer", "peer", peerInfo.ID)
 	return nil
 }
 
@@ -708,7 +709,7 @@ func (n *Node) FindPeer(peerID string) (*peer.AddrInfo, error) {
 	// Try direct FindPeer first (requires peer to have advertised themselves)
 	peerInfo, err := n.dht.FindPeer(ctx, parsedID)
 	if err == nil && len(peerInfo.Addrs) > 0 {
-		logger.Infow("Found peer via DHT FindPeer", "peer", peerInfo.ID, "addrs", peerInfo.Addrs)
+		logger.Debugw("found peer via DHT FindPeer", "peer", peerInfo.ID, "addrs", peerInfo.Addrs)
 		return &peerInfo, nil
 	}
 
@@ -728,7 +729,7 @@ func (n *Node) FindPeer(peerID string) (*peer.AddrInfo, error) {
 
 	// Return the closest peers - the first one is typically the best match
 	// Note: These may not be the exact target, but peers near them in DHT space
-	logger.Infow("Found closest peers via DHT", "target", parsedID, "count", len(closestPeers))
+	logger.Debugw("found closest peers via DHT", "target", parsedID, "count", len(closestPeers))
 
 	// Get address info for the closest peer
 	closestInfo := n.host.Peerstore().PeerInfo(closestPeers[0])
@@ -753,7 +754,7 @@ func (n *Node) WaitForDHT(timeout time.Duration) error {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	logger.Infow("Waiting for DHT bootstrap...", "timeout", timeout)
+	logger.Debugw("waiting for DHT bootstrap...", "timeout", timeout)
 
 	for {
 		select {
@@ -763,7 +764,7 @@ func (n *Node) WaitForDHT(timeout time.Duration) error {
 		case <-ticker.C:
 			routingTableSize := len(n.dht.RoutingTable().ListPeers())
 			if routingTableSize > 0 {
-				logger.Infow("DHT bootstrap complete", "routing_table_size", routingTableSize)
+				logger.Debugw("DHT bootstrap complete", "routing_table_size", routingTableSize)
 				return nil
 			}
 			logger.Debugw("DHT routing table empty, waiting...")
@@ -841,14 +842,14 @@ func (n *Node) ConnectToBootstrapPeers() error {
 			logger.Debugw("failed to connect to bootstrap peer", "peer", peerInfo.ID, "error", err)
 		} else {
 			connected++
-			logger.Infow("connected to bootstrap peer", "peer", peerInfo.ID)
+			logger.Debugw("connected to bootstrap peer", "peer", peerInfo.ID)
 		}
 	}
 
 	if connected == 0 {
-		logger.Warn("no bootstrap peers connected")
+		logger.Warnw("no bootstrap peers connected")
 	} else {
-		logger.Infow("bootstrap complete", "connected_peers", connected)
+		logger.Debugw("bootstrap complete", "connected_peers", connected)
 	}
 
 	return nil
@@ -939,10 +940,10 @@ func (n *Node) bootstrapDHT() error {
 	if err != nil {
 		logger.Warnw("failed to load stored peers", "error", err)
 	} else if len(storedPeers) > 0 {
-		logger.Infow("bootstrap stage 1: connecting to stored peers", "count", len(storedPeers))
+		logger.Debugw("bootstrap stage 1: connecting to stored peers", "count", len(storedPeers))
 		result.StoredPeersAttempted = len(storedPeers)
 		result.StoredPeersConnected = n.connectToPeersParallel(ctx, storedPeers)
-		logger.Infow("stored peer bootstrap complete",
+		logger.Debugw("stored peer bootstrap complete",
 			"connected", result.StoredPeersConnected,
 			"attempted", result.StoredPeersAttempted)
 	}
@@ -953,14 +954,14 @@ func (n *Node) bootstrapDHT() error {
 	storedPeersFailed := result.StoredPeersAttempted > 0 && result.StoredPeersConnected == 0
 	
 	if (currentPeers < 3 || storedPeersFailed) && len(n.config.BootstrapPeers) > 0 {
-		logger.Infow("bootstrap stage 2: connecting to config peers",
+		logger.Debugw("bootstrap stage 2: connecting to config peers",
 			"current_connections", currentPeers,
 			"stored_peers_connected", result.StoredPeersConnected,
 			"stored_peers_failed", storedPeersFailed,
 			"config_peers", len(n.config.BootstrapPeers))
 		result.ConfigPeersAttempted = len(n.config.BootstrapPeers)
 		result.ConfigPeersConnected = n.connectToBootstrapPeersWithDNS(ctx)
-		logger.Infow("config peer bootstrap complete",
+		logger.Debugw("config peer bootstrap complete",
 			"connected", result.ConfigPeersConnected,
 			"attempted", result.ConfigPeersAttempted)
 	}
@@ -971,7 +972,7 @@ func (n *Node) bootstrapDHT() error {
 
 	// Stage 3: Wait for DHT routing table to populate
 	if result.TotalConnected > 0 {
-		logger.Infow("bootstrap peer connections complete",
+		logger.Debugw("bootstrap peer connections complete",
 			"total_connected", result.TotalConnected,
 			"duration", result.Duration)
 
@@ -980,23 +981,22 @@ func (n *Node) bootstrapDHT() error {
 		case <-n.dht.RefreshRoutingTable():
 			routingTableSize := len(n.dht.RoutingTable().ListPeers())
 			result.RoutingTableSize = routingTableSize
-			logger.Infow("DHT routing table refreshed",
+			logger.Debugw("DHT routing table refreshed",
 				"bootstrap_duration", result.Duration,
 				"connected_peers", result.TotalConnected,
 				"routing_table_size", routingTableSize)
 		case <-ctx.Done():
-			logger.Warn("DHT bootstrap timeout")
+			logger.Warnw("DHT bootstrap timeout")
 		}
 
 		// Stage 4: Verify connected peers are responsive (Task 2.1.5)
 		result.VerifiedPeers = n.verifyBootstrapPeers(ctx)
-		logger.Infow("peer verification complete",
+		logger.Debugw("peer verification complete",
 			"verified", result.VerifiedPeers,
 			"total_connected", result.TotalConnected)
 	} else {
 		// Both Stage 1 and Stage 2 failed - try passive DHT bootstrap
-		logger.Warn("no bootstrap peers connected - attempting passive DHT bootstrap")
-		logger.Warn("this may take longer and requires incoming connections from other peers")
+		logger.Warnw("no bootstrap peers connected, attempting passive DHT bootstrap")
 		
 		// Give DHT more time to find peers passively
 		passiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -1007,21 +1007,20 @@ func (n *Node) bootstrapDHT() error {
 			routingTableSize := len(n.dht.RoutingTable().ListPeers())
 			result.RoutingTableSize = routingTableSize
 			if routingTableSize > 0 {
-				logger.Infow("DHT routing table populated via passive discovery",
+				logger.Debugw("DHT routing table populated via passive discovery",
 					"routing_table_size", routingTableSize)
 			}
 		case <-passiveCtx.Done():
-			logger.Warn("passive DHT bootstrap timeout")
+			logger.Warnw("passive DHT bootstrap timeout")
 		}
 		
 		if result.RoutingTableSize == 0 {
-			logger.Error("DHT bootstrap completely failed - no peers in routing table")
-			logger.Error("the node will have limited functionality until peers are discovered")
-			logger.Warn("try:")
-			logger.Warn("  - Check your internet connection")
-			logger.Warn("  - Check firewall settings (TCP port 4001)")
-			logger.Warn("  - Ensure NAT traversal is enabled (UPnP/IGD)")
-			logger.Warn("  - Use /connect <multiaddr> for direct peer connection")
+			logger.Errorw("DHT bootstrap completely failed, no peers in routing table")
+			fmt.Println("\nWarning: No peers found. Try:")
+			fmt.Println("  - Check your internet connection")
+			fmt.Println("  - Check firewall settings (TCP port 4001)")
+			fmt.Println("  - Ensure NAT traversal is enabled (UPnP/IGD)")
+			fmt.Println("  - Use /connect <multiaddr> for direct peer connection")
 		}
 	}
 
@@ -1200,11 +1199,11 @@ func (n *Node) logBootstrapSummary(result *BootstrapResult) {
 		"verified_peers", result.VerifiedPeers)
 
 	if result.TotalConnected == 0 {
-		logger.Warn("bootstrap failed - no peers connected")
+		logger.Warnw("bootstrap failed, no peers connected")
 	} else if result.RoutingTableSize == 0 {
-		logger.Warn("bootstrap partial - connected but DHT routing table empty")
+		logger.Warnw("bootstrap partial, connected but DHT routing table empty")
 	} else if result.RoutingTableSize < 5 {
-		logger.Warn("bootstrap degraded - small routing table", "size", result.RoutingTableSize)
+		logger.Warnw("bootstrap degraded, small routing table", "size", result.RoutingTableSize)
 	} else {
 		logger.Info("bootstrap successful")
 	}
@@ -1219,7 +1218,7 @@ func (n *Node) verifyBootstrapPeers(ctx context.Context) int {
 		return 0
 	}
 
-	logger.Infow("verifying bootstrap peers", "count", len(connectedPeers))
+	logger.Debugw("verifying bootstrap peers", "count", len(connectedPeers))
 
 	verified := atomic.Int32{}
 	var wg sync.WaitGroup
@@ -1264,7 +1263,7 @@ func (n *Node) verifyBootstrapPeers(ctx context.Context) int {
 	}
 
 	count := int(verified.Load())
-	logger.Infow("bootstrap peer verification complete", "verified", count, "total", len(connectedPeers))
+	logger.Debugw("bootstrap peer verification complete", "verified", count, "total", len(connectedPeers))
 	return count
 }
 
@@ -1286,7 +1285,7 @@ func (n *Node) startPeerDiscovery() {
 	n.peerChan = peerChan
 
 	// Process discovered peers in background
-	go func() {
+	bterrors.SafeGo("ipfs-peer-discovery", func() {
 		for peerInfo := range n.peerChan {
 			if peerInfo.ID == n.host.ID() || len(peerInfo.Addrs) == 0 {
 				continue
@@ -1297,11 +1296,11 @@ func (n *Node) startPeerDiscovery() {
 			if err := n.host.Connect(ctx, peerInfo); err != nil {
 				logger.Debugw("failed to connect to discovered peer", "peer", peerInfo.ID, "error", err)
 			} else {
-				logger.Infow("connected to discovered peer", "peer", peerInfo.ID)
+				logger.Debugw("connected to discovered peer", "peer", peerInfo.ID)
 			}
 			cancel()
 		}
-	}()
+	})
 }
 
 // subscribePeerEvents subscribes to libp2p peer connection events for tracking
@@ -1314,13 +1313,7 @@ func (n *Node) subscribePeerEvents() {
 	}
 	n.peerEventSub = sub
 
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Debugw("peer event subscription panic recovered", "recover", r)
-			}
-		}()
-
+	bterrors.SafeGo("ipfs-peer-events", func() {
 		for {
 			select {
 			case <-n.ctx.Done():
@@ -1335,21 +1328,21 @@ func (n *Node) subscribePeerEvents() {
 						n.peerCount.Add(1)
 						n.updatePeerScore(peerID, true, false)
 						n.metrics.RecordConnection(peerID, 0) // Latency can be added later
-						logger.Infow("peer connected",
+						logger.Debugw("peer connected",
 							"peer", peerID,
 							"total_peers", n.peerCount.Load())
 					case network.NotConnected:
 						n.peerCount.Add(-1)
 						n.updatePeerScore(peerID, false, false)
 						n.metrics.RecordDisconnection(peerID)
-						logger.Infow("peer disconnected",
+						logger.Debugw("peer disconnected",
 							"peer", peerID,
 							"total_peers", n.peerCount.Load())
 					}
 				}
 			}
 		}
-	}()
+	})
 }
 
 // updatePeerScore updates the score for a peer based on connection events
@@ -1414,7 +1407,7 @@ func (n *Node) getLowScorePeers(threshold float64) []string {
 
 // startDHTMaintenance starts a background goroutine that periodically refreshes the DHT
 func (n *Node) startDHTMaintenance() {
-	go func() {
+	bterrors.SafeGo("ipfs-dht-maintenance", func() {
 		ticker := time.NewTicker(DHTRefreshInterval)
 		defer ticker.Stop()
 		defer close(n.dhtMaintenanceDone)
@@ -1448,10 +1441,12 @@ func (n *Node) startDHTMaintenance() {
 				logger.Debugw("DHT maintenance check", "connected_peers", peerCount)
 			}
 		}
-	}()
+	})
 
 	// Start connection health checks
-	go n.startConnectionHealthChecks()
+	bterrors.SafeGo("ipfs-health-checks", func() {
+		n.startConnectionHealthChecks()
+	})
 }
 
 // startConnectionHealthChecks periodically checks connection health and reconnects if needed
@@ -1487,7 +1482,7 @@ func (n *Node) performHealthCheck() {
 
 	// Check if we have enough connections
 	if peerCount < 5 {
-		logger.Infow("low peer count, attempting reconnection to stored peers")
+		logger.Debugw("low peer count, attempting reconnection to stored peers")
 		n.reconnectToLowScorePeers()
 	}
 
@@ -1516,7 +1511,7 @@ func (n *Node) performHealthCheck() {
 
 	lowScorePeers := n.getLowScorePeers(pruneThreshold)
 	if len(lowScorePeers) > 0 {
-		logger.Infow("pruning low-quality peers",
+		logger.Debugw("pruning low-quality peers",
 			"count", min(maxPruneCount, len(lowScorePeers)),
 			"threshold", pruneThreshold,
 			"total_low_score", len(lowScorePeers))
@@ -1548,7 +1543,7 @@ func (n *Node) performHealthCheck() {
 			n.metrics.RecordDisconnection(peerID)
 		}
 
-		logger.Infow("pruning complete", "pruned", pruned)
+		logger.Debugw("pruning complete", "pruned", pruned)
 	}
 }
 
@@ -1562,7 +1557,7 @@ func (n *Node) reconnectToLowScorePeers() {
 		return
 	}
 
-	logger.Infow("attempting reconnection to low-score peers", "count", len(lowScorePeers))
+	logger.Debugw("attempting reconnection to low-score peers", "count", len(lowScorePeers))
 
 	// Try to reconnect to up to 5 peers
 	for i, peerID := range lowScorePeers {
@@ -1596,7 +1591,7 @@ func (n *Node) reconnectToLowScorePeers() {
 			logger.Debugw("reconnection failed", "peer", peerID, "error", err)
 			n.updatePeerScore(peerID, false, true)
 		} else {
-			logger.Infow("reconnected to peer", "peer", peerID)
+			logger.Debugw("reconnected to peer", "peer", peerID)
 		}
 	}
 }
@@ -1638,7 +1633,7 @@ func (n *Node) AdvertiseSelf(ctx context.Context) error {
 		return fmt.Errorf("failed to advertise self: %w", err)
 	}
 
-	logger.Infow("Advertised self to DHT",
+	logger.Debugw("advertised self to DHT",
 		"peer_id", n.host.ID(),
 		"closest_peers", len(closestPeers),
 		"provide_cid", peerCID.String())

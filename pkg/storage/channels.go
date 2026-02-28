@@ -55,7 +55,7 @@ func (s *BadgerStorage) SaveChannel(channel *pb.ChannelState) error {
 		return fmt.Errorf("failed to store channel: %w", err)
 	}
 
-	logger.Debugf("Stored channel %s", hex.EncodeToString(channel.ChannelId))
+	logger.Debugw("stored channel", "channel", hex.EncodeToString(channel.ChannelId[:8]))
 	return nil
 }
 
@@ -148,7 +148,7 @@ func (s *BadgerStorage) DeleteChannel(channelID []byte) error {
 		return fmt.Errorf("failed to delete channel: %w", err)
 	}
 
-	logger.Debugf("Deleted channel %s", hex.EncodeToString(channelID))
+	logger.Debugw("deleted channel", "channel", hex.EncodeToString(channelID[:8]))
 	return nil
 }
 
@@ -189,7 +189,7 @@ func (s *BadgerStorage) SaveChannelPost(post *pb.ChannelPost) error {
 		return fmt.Errorf("failed to store channel post: %w", err)
 	}
 
-	logger.Debugf("Stored channel post %s in channel %s", hex.EncodeToString(post.PostId), hex.EncodeToString(post.ChannelId))
+	logger.Debugw("stored channel post", "post", hex.EncodeToString(post.PostId[:8]), "channel", hex.EncodeToString(post.ChannelId[:8]))
 	return nil
 }
 

@@ -53,7 +53,7 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 		return nil, nil, fmt.Errorf("failed to compute shared secret: %w", err)
 	}
 
-	logger.Debugw("computed shared secret", "secret", fmt.Sprintf("%x", sharedSecret[:8]))
+	logger.Debugw("computed shared secret", "shared_secret_computed", true)
 
 	nonce, ciphertext, err := crypto.EncryptWithSharedSecret(sharedSecret, plaintext)
 	if err != nil {
@@ -175,7 +175,7 @@ func DecryptEnvelope(envelope *pb.Envelope, recipientX25519PrivKey []byte) ([]by
 		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
 	}
 
-	logger.Debugw("computed shared secret", "secret", fmt.Sprintf("%x", sharedSecret[:8]))
+	logger.Debugw("computed shared secret", "shared_secret_computed", true)
 
 	plaintext, err := crypto.DecryptWithSharedSecret(sharedSecret, envelope.Nonce, envelope.Ciphertext)
 	if err != nil {

@@ -2,6 +2,7 @@ package mailbox
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"babylontower/pkg/crypto"
+	bterrors "babylontower/pkg/errors"
 	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
 )
@@ -154,7 +156,7 @@ func (am *AnnouncementManager) RemoveAnnouncement(targetPubkey []byte) error {
 // StartPeriodicAnnouncement starts periodic republishing of announcements
 func (am *AnnouncementManager) StartPeriodicAnnouncement() {
 	ticker := time.NewTicker(DefaultAnnounceInterval)
-	go func() {
+	bterrors.SafeGo("mailbox-periodic-announce", func() {
 		for {
 			select {
 			case <-am.ctx.Done():
@@ -164,7 +166,7 @@ func (am *AnnouncementManager) StartPeriodicAnnouncement() {
 				am.republishAll()
 			}
 		}
-	}()
+	})
 }
 
 // Stop stops the announcement manager
@@ -236,8 +238,35 @@ func (am *AnnouncementManager) signAnnouncement(announcement *pb.MailboxAnnounce
 
 // verifyAnnouncementSignature verifies an announcement signature
 func (am *AnnouncementManager) verifyAnnouncementSignature(announcement *pb.MailboxAnnouncement) bool {
-	// This would need the mailbox node's public key to verify
-	// For now, we skip verification in PoC
-	// TODO: Extract signer's pubkey from announcement and verify
+	if len(announcement.Signature) == 0 {
+		return false
+	}
+
+	// Create canonical form for verification (exclude signature field)
+	canonical := &pb.MailboxAnnouncement{
+		MailboxPeerId:   announcement.MailboxPeerId,
+		TargetPubkey:    announcement.TargetPubkey,
+		CapacityBytes:   announcement.CapacityBytes,
+		MaxMessageSize:  announcement.MaxMessageSize,
+		MaxMessages:     announcement.MaxMessages,
+		TtlSeconds:      announcement.TtlSeconds,
+		AnnouncedAt:     announcement.AnnouncedAt,
+		Capabilities:    announcement.Capabilities,
+		ReputationScore: announcement.ReputationScore,
+	}
+	data, err := proto.Marshal(canonical)
+	if err != nil {
+		return false
+	}
+
+	// The announcement is signed by the mailbox node's device key.
+	// We verify using TargetPubkey as the signer when the mailbox serves itself,
+	// otherwise this requires looking up the mailbox node's identity key.
+	// For now, verify against TargetPubkey if it's a valid Ed25519 key.
+	if len(announcement.TargetPubkey) == ed25519.PublicKeySize {
+		return crypto.Verify(announcement.TargetPubkey, data, announcement.Signature)
+	}
+
+	// Cannot verify without the signer's public key
 	return true
 }

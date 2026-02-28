@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"testing"
 	"time"
@@ -15,7 +16,6 @@ import (
 	pb "babylontower/pkg/proto"
 	"github.com/tyler-smith/go-bip39"
 	"babylontower/pkg/identity"
-	"golang.org/x/crypto/curve25519"
 )
 
 // TestDeviceRegistration tests device registration and certificate generation
@@ -38,12 +38,12 @@ func TestDeviceRegistration(t *testing.T) {
 		t.Fatalf("Failed to create identity: %v", err)
 	}
 
-	t.Logf("Identity Fingerprint: %s", id.GetFingerprint())
+	t.Logf("Identity Fingerprint: %s", id.IdentityFingerprint())
 
 	// Create device manager
 	config := &DeviceConfig{
-		IdentitySignPub:  id.IKPub,
-		IdentitySignPriv: id.IKPriv,
+		IdentitySignPub:  id.IKSignPub,
+		IdentitySignPriv: id.IKSignPriv,
 		IdentityDHPub:    id.IKDHPub[:],
 		IdentityDHPriv:   id.IKDHPriv[:],
 		DeviceName:       "Test Device 1",
@@ -93,8 +93,8 @@ func TestDeviceSyncTopicDerivation(t *testing.T) {
 	id, _ := identity.NewIdentityV1(mnemonic, "Test User")
 
 	config := &DeviceConfig{
-		IdentitySignPub:  id.IKPub,
-		IdentitySignPriv: id.IKPriv,
+		IdentitySignPub:  id.IKSignPub,
+		IdentitySignPriv: id.IKSignPriv,
 		IdentityDHPub:    id.IKDHPub[:],
 		IdentityDHPriv:   id.IKDHPriv[:],
 		DeviceName:       "Device 1",
@@ -103,7 +103,7 @@ func TestDeviceSyncTopicDerivation(t *testing.T) {
 	rand.Read(config.DeviceGroupKey)
 
 	dm := NewDeviceManager(config)
-	cert1, _ := dm.RegisterNewDevice()
+	_, _ = dm.RegisterNewDevice()
 
 	// Register second device
 	config.DeviceName = "Device 2"
@@ -111,8 +111,8 @@ func TestDeviceSyncTopicDerivation(t *testing.T) {
 	cert2, _ := dm2.RegisterNewDevice()
 
 	// Derive sync topic for both devices (should be same for same identity)
-	topic1 := deriveSyncTopic(id.IKPub)
-	topic2 := deriveSyncTopic(id.IKPub)
+	topic1 := deriveSyncTopic(id.IKSignPub)
+	topic2 := deriveSyncTopic(id.IKSignPub)
 
 	if topic1 != topic2 {
 		t.Errorf("Sync topics differ for same identity")
@@ -150,8 +150,8 @@ func TestSyncMessageEncryption(t *testing.T) {
 
 	// Setup device 1
 	config1 := &DeviceConfig{
-		IdentitySignPub:  id.IKPub,
-		IdentitySignPriv: id.IKPriv,
+		IdentitySignPub:  id.IKSignPub,
+		IdentitySignPriv: id.IKSignPriv,
 		IdentityDHPub:    id.IKDHPub[:],
 		IdentityDHPriv:   id.IKDHPriv[:],
 		DeviceName:       "Device 1",
@@ -162,8 +162,8 @@ func TestSyncMessageEncryption(t *testing.T) {
 
 	// Setup device 2
 	config2 := &DeviceConfig{
-		IdentitySignPub:  id.IKPub,
-		IdentitySignPriv: id.IKPriv,
+		IdentitySignPub:  id.IKSignPub,
+		IdentitySignPriv: id.IKSignPriv,
 		IdentityDHPub:    id.IKDHPub[:],
 		IdentityDHPriv:   id.IKDHPriv[:],
 		DeviceName:       "Device 2",
@@ -173,20 +173,20 @@ func TestSyncMessageEncryption(t *testing.T) {
 	cert2, _ := dm2.RegisterNewDevice()
 
 	// Device 1 creates sync message (e.g., new contact added)
-	syncData := &pb.SyncMessage{
-		Type:      pb.SyncMessageType_CONTACT_ADDED,
-		Timestamp: uint64(time.Now().Unix()),
-		Data:      []byte("contact_data"),
+	syncData := &pb.DeviceSyncMessage{
+		Type:             pb.SyncType_CONTACT_ADDED,
+		Timestamp:        uint64(time.Now().Unix()),
+		EncryptedPayload: []byte("contact_data"),
 	}
 
 	// Serialize sync message
-	syncBytes, err := proto.Marshal(syncData)
+	syncBytes, err := testProto.Marshal(syncData)
 	if err != nil {
 		t.Fatalf("Failed to marshal sync message: %v", err)
 	}
 
 	// Encrypt with device group key
-	ciphertext, err := crypto.Encrypt(syncBytes, deviceGroupKey)
+	nonce, ciphertext, err := crypto.EncryptWithSharedSecret(deviceGroupKey, syncBytes)
 	if err != nil {
 		t.Fatalf("Encryption failed: %v", err)
 	}
@@ -194,18 +194,18 @@ func TestSyncMessageEncryption(t *testing.T) {
 	t.Logf("Sync message encrypted (ciphertext length: %d)", len(ciphertext))
 
 	// Device 2 decrypts
-	plaintext, err := crypto.Decrypt(ciphertext, deviceGroupKey)
+	plaintext, err := crypto.DecryptWithSharedSecret(deviceGroupKey, nonce, ciphertext)
 	if err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
 
 	// Parse decrypted message
-	decrypted := &pb.SyncMessage{}
-	if err := proto.Unmarshal(plaintext, decrypted); err != nil {
+	decrypted := &pb.DeviceSyncMessage{}
+	if err := testProto.Unmarshal(plaintext, decrypted); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
 
-	if decrypted.Type != pb.SyncMessageType_CONTACT_ADDED {
+	if decrypted.Type != pb.SyncType_CONTACT_ADDED {
 		t.Errorf("Decrypted message type mismatch")
 	}
 
@@ -215,6 +215,7 @@ func TestSyncMessageEncryption(t *testing.T) {
 	t.Log("✓ Sync data integrity preserved")
 
 	_ = cert1
+	_ = cert2
 }
 
 // TestVectorClockConflictResolution tests vector clock for conflict resolution
@@ -302,8 +303,8 @@ func TestMessageFanout(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		config := &DeviceConfig{
-			IdentitySignPub:  bob.IKPub,
-			IdentitySignPriv: bob.IKPriv,
+			IdentitySignPub:  bob.IKSignPub,
+			IdentitySignPriv: bob.IKSignPriv,
 			IdentityDHPub:    bob.IKDHPub[:],
 			IdentityDHPriv:   bob.IKDHPriv[:],
 			DeviceName:       deviceNames[i],
@@ -325,8 +326,8 @@ func TestMessageFanout(t *testing.T) {
 	for i, device := range bobDevices {
 		// In full implementation, this would use Double Ratchet per device
 		// For testing, we simulate with symmetric encryption
-		deviceKey := deriveDeviceKey(alice.IKPub, device.DeviceId)
-		encrypted, err := crypto.Encrypt([]byte(message), deviceKey)
+		deviceKey := deriveDeviceKey(alice.IKSignPub, device.DeviceId)
+		encrypted, err := testEncrypt([]byte(message), deviceKey)
 		if err != nil {
 			t.Fatalf("Encrypt for device %d failed: %v", i, err)
 		}
@@ -336,8 +337,8 @@ func TestMessageFanout(t *testing.T) {
 
 	// Each device decrypts independently
 	for i, device := range bobDevices {
-		deviceKey := deriveDeviceKey(alice.IKPub, device.DeviceId)
-		decrypted, err := crypto.Decrypt(encryptedMessages[i], deviceKey)
+		deviceKey := deriveDeviceKey(alice.IKSignPub, device.DeviceId)
+		decrypted, err := testDecrypt(encryptedMessages[i], deviceKey)
 		if err != nil {
 			t.Fatalf("Decrypt for device %d failed: %v", i, err)
 		}
@@ -368,8 +369,8 @@ func TestOptimizedFanoutForManyDevices(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		config := &DeviceConfig{
-			IdentitySignPub:  recipient.IKPub,
-			IdentitySignPriv: recipient.IKPriv,
+			IdentitySignPub:  recipient.IKSignPub,
+			IdentitySignPriv: recipient.IKSignPriv,
 			IdentityDHPub:    recipient.IKDHPub[:],
 			IdentityDHPriv:   recipient.IKDHPriv[:],
 			DeviceName:       fmt.Sprintf("Device %d", i+1),
@@ -390,7 +391,7 @@ func TestOptimizedFanoutForManyDevices(t *testing.T) {
 	rand.Read(symmetricKey)
 
 	message := "Message to recipient with many devices"
-	ciphertext, err := crypto.Encrypt([]byte(message), symmetricKey)
+	ciphertext, err := testEncrypt([]byte(message), symmetricKey)
 	if err != nil {
 		t.Fatalf("Symmetric encryption failed: %v", err)
 	}
@@ -398,8 +399,8 @@ func TestOptimizedFanoutForManyDevices(t *testing.T) {
 	// Encrypt symmetric key for each device (much smaller overhead)
 	encryptedKeys := make([][]byte, len(recipientDevices))
 	for i, device := range recipientDevices {
-		deviceKey := deriveDeviceKey(recipient.IKPub, device.DeviceId)
-		encKey, err := crypto.Encrypt(symmetricKey, deviceKey)
+		deviceKey := deriveDeviceKey(recipient.IKSignPub, device.DeviceId)
+		encKey, err := testEncrypt(symmetricKey, deviceKey)
 		if err != nil {
 			t.Fatalf("Key encryption failed for device %d: %v", i, err)
 		}
@@ -411,16 +412,16 @@ func TestOptimizedFanoutForManyDevices(t *testing.T) {
 
 	// Each device decrypts symmetric key, then message
 	for i, device := range recipientDevices {
-		deviceKey := deriveDeviceKey(recipient.IKPub, device.DeviceId)
+		deviceKey := deriveDeviceKey(recipient.IKSignPub, device.DeviceId)
 
 		// Decrypt symmetric key
-		decryptedKey, err := crypto.Decrypt(encryptedKeys[i], deviceKey)
+		decryptedKey, err := testDecrypt(encryptedKeys[i], deviceKey)
 		if err != nil {
 			t.Fatalf("Key decryption failed for device %d: %v", i, err)
 		}
 
 		// Decrypt message
-		decrypted, err := crypto.Decrypt(ciphertext, decryptedKey)
+		decrypted, err := testDecrypt(ciphertext, decryptedKey)
 		if err != nil {
 			t.Fatalf("Message decryption failed for device %d: %v", i, err)
 		}
@@ -448,8 +449,8 @@ func TestDeviceRevocation(t *testing.T) {
 	id, _ := identity.NewIdentityV1(mnemonic, "Test User")
 
 	config := &DeviceConfig{
-		IdentitySignPub:  id.IKPub,
-		IdentitySignPriv: id.IKPriv,
+		IdentitySignPub:  id.IKSignPub,
+		IdentitySignPriv: id.IKSignPriv,
 		IdentityDHPub:    id.IKDHPub[:],
 		IdentityDHPriv:   id.IKDHPriv[:],
 		DeviceName:       "Device to Revoke",
@@ -463,19 +464,27 @@ func TestDeviceRevocation(t *testing.T) {
 	t.Logf("Device registered: %x", cert.DeviceId)
 
 	// Create revocation certificate
-	revocation := &pb.DeviceRevocation{
-		DeviceId:    cert.DeviceId,
-		RevokedAt:   uint64(time.Now().Unix()),
-		Reason:      "User requested",
-		IdentityPub: id.IKPub,
+	revocation := &pb.RevocationCertificate{
+		RevokedKey:     cert.DeviceId,
+		RevocationType: "device",
+		Reason:         "User requested",
+		RevokedAt:      uint64(time.Now().Unix()),
 	}
 
-	// Sign revocation with identity key
-	signature := ed25519.Sign(id.IKPriv, revocation.DeviceId)
-	revocation.Signature = signature
+	// Sign revocation with identity key (canonical serialization)
+	sigData := make([]byte, 0, 64)
+	sigData = append(sigData, revocation.RevokedKey...)
+	sigData = append(sigData, []byte(revocation.RevocationType)...)
+	sigData = append(sigData, []byte(revocation.Reason)...)
+	tsBytes := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		tsBytes[i] = byte(revocation.RevokedAt >> (56 - i*8))
+	}
+	sigData = append(sigData, tsBytes...)
+	revocation.Signature = ed25519.Sign(id.IKSignPriv, sigData)
 
 	// Verify revocation
-	err := VerifyDeviceRevocation(revocation)
+	err := VerifyRevocation(revocation, id.IKSignPub)
 	if err != nil {
 		t.Fatalf("Revocation verification failed: %v", err)
 	}
@@ -506,6 +515,26 @@ func deriveDeviceKey(identityPub, deviceID []byte) []byte {
 	data := append(identityPub, deviceID...)
 	hash := sha256.Sum256(data)
 	return hash[:]
+}
+
+// testEncrypt encrypts with EncryptWithSharedSecret and prepends nonce to ciphertext
+func testEncrypt(plaintext, key []byte) ([]byte, error) {
+	nonce, ciphertext, err := crypto.EncryptWithSharedSecret(key, plaintext)
+	if err != nil {
+		return nil, err
+	}
+	return append(nonce, ciphertext...), nil
+}
+
+// testDecrypt splits nonce from ciphertext and decrypts
+func testDecrypt(data, key []byte) ([]byte, error) {
+	nonceSize := 24 // XChaCha20-Poly1305 nonce size
+	if len(data) < nonceSize {
+		return nil, fmt.Errorf("data too short")
+	}
+	nonce := data[:nonceSize]
+	ciphertext := data[nonceSize:]
+	return crypto.DecryptWithSharedSecret(key, nonce, ciphertext)
 }
 
 func deriveSyncTopic(identityPub []byte) string {
@@ -546,13 +575,13 @@ func happensAfter(clock1, clock2 map[string]uint64) bool {
 }
 
 // Mock proto functions for testing (in real code, these come from protobuf)
-type proto struct{}
+type mockProto struct{}
 
-var protoInstance = &proto{}
+var mockProtoInstance = &mockProto{}
 
-func (p *proto) Marshal(msg interface{}) ([]byte, error) {
+func (p *mockProto) Marshal(msg interface{}) ([]byte, error) {
 	// Simplified mock - in real code this uses protobuf
-	if m, ok := msg.(*pb.SyncMessage); ok {
+	if m, ok := msg.(*pb.DeviceSyncMessage); ok {
 		data := make([]byte, 0)
 		data = append(data, byte(m.Type))
 		tsBytes := make([]byte, 8)
@@ -560,27 +589,27 @@ func (p *proto) Marshal(msg interface{}) ([]byte, error) {
 			tsBytes[i] = byte(m.Timestamp >> (56 - i*8))
 		}
 		data = append(data, tsBytes...)
-		data = append(data, m.Data...)
+		data = append(data, m.EncryptedPayload...)
 		return data, nil
 	}
 	return nil, fmt.Errorf("unknown type")
 }
 
-func (p *proto) Unmarshal(data []byte, msg interface{}) error {
+func (p *mockProto) Unmarshal(data []byte, msg interface{}) error {
 	// Simplified mock
-	if m, ok := msg.(*pb.SyncMessage); ok {
+	if m, ok := msg.(*pb.DeviceSyncMessage); ok {
 		if len(data) < 9 {
 			return fmt.Errorf("data too short")
 		}
-		m.Type = pb.SyncMessageType(data[0])
+		m.Type = pb.SyncType(data[0])
 		m.Timestamp = 0
 		for i := 0; i < 8; i++ {
 			m.Timestamp |= uint64(data[1+i]) << (56 - i*8)
 		}
-		m.Data = data[9:]
+		m.EncryptedPayload = data[9:]
 		return nil
 	}
 	return fmt.Errorf("unknown type")
 }
 
-var proto = protoInstance
+var testProto = mockProtoInstance

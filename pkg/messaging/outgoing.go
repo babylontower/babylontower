@@ -129,7 +129,7 @@ func (s *Service) SendMessage(
 		// Don't fail the send if storage fails
 	}
 
-	logger.Infow("message sent", "to", fmt.Sprintf("%x", recipientEd25519PubKey), "text", msg.Text)
+	logger.Debugw("message sent", "to", fmt.Sprintf("%x", recipientEd25519PubKey))
 
 	// Generate a pseudo-CID for reference (hash of envelope)
 	cidStr := fmt.Sprintf("poc-%x", envelopeBytes[:8])

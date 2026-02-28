@@ -210,9 +210,10 @@ type DoubleRatchetState struct {
 	DHReceivingKeyPub  *[32]byte
 
 	// Root and chain keys
-	RootKey           []byte
-	SendingChainKey   []byte
-	SendingChainCount uint32
+	RootKey                  []byte
+	SendingChainKey          []byte
+	SendingChainCount        uint32
+	PreviousSendingChainLen  uint32 // Length of previous sending chain (for header)
 
 	ReceivingChainKey   []byte
 	ReceivingChainCount uint32

@@ -3,6 +3,7 @@ package mailbox
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -192,9 +193,13 @@ func (dh *DepositHandler) validateDepositRequest(req *pb.DepositRequest) error {
 		return fmt.Errorf("failed to marshal for verification")
 	}
 
-	// Note: In PoC we skip actual signature verification
-	// TODO: Extract sender's pubkey from envelope and verify signature
-	_ = dataForSigning
+	// Verify signature using the sender's identity pubkey from the envelope
+	senderPub := envelope.SenderIdentity
+	if len(senderPub) == ed25519.PublicKeySize {
+		if !crypto.Verify(senderPub, dataForSigning, req.SenderSignature) {
+			return fmt.Errorf("invalid sender signature")
+		}
+	}
 
 	return nil
 }

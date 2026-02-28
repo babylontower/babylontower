@@ -3,9 +3,7 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/multiformats/go-multiaddr"
@@ -36,17 +34,7 @@ const (
 	DefaultListenAddrTCPv6 = "/ip6/::/tcp/0"
 )
 
-// PeerSource indicates where a peer was discovered
-type PeerSource string
-
-const (
-	SourceBootstrap   PeerSource = "bootstrap"
-	SourceDHT         PeerSource = "dht"
-	SourceMDNS        PeerSource = "mdns"
-	SourcePeerExchange PeerSource = "peer_exchange"
-)
-
-// IPFSConfig holds configuration for the IPFS node
+// IPFSConfig holds configuration for the IPFS node (internal representation for ipfsnode package)
 type IPFSConfig struct {
 	// Bootstrap configuration
 	BootstrapPeers      []string        `json:"bootstrap_peers"`
@@ -128,34 +116,6 @@ func DefaultIPFSConfig() *IPFSConfig {
 	}
 }
 
-// LoadFromFile loads configuration from a JSON file
-func LoadFromFile(path string) (*IPFSConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	config := DefaultIPFSConfig()
-	if err := json.Unmarshal(data, config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	return config, nil
-}
-
-// SaveToFile saves configuration to a JSON file
-func (c *IPFSConfig) SaveToFile(path string) error {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
-}
 
 // Validate validates the configuration
 func (c *IPFSConfig) Validate() error {
@@ -236,74 +196,3 @@ func (c *IPFSConfig) GetBootstrapPeerInfos() ([]multiaddr.Multiaddr, error) {
 	return addrs, nil
 }
 
-// ToMap converts the config to a map for storage
-func (c *IPFSConfig) ToMap() (map[string]string, error) {
-	data, err := json.Marshal(c)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]string{
-		"ipfs_config": string(data),
-	}, nil
-}
-
-// FromMap loads the config from a map
-func (c *IPFSConfig) FromMap(m map[string]string) error {
-	data, ok := m["ipfs_config"]
-	if !ok {
-		return fmt.Errorf("ipfs_config key not found")
-	}
-
-	return json.Unmarshal([]byte(data), c)
-}
-
-// PeerRecord represents a discovered peer for persistence
-type PeerRecord struct {
-	PeerID        string    `json:"peer_id"`
-	Multiaddrs    []string  `json:"multiaddrs"`
-	FirstSeen     time.Time `json:"first_seen"`
-	LastSeen      time.Time `json:"last_seen"`
-	LastConnected time.Time `json:"last_connected"`
-	ConnectCount  int       `json:"connect_count"`
-	FailCount     int       `json:"fail_count"`
-	Source        PeerSource `json:"source"`
-	Protocols     []string  `json:"protocols"`
-	LatencyMs     int64     `json:"latency_ms"`
-}
-
-// SuccessRate returns the connection success rate (0.0 to 1.0)
-func (p *PeerRecord) SuccessRate() float64 {
-	total := p.ConnectCount + p.FailCount
-	if total == 0 {
-		return 0.0
-	}
-	return float64(p.ConnectCount) / float64(total)
-}
-
-// IsStale returns true if the peer hasn't been seen recently
-func (p *PeerRecord) IsStale(maxAge time.Duration) bool {
-	return time.Since(p.LastSeen) > maxAge
-}
-
-// ToMap converts the peer record to a map for storage
-func (p *PeerRecord) ToMap() (map[string]string, error) {
-	data, err := json.Marshal(p)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]string{
-		p.PeerID: string(data),
-	}, nil
-}
-
-// FromMap loads a peer record from a map
-func (p *PeerRecord) FromMap(m map[string]string, peerID string) error {
-	data, ok := m[peerID]
-	if !ok {
-		return fmt.Errorf("peer %s not found", peerID)
-	}
-
-	return json.Unmarshal([]byte(data), p)
-}

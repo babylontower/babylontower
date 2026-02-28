@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var syncLogger = log.Logger("babylontower/multidevice")
+var logger = log.Logger("babylontower/multidevice")
 
 // SyncType aliases for convenience
 type SyncType = pb.SyncType
@@ -117,7 +117,7 @@ func (sm *SyncManager) Start(identityPub []byte) error {
 	// Subscribe to sync topic
 	// Note: Actual subscription requires type assertion to IPFS node
 	// This is handled by the caller in main.go
-	syncLogger.Infow("sync manager started", "topic", topic)
+	logger.Infow("sync manager started", "topic", topic)
 
 	return nil
 }
@@ -132,7 +132,7 @@ func (sm *SyncManager) Stop() error {
 		_ = sm.subscription // prevent staticcheck empty branch warning
 	}
 
-	syncLogger.Info("sync manager stopped")
+	logger.Info("sync manager stopped")
 	return nil
 }
 
@@ -150,7 +150,7 @@ func (sm *SyncManager) BroadcastSync(syncType SyncType, payload proto.Message) e
 		return fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	ciphertext, err := crypto.Encrypt(payloadBytes, sm.deviceManager.deviceGroupKey, nonce)
+	ciphertext, err := crypto.Encrypt(sm.deviceManager.deviceGroupKey, nonce, payloadBytes)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt payload: %w", err)
 	}
@@ -249,7 +249,7 @@ func (sm *SyncManager) HandleSyncMessage(data []byte) error {
 	select {
 	case sm.eventChan <- event:
 	default:
-		syncLogger.Warn("sync event channel full, dropping event")
+		logger.Warn("sync event channel full, dropping event")
 	}
 
 	return nil

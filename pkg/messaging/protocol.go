@@ -3,11 +3,11 @@ package messaging
 import (
 	"context"
 	"crypto/ed25519"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/reputation"
@@ -18,13 +18,11 @@ import (
 
 var logger = log.Logger("babylontower/messaging")
 
+// Re-export sentinel errors from the centralized errors package for backward compatibility.
 var (
-	// ErrServiceNotStarted is returned when operations are attempted on a stopped service
-	ErrServiceNotStarted = errors.New("messaging service not started")
-	// ErrUnknownContact is returned when trying to message an unknown contact
-	ErrUnknownContact = errors.New("unknown contact")
-	// ErrSelfMessage is returned when trying to send a message to oneself
-	ErrSelfMessage = errors.New("cannot send message to self")
+	ErrServiceNotStarted = bterrors.ErrServiceNotStarted
+	ErrUnknownContact    = bterrors.ErrUnknownContact
+	ErrSelfMessage       = bterrors.ErrSelfMessage
 )
 
 // Config holds configuration for the messaging service
@@ -243,7 +241,7 @@ func (s *Service) processEnvelope(envelopeBytes []byte) error {
 	// Check if sender is a known contact (optional for PoC)
 	contact, err := s.storage.GetContact(senderPubKey)
 	if err != nil {
-		logger.Warnw("message from unknown contact", "sender", fmt.Sprintf("%x", senderPubKey))
+		logger.Debugw("message from unknown contact", "sender", fmt.Sprintf("%x", senderPubKey))
 		// For PoC, we still process the message
 	}
 	_ = contact
@@ -262,7 +260,7 @@ func (s *Service) processEnvelope(envelopeBytes []byte) error {
 
 	select {
 	case s.messageChan <- event:
-		logger.Infow("message event emitted", "from", fmt.Sprintf("%x", senderPubKey), "text", msg.Text)
+		logger.Debugw("message event emitted", "from", fmt.Sprintf("%x", senderPubKey))
 	default:
 		logger.Warnw("message channel full, dropping event")
 	}
@@ -614,7 +612,7 @@ func (s *Service) FindAndConnect(contactPubKey []byte, addrBook interface{}, mul
 		if err := s.ipfsNode.ConnectToPeer(multiaddr); err != nil {
 			return nil, fmt.Errorf("failed to connect to peer: %w", err)
 		}
-		logger.Infow("Connected to peer via manual multiaddr", "multiaddr", multiaddr)
+		logger.Debugw("connected to peer via manual multiaddr", "multiaddr", multiaddr)
 		return &FindAndConnectResult{
 			Source:    "manual",
 			Addresses: []string{multiaddr},
@@ -658,18 +656,18 @@ func (s *Service) OptimizePubSubMesh(contactPubKey []byte) error {
 	// Check if we have enough peers in the mesh
 	if topicInfo.MeshSize < 3 {
 		logger.Debugw("mesh size small, attempting to improve", "topic", topic, "size", topicInfo.MeshSize)
-		
+
 		// Try to find more peers via DHT
 		// This is a best-effort operation
-		go func() {
+		bterrors.SafeGo("messaging-dht-refresh", func() {
 			ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 			defer cancel()
-			
+
 			// Query DHT for peers
 			if err := s.ipfsNode.RefreshDHT(ctx); err != nil {
 				logger.Debugw("DHT refresh failed", "error", err)
 			}
-		}()
+		})
 	}
 
 	logger.Debugw("pubsub mesh optimized", "topic", topic, "mesh_size", topicInfo.MeshSize)

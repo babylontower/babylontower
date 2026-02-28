@@ -10,10 +10,9 @@ import (
 	"babylontower/pkg/identity"
 	"babylontower/pkg/messaging"
 	"babylontower/pkg/storage"
-	"github.com/ipfs/go-log/v2"
 )
 
-var mgrLogger = log.Logger("babylontower/rtc/manager")
+// logger is declared in session.go for this package
 
 // CallManager provides high-level call lifecycle management
 type CallManager struct {
@@ -127,7 +126,7 @@ func (cm *CallManager) Start() error {
 		return fmt.Errorf("failed to start signaling service: %w", err)
 	}
 
-	mgrLogger.Info("Call manager started")
+	logger.Info("Call manager started")
 	return nil
 }
 
@@ -148,7 +147,7 @@ func (cm *CallManager) Stop() {
 	cm.cancel()
 	cm.wg.Wait()
 
-	mgrLogger.Info("Call manager stopped")
+	logger.Info("Call manager stopped")
 }
 
 // StartOutgoingCall initiates an outgoing call to a contact
@@ -177,8 +176,7 @@ func (cm *CallManager) StartOutgoingCall(remoteIdentity []byte, callType string)
 
 	cm.currentCallID = session.CallID
 
-	mgrLogger.Infof("Started outgoing %s call to %s (call ID: %s)",
-		callType, hex.EncodeToString(remoteIdentity)[:16], session.CallID)
+	logger.Infow("started outgoing call", "type", callType, "remote", hex.EncodeToString(remoteIdentity)[:16], "call", session.CallID)
 
 	// Notify callback
 	if cm.onCallStarted != nil {
@@ -222,7 +220,7 @@ func (cm *CallManager) AnswerIncomingCall(callID string) error {
 
 	cm.currentCallID = callID
 
-	mgrLogger.Infof("Answered incoming call %s", callID)
+	logger.Infow("answered incoming call", "call", callID)
 
 	// Notify callback
 	if cm.onCallStarted != nil {
@@ -241,7 +239,7 @@ func (cm *CallManager) RejectIncomingCall(callID string, reason string) error {
 
 	// Send hangup
 	if err := cm.signaling.SendHangup(callID, reason); err != nil {
-		mgrLogger.Warnf("Failed to send hangup: %v", err)
+		logger.Warnw("failed to send hangup", "error", err)
 	}
 
 	// End call locally
@@ -249,7 +247,7 @@ func (cm *CallManager) RejectIncomingCall(callID string, reason string) error {
 		return fmt.Errorf("failed to end call: %w", err)
 	}
 
-	mgrLogger.Infof("Rejected incoming call %s (reason: %s)", callID, reason)
+	logger.Infow("rejected incoming call", "call", callID, "reason", reason)
 
 	return nil
 }
@@ -271,7 +269,7 @@ func (cm *CallManager) EndCall(reason string) error {
 func (cm *CallManager) EndCallByID(callID string, reason string) error {
 	// Send hangup
 	if err := cm.signaling.SendHangup(callID, reason); err != nil {
-		mgrLogger.Warnf("Failed to send hangup: %v", err)
+		logger.Warnw("failed to send hangup", "error", err)
 	}
 
 	// End call locally
@@ -285,7 +283,7 @@ func (cm *CallManager) EndCallByID(callID string, reason string) error {
 	}
 	cm.mu.Unlock()
 
-	mgrLogger.Infof("Ended call %s (reason: %s)", callID, reason)
+	logger.Infow("ended call", "call", callID, "reason", reason)
 
 	return nil
 }
@@ -380,7 +378,7 @@ func (cm *CallManager) handleIncomingOffer(callID string, remoteIdentity []byte,
 		go func() {
 			time.Sleep(cm.config.AutoAnswerTimeout)
 			if err := cm.AnswerIncomingCall(callID); err != nil {
-				mgrLogger.Errorf("Failed to auto-answer call: %v", err)
+				logger.Errorw("failed to auto-answer call", "call", callID, "error", err)
 			}
 		}()
 	}
@@ -388,11 +386,11 @@ func (cm *CallManager) handleIncomingOffer(callID string, remoteIdentity []byte,
 
 // handleIncomingAnswer handles an incoming RTC answer
 func (cm *CallManager) handleIncomingAnswer(callID string, remoteIdentity []byte, sdp string) {
-	mgrLogger.Debugf("Received answer for call %s", callID)
+	logger.Debugw("received answer for call", "call", callID)
 
 	// Update state to connecting
 	if err := cm.sessionMgr.UpdateState(callID, CallStateConnecting); err != nil {
-		mgrLogger.Warnf("Failed to update call state: %v", err)
+		logger.Warnw("failed to update call state", "error", err)
 	}
 
 	// In a real implementation, this would trigger ICE connectivity checks
@@ -401,7 +399,7 @@ func (cm *CallManager) handleIncomingAnswer(callID string, remoteIdentity []byte
 
 // handleIncomingICE handles an incoming ICE candidate
 func (cm *CallManager) handleIncomingICE(callID string, remoteIdentity []byte, candidate string, sdpMid string, mlineIdx uint32) {
-	mgrLogger.Debugf("Received ICE candidate for call %s", callID)
+	logger.Debugw("received ICE candidate for call", "call", callID)
 
 	// In a real implementation, this would add the remote ICE candidate
 	// and potentially trigger connectivity checks
@@ -415,12 +413,12 @@ func (cm *CallManager) handleIncomingHangup(callID string, remoteIdentity []byte
 	}
 	cm.mu.Unlock()
 
-	mgrLogger.Infof("Remote peer ended call %s (reason: %s)", callID, reason)
+	logger.Infow("remote peer ended call", "call", callID, "reason", reason)
 }
 
 // handleStateChanged handles call state changes
 func (cm *CallManager) handleStateChanged(session *CallSession, oldState, newState string) {
-	mgrLogger.Debugf("Call %s state changed: %s -> %s", session.CallID, oldState, newState)
+	logger.Debugw("call state changed", "call", session.CallID, "old_state", oldState, "new_state", newState)
 
 	if newState == CallStateActive && cm.onCallConnected != nil {
 		cm.onCallConnected(session.CallID)
@@ -437,8 +435,7 @@ func (cm *CallManager) handleSessionEnded(session *CallSession) {
 
 	duration := session.Duration()
 
-	mgrLogger.Infof("Call %s ended (duration: %v, reason: %s)",
-		session.CallID, duration, session.HangupReason)
+	logger.Infow("call ended", "call", session.CallID, "duration", duration, "reason", session.HangupReason)
 
 	if cm.onCallEnded != nil {
 		cm.onCallEnded(session.CallID, session.HangupReason, duration)
@@ -449,7 +446,7 @@ func (cm *CallManager) handleSessionEnded(session *CallSession) {
 func (cm *CallManager) startCallTimeout(callID string, timeout time.Duration) {
 	select {
 	case <-time.After(timeout):
-		mgrLogger.Warnf("Call %s timed out", callID)
+		logger.Warnw("call timed out", "call", callID)
 		_ = cm.EndCallByID(callID, HangupTimeout)
 	case <-cm.ctx.Done():
 		return

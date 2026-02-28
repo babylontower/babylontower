@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"babylontower/pkg/cli"
@@ -33,7 +34,6 @@ const (
 	IdentityFileName   = "identity.json"
 	StorageDirName     = "storage"
 	IPFSDirName        = "ipfs"
-	ConfigFileName     = "config.json"
 	peerSuccessThreshold = 0.5
 	peerMaxAge         = 7 * 24 * time.Hour
 )
@@ -59,8 +59,12 @@ func printHelp() {
 	fmt.Println("  messenger [options]")
 	fmt.Println("")
 	fmt.Println("Options:")
-	fmt.Println("  -data-dir <path>    Data directory for this instance")
-	fmt.Println("                      Default: ~/.babylontower")
+	fmt.Println("  -data-dir <path>              Data directory for this instance")
+	fmt.Println("                                Default: ~/.babylontower")
+	fmt.Println("  -log-level <level>            Log level: debug, info, warn, error")
+	fmt.Println("                                Default: warn (env: BABYLONTOWER_LOG_LEVEL)")
+	fmt.Println("  -log-file <path>              Write logs to file instead of stderr")
+	fmt.Println("                                (env: BABYLONTOWER_LOG_FILE)")
 	fmt.Println("")
 	fmt.Println("Running Multiple Instances:")
 	fmt.Println("  To run two nodes on the same machine, use different data directories:")
@@ -76,9 +80,11 @@ func printHelp() {
 func run() error {
 	dataDirFlag := flag.String("data-dir", "", "Data directory (default: ~/.babylontower)")
 	configFlag := flag.String("config", "", "Config file path (optional)")
+	logLevelFlag := flag.String("log-level", "", "Log level: debug, info, warn, error (default: warn)")
+	logFileFlag := flag.String("log-file", "", "Write logs to file instead of stderr")
 	flag.Parse()
 
-	if err := log.SetLogLevel("babylontower", "debug"); err != nil {
+	if err := configureLogging(*logLevelFlag, *logFileFlag); err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
 	}
 
@@ -94,9 +100,30 @@ func run() error {
 	identityPath := filepath.Join(dataDir, IdentityFileName)
 	storageDir := filepath.Join(dataDir, StorageDirName)
 	ipfsDir := filepath.Join(dataDir, IPFSDirName)
-	configPath := filepath.Join(dataDir, ConfigFileName)
 
 	logger.Infow("starting Babylon Tower", "version", Version, "data_dir", dataDir)
+
+	// Load unified YAML configuration
+	appConfig, err := config.LoadAppConfig(dataDir, *configFlag)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Apply CLI flag overrides on top of config
+	if *logLevelFlag != "" {
+		appConfig.Logging.Level = *logLevelFlag
+	}
+	if *logFileFlag != "" {
+		appConfig.Logging.File = *logFileFlag
+	}
+
+	if err := config.ValidateAppConfig(appConfig); err != nil {
+		logger.Warnw("config validation failed, using defaults", "error", err)
+		appConfig = config.DefaultAppConfig()
+	}
+
+	// Convert to IPFSConfig for backward compatibility with ipfsnode package
+	ipfsConfig := appConfig.ToIPFSConfig()
 
 	ident, err := loadOrCreateIdentity(identityPath)
 	if err != nil {
@@ -107,7 +134,7 @@ func run() error {
 
 	store, err := storage.NewBadgerStorage(storage.Config{
 		Path:     storageDir,
-		InMemory: false,
+		InMemory: appConfig.Storage.InMemory,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
@@ -116,20 +143,7 @@ func run() error {
 
 	logger.Info("storage initialized")
 
-	ipfsConfig := loadIPFSConfig(store, configPath, *configFlag)
-	if err := ipfsConfig.Validate(); err != nil {
-		logger.Warnw("config validation failed, using defaults", "error", err)
-		ipfsConfig = config.DefaultIPFSConfig()
-	}
-
-	if err := saveIPFSConfig(store, ipfsConfig); err != nil {
-		logger.Warnw("failed to save config to storage", "error", err)
-	}
-	if err := ipfsConfig.SaveToFile(configPath); err != nil {
-		logger.Warnw("failed to save config file", "error", err)
-	}
-
-	logger.Infow("IPFS config loaded",
+	logger.Infow("config loaded",
 		"bootstrap_peers", len(ipfsConfig.BootstrapPeers),
 		"max_stored_peers", ipfsConfig.MaxStoredPeers,
 		"min_peer_connections", ipfsConfig.MinPeerConnections)
@@ -197,6 +211,73 @@ func run() error {
 	}
 
 	logger.Info("Babylon Tower shutdown complete")
+	return nil
+}
+
+// configureLogging sets up structured logging with the given level and optional file output.
+// Priority: CLI flag > env var > default ("warn").
+func configureLogging(flagLevel, flagFile string) error {
+	// Determine log level: flag > env > default
+	level := flagLevel
+	if level == "" {
+		level = os.Getenv("BABYLONTOWER_LOG_LEVEL")
+	}
+	if level == "" {
+		level = "warn"
+	}
+	level = strings.ToLower(level)
+
+	// Determine log file: flag > env > stderr
+	logFile := flagFile
+	if logFile == "" {
+		logFile = os.Getenv("BABYLONTOWER_LOG_FILE")
+	}
+
+	// Configure log output via go-log/v2 SetupLogging
+	logCfg := log.GetConfig()
+	logCfg.Level = log.LevelError // base level, overridden per-subsystem below
+	if logFile != "" {
+		logCfg.File = logFile
+	}
+	log.SetupLogging(logCfg)
+
+	// Set all babylontower subsystems to the requested level
+	btSubsystems := []string{
+		"babylontower",
+		"babylontower/cli",
+		"babylontower/storage",
+		"babylontower/messaging",
+		"babylontower/ipfsnode",
+		"babylontower/identity",
+		"babylontower/peerstore",
+		"babylontower/rtc",
+		"babylontower/multidevice",
+		"babylontower/groups",
+		"babylontower/mailbox",
+		"babylontower/reputation",
+		"babylontower/protocol",
+		"babylontower/ratchet",
+		"babylontower/recovery",
+	}
+	for _, sub := range btSubsystems {
+		if err := log.SetLogLevel(sub, level); err != nil {
+			return fmt.Errorf("failed to set log level for %s: %w", sub, err)
+		}
+	}
+
+	// Quiet libp2p subsystems — set to "error" normally, "warn" when app is debug
+	libp2pLevel := "error"
+	if level == "debug" {
+		libp2pLevel = "warn"
+	}
+	libp2pSubsystems := []string{
+		"dht", "pubsub", "swarm2", "relay", "autonat",
+		"connmgr", "basichost", "net/identify",
+	}
+	for _, sub := range libp2pSubsystems {
+		_ = log.SetLogLevel(sub, libp2pLevel) // best-effort; subsystem may not exist yet
+	}
+
 	return nil
 }
 
@@ -325,40 +406,6 @@ func printNewIdentityInfo(ident *identity.Identity) {
 	fmt.Printf("Store it in a secure location.\n\n")
 }
 
-func loadIPFSConfig(store *storage.BadgerStorage, configPath, configFlag string) *config.IPFSConfig {
-	if configFlag != "" {
-		if cfg, err := config.LoadFromFile(configFlag); err == nil {
-			logger.Infow("loaded config from flag", "path", configFlag)
-			return cfg
-		}
-	}
-
-	if _, err := os.Stat(configPath); err == nil {
-		if cfg, err := config.LoadFromFile(configPath); err == nil {
-			logger.Infow("loaded config from file", "path", configPath)
-			return cfg
-		}
-	}
-
-	if value, err := store.GetConfig("ipfs_config"); err == nil && value != "" {
-		cfg := config.DefaultIPFSConfig()
-		if err := cfg.FromMap(map[string]string{"ipfs_config": value}); err == nil {
-			logger.Info("loaded config from storage")
-			return cfg
-		}
-	}
-
-	logger.Info("using default IPFS configuration")
-	return config.DefaultIPFSConfig()
-}
-
-func saveIPFSConfig(store *storage.BadgerStorage, cfg *config.IPFSConfig) error {
-	m, err := cfg.ToMap()
-	if err != nil {
-		return err
-	}
-	return store.SetConfig("ipfs_config", m["ipfs_config"])
-}
 
 func loadAndConnectStoredPeers(store *storage.BadgerStorage, ipfsConfig *config.IPFSConfig) ([]libp2ppeer.AddrInfo, error) {
 	peers, err := store.ListPeers(ipfsConfig.MaxStoredPeers)
@@ -451,7 +498,7 @@ func storeConnectedPeers(store *storage.BadgerStorage, node *ipfsnode.Node) erro
 		stored++
 	}
 
-	logger.Infow("stored connected peers", "count", stored, "total_connected", info.ConnectedPeerCount)
+	logger.Debugw("stored connected peers", "count", stored, "total_connected", info.ConnectedPeerCount)
 	return nil
 }
 

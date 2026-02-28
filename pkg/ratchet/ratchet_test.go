@@ -3,11 +3,13 @@ package ratchet
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"testing"
 
-	"github.com/tyler-smith/go-bip39"
 	"babylontower/pkg/identity"
+
+	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -223,18 +225,145 @@ func TestDoubleRatchet_InitiatorResponder(t *testing.T) {
 	})
 }
 
+// setupRatchetPair creates an Alice-Bob ratchet pair for testing.
+// Alice is the initiator and sends the first message.
+func setupRatchetPair(t *testing.T) (*DoubleRatchetState, *DoubleRatchetState) {
+	t.Helper()
+
+	aliceEntropy, _ := bip39.NewEntropy(128)
+	aliceMnemonic, _ := bip39.NewMnemonic(aliceEntropy)
+	bobEntropy, _ := bip39.NewEntropy(128)
+	bobMnemonic, _ := bip39.NewMnemonic(bobEntropy)
+	alice, _ := identity.NewIdentityV1(aliceMnemonic, "Alice")
+	bob, _ := identity.NewIdentityV1(bobMnemonic, "Bob")
+
+	// Generate Bob's prekeys as raw X25519 pairs (since proto doesn't store private keys)
+	bobSPKPub, bobSPKPriv := generateX25519TestKey(t)
+	bobOPKPub, bobOPKPriv := generateX25519TestKey(t)
+
+	// X3DH key agreement
+	x3dhAlice, err := X3DHInitiator(alice.IKDHPriv, alice.IKDHPub, bob.IKDHPub, bobSPKPub, bobOPKPub)
+	if err != nil {
+		t.Fatalf("X3DH initiator failed: %v", err)
+	}
+
+	x3dhBob, err := X3DHResponder(bob.IKDHPriv, bob.IKDHPub, bobSPKPriv, bobOPKPriv, alice.IKDHPub, x3dhAlice.EphemeralPub)
+	if err != nil {
+		t.Fatalf("X3DH responder failed: %v", err)
+	}
+
+	if !bytes.Equal(x3dhAlice.SharedSecret, x3dhBob.SharedSecret) {
+		t.Fatal("X3DH shared secrets do not match")
+	}
+
+	aliceState, err := NewDoubleRatchetStateInitiator("test-session", alice.IKSignPub, bob.IKSignPub, x3dhAlice.SharedSecret, bobSPKPub)
+	if err != nil {
+		t.Fatalf("Failed to create initiator state: %v", err)
+	}
+
+	bobState, err := NewDoubleRatchetStateResponder("test-session", bob.IKSignPub, alice.IKSignPub, x3dhBob.SharedSecret, bobSPKPriv, bobSPKPub)
+	if err != nil {
+		t.Fatalf("Failed to create responder state: %v", err)
+	}
+
+	return aliceState, bobState
+}
+
 // TestDoubleRatchet_MultipleMessages tests multiple message exchange
 func TestDoubleRatchet_MultipleMessages(t *testing.T) {
-	// This test requires full ratchet state synchronization
-	// Skipping until full implementation is complete
-	t.Skip("Requires full ratchet state synchronization")
+	aliceState, bobState := setupRatchetPair(t)
+	ad := []byte("associated-data")
+
+	// Alice sends 3 messages to Bob
+	for i := 0; i < 3; i++ {
+		plaintext := []byte(fmt.Sprintf("hello from alice %d", i))
+		enc, err := aliceState.Encrypt(plaintext, ad)
+		if err != nil {
+			t.Fatalf("Alice encrypt %d failed: %v", i, err)
+		}
+
+		decrypted, err := bobState.Decrypt(enc.Header, enc.Ciphertext, ad)
+		if err != nil {
+			t.Fatalf("Bob decrypt %d failed: %v", i, err)
+		}
+		if !bytes.Equal(plaintext, decrypted) {
+			t.Errorf("Message %d mismatch: got %q, want %q", i, decrypted, plaintext)
+		}
+	}
+
+	// Bob responds with 2 messages
+	for i := 0; i < 2; i++ {
+		plaintext := []byte(fmt.Sprintf("hello from bob %d", i))
+		enc, err := bobState.Encrypt(plaintext, ad)
+		if err != nil {
+			t.Fatalf("Bob encrypt %d failed: %v", i, err)
+		}
+
+		decrypted, err := aliceState.Decrypt(enc.Header, enc.Ciphertext, ad)
+		if err != nil {
+			t.Fatalf("Alice decrypt %d failed: %v", i, err)
+		}
+		if !bytes.Equal(plaintext, decrypted) {
+			t.Errorf("Bob message %d mismatch: got %q, want %q", i, decrypted, plaintext)
+		}
+	}
+
+	// Alice sends again (new ratchet step)
+	plaintext := []byte("alice after bob's reply")
+	enc, err := aliceState.Encrypt(plaintext, ad)
+	if err != nil {
+		t.Fatalf("Alice re-encrypt failed: %v", err)
+	}
+	decrypted, err := bobState.Decrypt(enc.Header, enc.Ciphertext, ad)
+	if err != nil {
+		t.Fatalf("Bob re-decrypt failed: %v", err)
+	}
+	if !bytes.Equal(plaintext, decrypted) {
+		t.Errorf("Re-encrypted message mismatch")
+	}
 }
 
 // TestDoubleRatchet_OutOfOrder tests out-of-order message handling
 func TestDoubleRatchet_OutOfOrder(t *testing.T) {
-	// This test would verify that skipped messages are properly cached
-	// Implementation requires full ratchet setup
-	t.Skip("Out-of-order test requires full ratchet implementation")
+	aliceState, bobState := setupRatchetPair(t)
+	ad := []byte("associated-data")
+
+	// Alice sends 3 messages
+	encrypted := make([]*EncryptedMessage, 3)
+	for i := 0; i < 3; i++ {
+		var err error
+		encrypted[i], err = aliceState.Encrypt([]byte(fmt.Sprintf("msg-%d", i)), ad)
+		if err != nil {
+			t.Fatalf("Encrypt %d failed: %v", i, err)
+		}
+	}
+
+	// Bob decrypts msg-2 first (skipping 0 and 1)
+	dec, err := bobState.Decrypt(encrypted[2].Header, encrypted[2].Ciphertext, ad)
+	if err != nil {
+		t.Fatalf("Decrypt msg-2 failed: %v", err)
+	}
+	if string(dec) != "msg-2" {
+		t.Errorf("Expected msg-2, got %q", dec)
+	}
+
+	// Bob decrypts msg-0 (out of order, should use skipped key)
+	dec, err = bobState.Decrypt(encrypted[0].Header, encrypted[0].Ciphertext, ad)
+	if err != nil {
+		t.Fatalf("Decrypt msg-0 (out of order) failed: %v", err)
+	}
+	if string(dec) != "msg-0" {
+		t.Errorf("Expected msg-0, got %q", dec)
+	}
+
+	// Bob decrypts msg-1 (out of order, should use skipped key)
+	dec, err = bobState.Decrypt(encrypted[1].Header, encrypted[1].Ciphertext, ad)
+	if err != nil {
+		t.Fatalf("Decrypt msg-1 (out of order) failed: %v", err)
+	}
+	if string(dec) != "msg-1" {
+		t.Errorf("Expected msg-1, got %q", dec)
+	}
 }
 
 // TestSessionState_Serialization tests session state serialization

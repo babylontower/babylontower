@@ -1,0 +1,82 @@
+# Babylon Tower Configuration
+# Copy this file to your data directory (default: ~/.babylontower/config.yaml)
+# and edit as needed.
+#
+# All values shown below are the defaults. Uncomment and change as needed.
+# Environment variable overrides use BABYLONTOWER_ prefix with underscores:
+#   e.g. BABYLONTOWER_LOGGING_LEVEL=debug
+
+# ─── Network / libp2p ───────────────────────────────────────────────────
+network:
+  # Bootstrap peers for DHT discovery
+  # bootstrap_peers:
+  #   - /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
+  #   - /dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
+
+  # Timeouts
+  # dial_timeout: 15s
+  # connection_timeout: 30s
+  # bootstrap_timeout: 60s
+  # dht_bootstrap_timeout: 60s
+
+  # Connection limits
+  # max_connections: 400
+  # low_water: 50
+  # high_water: 400
+
+  # NAT traversal
+  # enable_relay: false
+  # enable_hole_punching: true
+  # enable_autonat: true
+
+  # DHT mode: auto, client, or server
+  # dht_mode: auto
+
+  # Listen addresses
+  # listen_addrs:
+  #   - /ip4/0.0.0.0/tcp/0
+  #   - /ip4/0.0.0.0/tcp/0/ws
+  #   - /ip6/::/tcp/0
+
+  # protocol_id: /babylontower/1.0.0
+  # max_stored_peers: 100
+  # min_peer_connections: 10
+
+# ─── Storage ─────────────────────────────────────────────────────────────
+storage:
+  # path: ""        # Set automatically from -data-dir flag
+  # in_memory: false # Use in-memory storage (testing only)
+
+# ─── Logging ─────────────────────────────────────────────────────────────
+logging:
+  # level: warn     # debug, info, warn, error
+  # file: ""        # Log to file instead of stderr
+
+# ─── Messaging ───────────────────────────────────────────────────────────
+messaging:
+  # channel_buffer_size: 100
+
+# ─── Mailbox (offline delivery) ─────────────────────────────────────────
+mailbox:
+  # max_messages_per_target: 500
+  # max_message_size: 262144       # 256 KB
+  # max_total_bytes_per_target: 67108864  # 64 MB
+  # default_ttl: 168h              # 7 days
+  # rate_limit_per_minute: 60
+
+# ─── RTC (voice/video calls) ────────────────────────────────────────────
+rtc:
+  # call_timeout: 30s
+  # enable_video: true
+  # max_participants: 25
+
+# ─── Multi-device ────────────────────────────────────────────────────────
+multidevice:
+  # device_name: ""
+  # max_devices: 5
+  # sync_interval: 30s
+
+# ─── Identity ────────────────────────────────────────────────────────────
+identity:
+  # dht_publish: true
+  # refresh_interval: 4h

@@ -333,8 +333,8 @@ func TestSaveIdentity_InvalidDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateIdentity() failed: %v", err)
 	}
-	// Try to save to an invalid path
-	err = SaveIdentity(identity, "/nonexistent/directory/identity.json")
+	// Try to save to an invalid path (NUL is invalid on all platforms)
+	err = SaveIdentity(identity, string([]byte{0}) + "/identity.json")
 	if err == nil {
 		t.Error("Expected error for invalid directory")
 	}

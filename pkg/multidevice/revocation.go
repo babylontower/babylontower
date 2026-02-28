@@ -9,11 +9,10 @@ import (
 
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
-	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
 
-var revocationLogger = log.Logger("babylontower/multidevice/revocation")
+// logger is declared in sync.go for this package
 
 // RevocationManager handles device revocation
 type RevocationManager struct {
@@ -55,7 +54,7 @@ func (rm *RevocationManager) RevokeDevice(deviceID []byte, reason string) (*pb.R
 	}
 	cert.Signature = signature
 
-	revocationLogger.Infow("device revoked", "device", hex.EncodeToString(deviceID), "reason", reason)
+	logger.Infow("device revoked", "device", hex.EncodeToString(deviceID), "reason", reason)
 
 	return cert, nil
 }
@@ -118,7 +117,7 @@ func (rm *RevocationManager) PublishRevocation(cert *pb.RevocationCertificate, i
 	_ = revocationTopic
 	_ = certBytes
 
-	revocationLogger.Info("revocation published")
+	logger.Info("revocation published")
 	return nil
 }
 
@@ -137,7 +136,7 @@ func (rm *RevocationManager) HandleRevocation(cert *pb.RevocationCertificate) er
 
 	// Check if this is our identity
 	if string(cert.RevokedKey) == string(rm.deviceManager.deviceID) {
-		revocationLogger.Warn("own device was revoked")
+		logger.Warn("own device was revoked")
 		// In full implementation, would notify user and potentially disable device
 		return nil
 	}
@@ -209,7 +208,7 @@ func (fm *FanoutManager) CleanupRevokedDevices(identityPub []byte, identityDoc *
 	for deviceID, session := range identitySessions {
 		if !activeDevices[hex.EncodeToString(session.DeviceID)] {
 			delete(identitySessions, deviceID)
-			revocationLogger.Infow("cleaned up revoked device session", "device", deviceID)
+			logger.Infow("cleaned up revoked device session", "device", deviceID)
 		}
 	}
 }

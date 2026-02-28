@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -14,11 +15,10 @@ import (
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
-	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
 
-var fanoutLogger = log.Logger("babylontower/multidevice/fanout")
+// logger is declared in sync.go for this package
 
 // DeviceSession represents a Double Ratchet session with a specific device
 type DeviceSession struct {
@@ -114,7 +114,7 @@ func (fm *FanoutManager) sendWithFanout(
 	for _, device := range recipientDevices {
 		result, err := fm.sendToDevice(text, recipientIdentityPub, device)
 		if err != nil {
-			fanoutLogger.Warnw("failed to send to device", "device", hex.EncodeToString(device.DeviceId), "error", err)
+			logger.Warnw("failed to send to device", "device", hex.EncodeToString(device.DeviceId), "error", err)
 			if firstError == nil {
 				firstError = err
 			}
@@ -169,7 +169,7 @@ func (fm *FanoutManager) sendWithSymmetricKey(
 	for _, device := range recipientDevices {
 		encryptedKey, err := fm.encryptKeyForDevice(symKey, device)
 		if err != nil {
-			fanoutLogger.Warnw("failed to encrypt key for device", "device", hex.EncodeToString(device.DeviceId), "error", err)
+			logger.Warnw("failed to encrypt key for device", "device", hex.EncodeToString(device.DeviceId), "error", err)
 			continue
 		}
 		keyResults = append(keyResults, encryptedKey)
@@ -492,10 +492,22 @@ func (fm *FanoutManager) signEnvelope(envelope *pb.MultiDeviceEnvelope) ([]byte,
 	return signature, nil
 }
 
-// persistSession persists a session to storage
+// persistSession persists a session to storage using config key-value pairs
 func (fm *FanoutManager) persistSession(identityHex, deviceID string, session *DeviceSession) {
-	// Would persist to storage in full implementation
-	// Key format: session:<identity_hex>:<device_id>
+	if fm.storage == nil {
+		return
+	}
+	key := fmt.Sprintf("session:%s:%s", identityHex, deviceID)
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		logger.Warnw("failed to marshal session for persistence", "error", err)
+		return
+	}
+
+	if err := fm.storage.SetConfig(key, string(data)); err != nil {
+		logger.Warnw("failed to persist session", "identity", identityHex, "device", deviceID, "error", err)
+	}
 }
 
 // generateMessageID generates a random 16-byte message ID

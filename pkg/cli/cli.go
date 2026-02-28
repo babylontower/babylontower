@@ -15,10 +15,9 @@ import (
 	"babylontower/pkg/messaging"
 	"babylontower/pkg/storage"
 	"github.com/chzyer/readline"
-	"github.com/ipfs/go-log/v2"
 )
 
-var cliLogger = log.Logger("babylontower/cli")
+// logger is declared in commands.go for this package
 
 // Config holds CLI configuration
 type Config struct {
@@ -210,7 +209,7 @@ func (c *CLI) output(message string) {
 
 // Stop gracefully shuts down the CLI
 func (c *CLI) Stop() error {
-	cliLogger.Info("stopping CLI...")
+	logger.Info("stopping CLI...")
 
 	// Cancel context
 	c.cancel()
@@ -221,11 +220,11 @@ func (c *CLI) Stop() error {
 	// Close readline
 	if c.rl != nil {
 		if err := c.rl.Close(); err != nil {
-			cliLogger.Warnw("readline close error", "error", err)
+			logger.Warnw("readline close error", "error", err)
 		}
 	}
 
-	cliLogger.Info("CLI stopped")
+	logger.Info("CLI stopped")
 	return nil
 }
 

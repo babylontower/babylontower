@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	pb "babylontower/pkg/proto"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ipfs/go-log/v2"
@@ -636,7 +637,7 @@ func (s *BadgerStorage) PrunePeers(maxAgeDays int, keepCount int) error {
 		if err != nil {
 			return fmt.Errorf("failed to delete stale peers: %w", err)
 		}
-		logger.Infof("Pruned %d stale peers", len(peersToDelete))
+		logger.Debugw("pruned stale peers", "count", len(peersToDelete))
 	}
 
 	return nil
@@ -773,11 +774,11 @@ func (s *BadgerStorage) IsBlacklisted(peerID string) (bool, error) {
 	// Check if entry has expired
 	if entry.IsExpired() {
 		// Auto-remove expired entry
-		go func() {
+		bterrors.SafeGo("blacklist-expire-cleanup", func() {
 			if err := s.DeleteConfig(string(blacklistKey(peerID))); err != nil {
 				logger.Debugw("failed to delete expired blacklist entry", "peer", peerID, "error", err)
 			}
-		}()
+		})
 		return false, nil
 	}
 

@@ -5,7 +5,6 @@ package ratchet
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"fmt"
 	"testing"
 	"time"
@@ -48,31 +47,17 @@ func TestX3DHSessionEstablishment(t *testing.T) {
 		t.Fatalf("Failed to create Bob identity: %v", err)
 	}
 
-	t.Logf("Alice Identity Fingerprint: %s", alice.GetFingerprint())
-	t.Logf("Bob Identity Fingerprint: %s", bob.GetFingerprint())
+	t.Logf("Alice Identity Fingerprint: %s", alice.IdentityFingerprint())
+	t.Logf("Bob Identity Fingerprint: %s", bob.IdentityFingerprint())
 
-	// Step 1: Bob generates and publishes prekey bundle (SPK + OPKs)
-	bobSPK, err := bob.GenerateSignedPrekey(1)
-	if err != nil {
-		t.Fatalf("Failed to generate Bob's SPK: %v", err)
-	}
+	// Step 1: Bob generates prekeys (raw X25519 pairs for testing)
+	bobSPKPub, bobSPKPriv := generateX25519TestKey(t)
+	bobOPKPub, bobOPKPriv := generateX25519TestKey(t)
 
-	bobOPKs, err := bob.GenerateOneTimePrekeys(1, 5)
-	if err != nil {
-		t.Fatalf("Failed to generate Bob's OPKs: %v", err)
-	}
+	t.Log("Bob generated prekeys")
 
-	t.Logf("Bob generated %d one-time prekeys", len(bobOPKs))
-
-	// Step 2: Alice fetches Bob's prekey bundle (simulated - already have keys)
+	// Step 2: Alice fetches Bob's prekey bundle (simulated)
 	t.Log("Alice fetching Bob's prekey bundle from DHT...")
-
-	// Convert to X25519 format for X3DH
-	bobSPKPub := new([32]byte)
-	copy(bobSPKPub[:], bobSPK.PrekeyPub)
-
-	bobOPKPub := new([32]byte)
-	copy(bobOPKPub[:], bobOPKs[0].PrekeyPub)
 
 	// Step 3: Alice performs X3DH as initiator
 	t.Log("Alice performing X3DH...")
@@ -90,11 +75,11 @@ func TestX3DHSessionEstablishment(t *testing.T) {
 	t.Logf("X3DH completed - Cipher suite: 0x%04x", x3dhResult.CipherSuite)
 
 	// Step 4: Alice initializes Double Ratchet as initiator
-	sessionID := fmt.Sprintf("%s-%s", alice.GetFingerprint(), bob.GetFingerprint())
+	sessionID := fmt.Sprintf("%s-%s", alice.IdentityFingerprint(), bob.IdentityFingerprint())
 	aliceRatchet, err := NewDoubleRatchetStateInitiator(
 		sessionID,
-		alice.IKPub,
-		bob.IKPub,
+		alice.IKSignPub,
+		bob.IKSignPub,
 		x3dhResult.SharedSecret,
 		bobSPKPub,
 	)
@@ -109,8 +94,8 @@ func TestX3DHSessionEstablishment(t *testing.T) {
 	bobX3DHResult, err := X3DHResponder(
 		bob.IKDHPriv,
 		bob.IKDHPub,
-		bobSPKPrivFromBundle(bobSPK),
-		bobOPKPrivFromBundle(bobOPKs[0]),
+		bobSPKPriv,
+		bobOPKPriv,
 		alice.IKDHPub,
 		x3dhResult.EphemeralPub,
 	)
@@ -130,10 +115,10 @@ func TestX3DHSessionEstablishment(t *testing.T) {
 	// Step 6: Bob initializes Double Ratchet as responder
 	bobRatchet, err := NewDoubleRatchetStateResponder(
 		sessionID,
-		bob.IKPub,
-		alice.IKPub,
+		bob.IKSignPub,
+		alice.IKSignPub,
 		bobX3DHResult.SharedSecret,
-		bobSPKPrivFromBundle(bobSPK),
+		bobSPKPriv,
 		bobSPKPub,
 	)
 	if err != nil {
@@ -159,7 +144,7 @@ func TestDoubleRatchetMessageExchange(t *testing.T) {
 	t.Log("=== Double Ratchet Message Exchange Test ===")
 
 	// Setup identities
-	alice, bob, aliceRatchet, bobRatchet := setupRatchetSession(t)
+	_, _, aliceRatchet, bobRatchet := setupRatchetSession(t)
 
 	// Test Scenario:
 	// 1. Alice sends 3 messages to Bob
@@ -299,7 +284,7 @@ func TestSkippedMessageHandling(t *testing.T) {
 func TestSessionPersistence(t *testing.T) {
 	t.Log("=== Session Persistence Test ===")
 
-	alice, bob, aliceRatchet, bobRatchet := setupRatchetSession(t)
+	_, _, aliceRatchet, bobRatchet := setupRatchetSession(t)
 
 	// Simulate session state serialization
 	t.Log("Serializing session state...")
@@ -349,7 +334,6 @@ func TestSessionPersistence(t *testing.T) {
 	t.Log("✓ Session can be restored (simulated)")
 
 	// Suppress unused variable warnings
-	_ = bob
 	_ = bobRatchet
 }
 
@@ -361,13 +345,7 @@ func TestX3DHWithoutOPK(t *testing.T) {
 	alice, bob := setupIdentities(t)
 
 	// Generate only SPK, no OPKs (simulating exhausted OPKs)
-	bobSPK, err := bob.GenerateSignedPrekey(1)
-	if err != nil {
-		t.Fatalf("Failed to generate SPK: %v", err)
-	}
-
-	bobSPKPub := new([32]byte)
-	copy(bobSPKPub[:], bobSPK.PrekeyPub)
+	bobSPKPub, bobSPKPriv := generateX25519TestKey(t)
 
 	// Alice initiates without OPK
 	t.Log("Alice initiating X3DH without OPK (3-DH fallback)...")
@@ -386,7 +364,7 @@ func TestX3DHWithoutOPK(t *testing.T) {
 	bobX3DHResult, err := X3DHResponder(
 		bob.IKDHPriv,
 		bob.IKDHPub,
-		bobSPKPrivFromBundle(bobSPK),
+		bobSPKPriv,
 		nil, // No OPK
 		alice.IKDHPub,
 		x3dhResult.EphemeralPub,
@@ -430,25 +408,12 @@ func setupIdentities(t *testing.T) (*identity.IdentityV1, *identity.IdentityV1) 
 func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.IdentityV1, *DoubleRatchetState, *DoubleRatchetState) {
 	alice, bob := setupIdentities(t)
 
-	// Generate Bob's prekeys
-	bobSPK, err := bob.GenerateSignedPrekey(1)
-	if err != nil {
-		t.Fatalf("Failed to generate Bob SPK: %v", err)
-	}
-
-	bobOPKs, err := bob.GenerateOneTimePrekeys(1, 1)
-	if err != nil {
-		t.Fatalf("Failed to generate Bob OPK: %v", err)
-	}
-
-	bobSPKPub := new([32]byte)
-	copy(bobSPKPub[:], bobSPK.PrekeyPub)
-
-	bobOPKPub := new([32]byte)
-	copy(bobOPKPub[:], bobOPKs[0].PrekeyPub)
+	// Generate Bob's prekeys as raw X25519 pairs
+	bobSPKPub, bobSPKPriv := generateX25519TestKey(t)
+	bobOPKPub, bobOPKPriv := generateX25519TestKey(t)
 
 	// X3DH
-	x3dhResult, err := X3DHInitiator(
+	x3dhAlice, err := X3DHInitiator(
 		alice.IKDHPriv,
 		alice.IKDHPub,
 		bob.IKDHPub,
@@ -456,17 +421,29 @@ func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.Identity
 		bobOPKPub,
 	)
 	if err != nil {
-		t.Fatalf("X3DH failed: %v", err)
+		t.Fatalf("X3DH initiator failed: %v", err)
 	}
 
-	sessionID := fmt.Sprintf("%s-%s", alice.GetFingerprint(), bob.GetFingerprint())
+	x3dhBob, err := X3DHResponder(
+		bob.IKDHPriv,
+		bob.IKDHPub,
+		bobSPKPriv,
+		bobOPKPriv,
+		alice.IKDHPub,
+		x3dhAlice.EphemeralPub,
+	)
+	if err != nil {
+		t.Fatalf("X3DH responder failed: %v", err)
+	}
+
+	sessionID := fmt.Sprintf("%s-%s", alice.IdentityFingerprint(), bob.IdentityFingerprint())
 
 	// Create ratchet states
 	aliceRatchet, err := NewDoubleRatchetStateInitiator(
 		sessionID,
-		alice.IKPub,
-		bob.IKPub,
-		x3dhResult.SharedSecret,
+		alice.IKSignPub,
+		bob.IKSignPub,
+		x3dhAlice.SharedSecret,
 		bobSPKPub,
 	)
 	if err != nil {
@@ -475,10 +452,10 @@ func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.Identity
 
 	bobRatchet, err := NewDoubleRatchetStateResponder(
 		sessionID,
-		bob.IKPub,
-		alice.IKPub,
-		x3dhResult.SharedSecret,
-		bobSPKPrivFromBundle(bobSPK),
+		bob.IKSignPub,
+		alice.IKSignPub,
+		x3dhBob.SharedSecret,
+		bobSPKPriv,
 		bobSPKPub,
 	)
 	if err != nil {
@@ -488,31 +465,13 @@ func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.Identity
 	return alice, bob, aliceRatchet, bobRatchet
 }
 
-// bobSPKPrivFromBundle extracts the private key from SPK bundle
-func bobSPKPrivFromBundle(spk *identity.SignedPrekeyBundle) *[32]byte {
-	priv := new([32]byte)
-	copy(priv[:], spk.PrekeyPriv)
-	return priv
-}
-
-// bobOPKPrivFromBundle extracts the private key from OPK bundle
-func bobOPKPrivFromBundle(opk *identity.OneTimePrekeyBundle) *[32]byte {
-	priv := new([32]byte)
-	copy(priv[:], opk.PrekeyPriv)
-	return priv
-}
-
 // BenchmarkX3DHPerformance benchmarks X3DH key exchange
 func BenchmarkX3DH_4DH(b *testing.B) {
 	alice, bob := setupIdentities(&testing.T{})
 
-	bobSPK, _ := bob.GenerateSignedPrekey(1)
-	bobOPKs, _ := bob.GenerateOneTimePrekeys(1, 1)
-
-	bobSPKPub := new([32]byte)
-	copy(bobSPKPub[:], bobSPK.PrekeyPub)
-	bobOPKPub := new([32]byte)
-	copy(bobOPKPub[:], bobOPKs[0].PrekeyPub)
+	t := &testing.T{}
+	bobSPKPub, _ := generateX25519TestKey(t)
+	bobOPKPub, _ := generateX25519TestKey(t)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

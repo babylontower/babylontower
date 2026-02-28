@@ -716,6 +716,10 @@ See [`protocol-v2.md`](protocol-v2.md) for the complete v1 protocol specificatio
 - ⏹️ Prekey generation, rotation, and distribution
 - ⏹️ Unit tests with >80% coverage
 
+**Notes:**
+- DHT validator (8.3.5) is defined but not registered in Node startup; validation logic exists but is not wired into the live DHT.
+- FeatureFlags (8.3.6) has placeholder capabilities; the structure is defined but populated with default/empty values.
+
 ---
 
 ## Phase 9: X3DH & Double Ratchet ⏹️
@@ -801,6 +805,10 @@ See [`protocol-v2.md`](protocol-v2.md) for the complete v1 protocol specificatio
 - ✅ Cross-device message delivery
 - ✅ State synchronization
 - ✅ Device revocation and cleanup
+
+**Notes:**
+- Session persistence in fanout.go uses JSON/config storage rather than full Double Ratchet persistence for per-device sessions.
+- No standalone unit tests for multidevice package; coverage comes from integration tests only.
 
 **Implementation Details:**
 
@@ -993,7 +1001,7 @@ The public groups and channels system was implemented with the following compone
 | 14.5 | Storage policies and eviction | ✅ |
 | 14.6 | Deduplication and ordering | ✅ |
 | 14.7 | Anti-abuse (rate limiting, quotas) | ✅ |
-| 14.8 | IPFS-based media persistence | ⏹️ |
+| 14.8 | IPFS-based media persistence | ⏹️ (placeholder - not implemented, mailbox stores envelopes only) |
 
 **Deliverables:**
 - ✅ Mailbox announcement system (DHT publication/retrieval)
@@ -1093,7 +1101,7 @@ The offline delivery (mailbox) system was implemented with the following compone
 
 ---
 
-## Phase 15: Voice & Video Calls ✅
+## Phase 15: Voice & Video Calls ✅ (Scaffolding)
 
 **Goal:** 1:1 voice and video calls with E2E encrypted signaling and media.
 
@@ -1116,6 +1124,8 @@ The offline delivery (mailbox) system was implemented with the following compone
 - ✅ SDP offer/answer generation and parsing
 - ✅ Call session persistence in BadgerDB
 - ✅ Unit tests for session management and codec negotiation (31 tests passing)
+
+**Note:** Media transport (media.go), signaling delivery (sendSignalingMessage), and SDP generation are scaffolded stubs. No actual WebRTC or real-time media transport is implemented. Integration with the messaging layer for signaling delivery is a TODO.
 
 **Implementation Details:**
 
@@ -1191,7 +1201,7 @@ The voice and video call system was implemented with the following components:
 
 ---
 
-## Phase 16: Group Calls ✅
+## Phase 16: Group Calls ✅ (Scaffolding)
 
 **Goal:** Group voice/video calls with mesh and SFU topologies.
 
@@ -1211,6 +1221,8 @@ The voice and video call system was implemented with the following components:
 - ✅ Group call protobuf definitions (GroupCallSession, ParticipantInfo, GroupCallOffer, etc.)
 - ✅ Group call topic derivation and PubSub subscription
 - ✅ Unit tests for group call logic (11 tests passing)
+
+**Note:** Group call PubSub uses a mock subscription. Media forwarding and real group call topology establishment are scaffolded stubs.
 
 **Implementation Details:**
 

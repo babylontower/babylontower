@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
@@ -324,7 +325,7 @@ func (ct *ContactTracker) GetContactByPeerID(peerID string) (*ContactPeerInfo, b
 // StartPeriodicRefresh starts a goroutine that periodically refreshes contact status
 func (ct *ContactTracker) StartPeriodicRefresh(ctx context.Context) {
 	ticker := time.NewTicker(ct.refreshInterval)
-	go func() {
+	bterrors.SafeGo("contact-tracker-refresh", func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -336,7 +337,7 @@ func (ct *ContactTracker) StartPeriodicRefresh(ctx context.Context) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // GetStats returns statistics about tracked contacts

@@ -539,7 +539,7 @@ func TestRepoDirExpansion(t *testing.T) {
 
 	// Verify the path was expanded (should not contain ~)
 	expanded, _ := expandPath(config.RepoDir)
-	if len(expanded) == 0 || expanded[0] != '/' {
+	if len(expanded) == 0 || !filepath.IsAbs(expanded) {
 		t.Errorf("Path not expanded correctly: %s", expanded)
 	}
 
@@ -572,7 +572,7 @@ func TestExpandPathRespectsHomeEnv(t *testing.T) {
 		t.Fatalf("Failed to expand path: %v", err)
 	}
 
-	expected := filepath.Join(customHome, ".babylontower/ipfs")
+	expected, _ := filepath.Abs(filepath.Join(customHome, ".babylontower/ipfs"))
 	if expanded != expected {
 		t.Errorf("Expected %s, got %s", expected, expanded)
 	}

@@ -281,6 +281,160 @@ func TestEnvelopeWithX3DHHeader(t *testing.T) {
 	}
 }
 
+// TestDeriveDMTopic_EmptyPubkey tests topic derivation with empty pubkey
+func TestDeriveDMTopic_EmptyPubkey(t *testing.T) {
+	// Should not panic, returns a deterministic topic for empty input
+	topic := DeriveDMTopic(nil)
+	if topic[:len(TopicDMPrefix)] != TopicDMPrefix {
+		t.Errorf("Expected DM prefix, got %s", topic)
+	}
+
+	// Empty and nil should produce the same result
+	topic2 := DeriveDMTopic([]byte{})
+	if topic != topic2 {
+		t.Error("nil and empty byte slice should produce same topic")
+	}
+}
+
+// TestVerifyEnvelope_InvalidSenderLength tests verification with wrong key length
+func TestVerifyEnvelope_InvalidSenderLength(t *testing.T) {
+	env := &pb.BabylonEnvelope{
+		SenderIdentity: []byte("short"),
+		Signature:      make([]byte, 64),
+	}
+
+	err := VerifyEnvelope(env)
+	if err == nil {
+		t.Error("Expected error for invalid sender identity length")
+	}
+}
+
+// TestEnvelopeBuilder_AllMessageTypes tests building envelopes with various message types
+func TestEnvelopeBuilder_AllMessageTypes(t *testing.T) {
+	sender := generateTestIdentity(t)
+	recipient := generateTestIdentity(t)
+
+	messageTypes := []pb.MessageType{
+		pb.MessageType_DM_TEXT,
+		pb.MessageType_CTRL_X3DH_INITIAL,
+		pb.MessageType_GROUP_TEXT,
+		pb.MessageType_CHANNEL_POST,
+	}
+
+	for _, mt := range messageTypes {
+		t.Run(mt.String(), func(t *testing.T) {
+			builder := NewEnvelopeBuilder(sender.IKSignPub, sender.DeviceID, sender.IKSignPriv).
+				MessageType(mt).
+				Payload([]byte("test"))
+
+			if mt == pb.MessageType_GROUP_TEXT {
+				builder.Group([]byte("group-id-12345678901234567890123"))
+			} else {
+				builder.Recipient(recipient.IKSignPub)
+			}
+
+			env, err := builder.Build()
+			if err != nil {
+				t.Fatalf("Build failed for %v: %v", mt, err)
+			}
+			if env.MessageType != mt {
+				t.Errorf("Expected message type %v, got %v", mt, env.MessageType)
+			}
+			if err := VerifyEnvelope(env); err != nil {
+				t.Errorf("Verify failed for %v: %v", mt, err)
+			}
+		})
+	}
+}
+
+// TestEnvelopeBuilder_ChannelMessage tests envelope with channel ID
+func TestEnvelopeBuilder_ChannelMessage(t *testing.T) {
+	sender := generateTestIdentity(t)
+	channelID := []byte("test-channel-id-12345678901234567")
+
+	env, err := NewEnvelopeBuilder(sender.IKSignPub, sender.DeviceID, sender.IKSignPriv).
+		MessageType(pb.MessageType_CHANNEL_POST).
+		Channel(channelID).
+		Payload([]byte("channel post")).
+		Build()
+
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if !bytes.Equal(env.ChannelId, channelID) {
+		t.Error("Channel ID mismatch")
+	}
+	if err := VerifyEnvelope(env); err != nil {
+		t.Errorf("Verify failed: %v", err)
+	}
+}
+
+// TestEnvelopeBuilder_EmptyPayload tests building an envelope with no payload
+func TestEnvelopeBuilder_EmptyPayload(t *testing.T) {
+	sender := generateTestIdentity(t)
+	recipient := generateTestIdentity(t)
+
+	env, err := NewEnvelopeBuilder(sender.IKSignPub, sender.DeviceID, sender.IKSignPriv).
+		MessageType(pb.MessageType_DM_TEXT).
+		Recipient(recipient.IKSignPub).
+		Build()
+
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if len(env.Payload) != 0 {
+		t.Error("Expected empty payload")
+	}
+	if err := VerifyEnvelope(env); err != nil {
+		t.Errorf("Verify failed: %v", err)
+	}
+}
+
+// TestParseDMPayload_Invalid tests parsing invalid DM payload
+func TestParseDMPayload_Invalid(t *testing.T) {
+	_, err := ParseDMPayload([]byte("not-protobuf"))
+	if err == nil {
+		t.Error("Expected error for invalid DM payload")
+	}
+}
+
+// TestParseGroupPayload tests parsing a group payload
+func TestParseGroupPayload(t *testing.T) {
+	payload := &pb.GroupPayload{
+		Epoch:      2,
+		ChainIndex: 5,
+		Content:    &pb.GroupPayload_Text{Text: &pb.TextMessage{Text: "hello group"}},
+	}
+
+	data, _ := proto.Marshal(payload)
+	parsed, err := ParseGroupPayload(data)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if parsed.Epoch != 2 {
+		t.Errorf("Expected epoch 2, got %d", parsed.Epoch)
+	}
+	if parsed.ChainIndex != 5 {
+		t.Errorf("Expected chain_index 5, got %d", parsed.ChainIndex)
+	}
+}
+
+// TestParseGroupPayload_Invalid tests parsing invalid group payload
+func TestParseGroupPayload_Invalid(t *testing.T) {
+	_, err := ParseGroupPayload([]byte("invalid"))
+	if err == nil {
+		t.Error("Expected error for invalid group payload")
+	}
+}
+
+// TestParseX3DHHeader_Invalid tests parsing invalid X3DH header
+func TestParseX3DHHeader_Invalid(t *testing.T) {
+	_, err := ParseX3DHHeader([]byte("bad"))
+	if err == nil {
+		t.Error("Expected error for invalid X3DH header")
+	}
+}
+
 // TestEnvelopeGroupMessage tests group envelope construction
 func TestEnvelopeGroupMessage(t *testing.T) {
 	sender := generateTestIdentity(t)

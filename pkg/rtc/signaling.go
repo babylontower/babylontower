@@ -10,11 +10,10 @@ import (
 	"babylontower/pkg/identity"
 	"babylontower/pkg/messaging"
 	pb "babylontower/pkg/proto"
-	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
 
-var sigLogger = log.Logger("babylontower/rtc/signaling")
+// logger is declared in session.go for this package
 
 var (
 	// ErrSignalingNotStarted is returned when operations are attempted on a stopped signaling service
@@ -66,7 +65,7 @@ func (s *SignalingService) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sigLogger.Info("RTC signaling service started")
+	logger.Info("RTC signaling service started")
 	return nil
 }
 
@@ -74,7 +73,7 @@ func (s *SignalingService) Start() error {
 func (s *SignalingService) Stop() {
 	s.cancel()
 	s.wg.Wait()
-	sigLogger.Info("RTC signaling service stopped")
+	logger.Info("RTC signaling service stopped")
 }
 
 // SendOffer initiates a call by sending an RTC offer to a peer
@@ -115,8 +114,7 @@ func (s *SignalingService) SendOffer(remoteIdentity []byte, callType string, sdp
 		return nil, fmt.Errorf("failed to send offer: %w", err)
 	}
 
-	sigLogger.Infof("Sent RTC offer to %s (call ID: %s, type: %s)",
-		hex.EncodeToString(remoteIdentity)[:16], session.CallID, callType)
+	logger.Infow("sent RTC offer", "remote", hex.EncodeToString(remoteIdentity)[:16], "call", session.CallID, "type", callType)
 
 	return session, nil
 }
@@ -148,7 +146,7 @@ func (s *SignalingService) SendAnswer(callID string, sdp string) error {
 		return fmt.Errorf("failed to send answer: %w", err)
 	}
 
-	sigLogger.Infof("Sent RTC answer for call %s", callID)
+	logger.Infow("sent RTC answer", "call", callID)
 
 	return nil
 }
@@ -175,7 +173,7 @@ func (s *SignalingService) SendICECandidate(callID string, candidate string, sdp
 		return fmt.Errorf("failed to send ICE candidate: %w", err)
 	}
 
-	sigLogger.Debugf("Sent ICE candidate for call %s: %s", callID, candidate[:50])
+	logger.Debugw("sent ICE candidate", "call", callID)
 
 	return nil
 }
@@ -199,11 +197,11 @@ func (s *SignalingService) SendHangup(callID string, reason string) error {
 
 	// Send via messaging service
 	if err := s.sendSignalingMessage(session.RemoteIdentity, pb.MessageType_RTC_HANGUP, hangupBytes); err != nil {
-		sigLogger.Warnf("Failed to send hangup message: %v", err)
+		logger.Warnw("failed to send hangup message", "error", err)
 		// Continue with local cleanup even if send fails
 	}
 
-	sigLogger.Infof("Sent hangup for call %s (reason: %s)", callID, reason)
+	logger.Infow("sent hangup", "call", callID, "reason", reason)
 
 	return nil
 }
@@ -219,8 +217,7 @@ func (s *SignalingService) sendSignalingMessage(
 	// Double Ratchet encryption
 
 	// For now, we'll log the signaling message
-	sigLogger.Debugf("Sending signaling message (type: %s) to %s",
-		messageType.String(), hex.EncodeToString(recipientPubKey)[:16])
+	logger.Debugw("sending signaling message", "type", messageType.String(), "remote", hex.EncodeToString(recipientPubKey)[:16])
 
 	// TODO: Integrate with messaging service to send encrypted signaling message
 	// The messaging service needs to be extended to support sending raw payloads
@@ -280,8 +277,7 @@ func (s *SignalingService) handleOffer(senderIdentity []byte, payload []byte) er
 		return fmt.Errorf("failed to create incoming call session: %w", err)
 	}
 
-	sigLogger.Infof("Received RTC offer from %s (call ID: %s, type: %s)",
-		hex.EncodeToString(senderIdentity)[:16], offer.CallId, callType)
+	logger.Infow("received RTC offer", "from", hex.EncodeToString(senderIdentity)[:16], "call", offer.CallId, "type", callType)
 
 	// Notify callback
 	if s.onIncomingOffer != nil {
@@ -304,7 +300,7 @@ func (s *SignalingService) handleAnswer(senderIdentity []byte, payload []byte) e
 		return fmt.Errorf("%w: answer for unknown call", ErrCallNotFound)
 	}
 
-	sigLogger.Infof("Received RTC answer for call %s", answer.CallId)
+	logger.Infow("received RTC answer", "call", answer.CallId)
 
 	// Notify callback
 	if s.onIncomingAnswer != nil {
@@ -337,8 +333,7 @@ func (s *SignalingService) handleICECandidate(senderIdentity []byte, payload []b
 		return fmt.Errorf("failed to add ICE candidate: %w", err)
 	}
 
-	sigLogger.Debugf("Received ICE candidate for call %s: %s",
-		iceCandidate.CallId, iceCandidate.Candidate[:50])
+	logger.Debugw("received ICE candidate", "call", iceCandidate.CallId)
 
 	// Notify callback
 	if s.onIncomingICE != nil {
@@ -359,7 +354,7 @@ func (s *SignalingService) handleHangup(senderIdentity []byte, payload []byte) e
 	// Find the call session
 	session, err := s.sessionMgr.GetSession(hangup.CallId)
 	if err != nil {
-		sigLogger.Warnf("Received hangup for unknown call: %s", hangup.CallId)
+		logger.Warnw("received hangup for unknown call", "call", hangup.CallId)
 		return nil // Don't error, just log
 	}
 
@@ -368,12 +363,11 @@ func (s *SignalingService) handleHangup(senderIdentity []byte, payload []byte) e
 		return fmt.Errorf("%w: hangup from unexpected sender", ErrInvalidSignalingMessage)
 	}
 
-	sigLogger.Infof("Received hangup for call %s (reason: %s)",
-		hangup.CallId, hangup.Reason)
+	logger.Infow("received hangup", "call", hangup.CallId, "reason", hangup.Reason)
 
 	// End the call
 	if err := s.sessionMgr.EndCall(hangup.CallId, hangup.Reason); err != nil {
-		sigLogger.Warnf("Failed to end call %s: %v", hangup.CallId, err)
+		logger.Warnw("failed to end call", "call", hangup.CallId, "error", err)
 	}
 
 	// Notify callback

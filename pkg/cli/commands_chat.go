@@ -80,7 +80,7 @@ func (h *CommandHandler) sendMessage(text string) error {
 	}
 	h.output(FormatMessage(msg, h.chatContactName, true))
 
-	logger.Debugw("message sent via service", "cid", result.CID, "text", text)
+	logger.Debugw("message sent via service", "cid", result.CID, "text_len", len(text))
 	return nil
 }
 
@@ -134,7 +134,7 @@ func (h *CommandHandler) handleHistory(args []string) {
 func (h *CommandHandler) loadAndDisplayHistory(contactPubKey []byte, limit int) {
 	messages, err := h.messaging.GetDecryptedMessagesWithMeta(contactPubKey, limit, 0)
 	if err != nil {
-		logger.Debugw("failed to load history", "error", err)
+		logger.Warnw("failed to load history", "error", err)
 		return
 	}
 
