@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"golang.org/x/crypto/ed25519"
 	"google.golang.org/protobuf/proto"
 )
@@ -183,18 +184,18 @@ func (gs *GroupState) ToProto() *pb.GroupState {
 	}
 
 	return &pb.GroupState{
-		GroupId:         gs.GroupID,
-		Epoch:           gs.Epoch,
-		Name:            gs.Name,
-		Description:     gs.Description,
-		AvatarCid:       gs.AvatarCID,
-		Type:            pb.GroupType(gs.Type),
-		Members:         members,
-		CreatorPubkey:   gs.CreatorPubkey,
-		CreatedAt:       gs.CreatedAt,
-		UpdatedAt:       gs.UpdatedAt,
-		StateSignature:  gs.StateSignature,
-		PreviousHash:    gs.PreviousStateHash,
+		GroupId:        gs.GroupID,
+		Epoch:          gs.Epoch,
+		Name:           gs.Name,
+		Description:    gs.Description,
+		AvatarCid:      gs.AvatarCID,
+		Type:           pb.GroupType(gs.Type),
+		Members:        members,
+		CreatorPubkey:  gs.CreatorPubkey,
+		CreatedAt:      gs.CreatedAt,
+		UpdatedAt:      gs.UpdatedAt,
+		StateSignature: gs.StateSignature,
+		PreviousHash:   gs.PreviousStateHash,
 	}
 }
 

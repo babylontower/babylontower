@@ -12,16 +12,16 @@ import (
 
 // RatchetHeader is included with each encrypted message
 type RatchetHeader struct {
-	DHRatchetPub      *[32]byte // Current DH ratchet public key
-	PreviousChainLen  uint32    // Length of previous sending chain
-	MessageNumber     uint32    // Index in current sending chain
+	DHRatchetPub     *[32]byte // Current DH ratchet public key
+	PreviousChainLen uint32    // Length of previous sending chain
+	MessageNumber    uint32    // Index in current sending chain
 }
 
 // EncryptedMessage is the output of Encrypt
 type EncryptedMessage struct {
-	Header       *RatchetHeader
-	Ciphertext   []byte
-	Nonce        []byte
+	Header     *RatchetHeader
+	Ciphertext []byte
+	Nonce      []byte
 }
 
 // Encrypt encrypts a message using the Double Ratchet

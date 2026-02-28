@@ -14,6 +14,7 @@ import (
 
 	bterrors "babylontower/pkg/errors"
 	"babylontower/pkg/ipfsnode"
+
 	"github.com/ipfs/go-log/v2"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -29,11 +30,11 @@ const (
 
 // PeerRecord contains information about a known peer
 type PeerRecord struct {
-	PublicKey  string   `json:"public_key"`  // Identity public key (hex encoded)
-	PeerID     string   `json:"peer_id"`     // libp2p PeerID
-	Addresses  []string `json:"addresses"`   // Multiaddresses
-	LastSeen   int64    `json:"last_seen"`   // Unix timestamp
-	Connected  bool     `json:"connected"`   // Currently connected
+	PublicKey string   `json:"public_key"` // Identity public key (hex encoded)
+	PeerID    string   `json:"peer_id"`    // libp2p PeerID
+	Addresses []string `json:"addresses"`  // Multiaddresses
+	LastSeen  int64    `json:"last_seen"`  // Unix timestamp
+	Connected bool     `json:"connected"`  // Currently connected
 }
 
 // AddrBook manages a persistent store of peer addresses

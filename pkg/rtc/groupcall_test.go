@@ -8,6 +8,7 @@ import (
 
 	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -75,7 +76,6 @@ func TestCreateGroupCall(t *testing.T) {
 func TestJoinGroupCall(t *testing.T) {
 	id := createTestIdentity(t)
 	messaging := &MockMessagingService{}
-	
 
 	gcm, err := NewGroupCallManager(id, messaging, nil, DefaultGroupCallConfig())
 	if err != nil {
@@ -104,7 +104,6 @@ func TestJoinGroupCall(t *testing.T) {
 func TestLeaveGroupCall(t *testing.T) {
 	id := createTestIdentity(t)
 	messaging := &MockMessagingService{}
-	
 
 	gcm, err := NewGroupCallManager(id, messaging, nil, DefaultGroupCallConfig())
 	if err != nil {
@@ -133,7 +132,6 @@ func TestLeaveGroupCall(t *testing.T) {
 func TestEndGroupCall(t *testing.T) {
 	id := createTestIdentity(t)
 	messaging := &MockMessagingService{}
-	
 
 	gcm, err := NewGroupCallManager(id, messaging, nil, DefaultGroupCallConfig())
 	if err != nil {
@@ -165,7 +163,6 @@ func TestEndGroupCall(t *testing.T) {
 func TestGetParticipant(t *testing.T) {
 	id := createTestIdentity(t)
 	messaging := &MockMessagingService{}
-	
 
 	gcm, err := NewGroupCallManager(id, messaging, nil, DefaultGroupCallConfig())
 	if err != nil {
@@ -193,7 +190,6 @@ func TestGetParticipant(t *testing.T) {
 func TestIsOwner(t *testing.T) {
 	id := createTestIdentity(t)
 	messaging := &MockMessagingService{}
-	
 
 	gcm, err := NewGroupCallManager(id, messaging, nil, DefaultGroupCallConfig())
 	if err != nil {
@@ -219,7 +215,6 @@ func TestIsOwner(t *testing.T) {
 func TestDuration(t *testing.T) {
 	id := createTestIdentity(t)
 	messaging := &MockMessagingService{}
-	
 
 	gcm, err := NewGroupCallManager(id, messaging, nil, DefaultGroupCallConfig())
 	if err != nil {
@@ -247,7 +242,6 @@ func TestDuration(t *testing.T) {
 func TestMeshTopology(t *testing.T) {
 	id := createTestIdentity(t)
 	messaging := &MockMessagingService{}
-	
 
 	gcm, err := NewGroupCallManager(id, messaging, nil, DefaultGroupCallConfig())
 	if err != nil {

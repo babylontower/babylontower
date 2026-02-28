@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -54,20 +55,20 @@ func (m *IdentityDocumentManager) CreateIdentityDocument(
 	}
 
 	doc := &pb.IdentityDocument{
-		IdentitySignPub:     m.identity.IKSignPub,
-		IdentityDhPub:       m.identity.IKDHPub[:],
-		Sequence:            sequence,
-		PreviousHash:        prevHash,
-		CreatedAt:           uint64(now.Unix()),
-		UpdatedAt:           uint64(now.Unix()),
-		Devices:             devices,
-		SignedPrekeys:       signedPrekeys,
-		OneTimePrekeys:      oneTimePrekeys,
-		SupportedVersions:   []uint32{1},
+		IdentitySignPub:       m.identity.IKSignPub,
+		IdentityDhPub:         m.identity.IKDHPub[:],
+		Sequence:              sequence,
+		PreviousHash:          prevHash,
+		CreatedAt:             uint64(now.Unix()),
+		UpdatedAt:             uint64(now.Unix()),
+		Devices:               devices,
+		SignedPrekeys:         signedPrekeys,
+		OneTimePrekeys:        oneTimePrekeys,
+		SupportedVersions:     []uint32{1},
 		SupportedCipherSuites: []string{"BT-X25519-XChaCha20Poly1305-SHA256"},
-		PreferredVersion:    1,
-		DisplayName:         displayName,
-		Features:            features,
+		PreferredVersion:      1,
+		DisplayName:           displayName,
+		Features:              features,
 	}
 
 	// Set created_at to previous timestamp if updating

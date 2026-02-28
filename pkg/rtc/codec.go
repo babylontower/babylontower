@@ -17,13 +17,13 @@ var (
 
 // Codec types
 const (
-	CodecOpus    = "opus"
-	CodecPCMU    = "PCMU"
-	CodecPCMA    = "PCMA"
-	CodecVP8     = "VP8"
-	CodecVP9     = "VP9"
-	CodecH264    = "H264"
-	CodecAV1     = "AV1"
+	CodecOpus = "opus"
+	CodecPCMU = "PCMU"
+	CodecPCMA = "PCMA"
+	CodecVP8  = "VP8"
+	CodecVP9  = "VP9"
+	CodecH264 = "H264"
+	CodecAV1  = "AV1"
 )
 
 // Media types
@@ -120,9 +120,9 @@ func DefaultCapabilities() *CodecCapabilities {
 				ClockRate:   90000,
 				PayloadType: 102,
 				Parameters: map[string]string{
-					"profile-level-id": "42e01f",
+					"profile-level-id":        "42e01f",
 					"level-asymmetry-allowed": "1",
-					"packetization-mode": "1",
+					"packetization-mode":      "1",
 				},
 				Priority: 70,
 				Required: false,
@@ -141,25 +141,25 @@ func DefaultCapabilities() *CodecCapabilities {
 
 // SDP represents a simplified SDP offer/answer
 type SDP struct {
-	Version      int           `json:"version"`
-	Origin       string        `json:"origin"`
-	SessionName  string        `json:"session_name"`
-	Connection   string        `json:"connection"`
-	Timing       string        `json:"timing"`
+	Version       int             `json:"version"`
+	Origin        string          `json:"origin"`
+	SessionName   string          `json:"session_name"`
+	Connection    string          `json:"connection"`
+	Timing        string          `json:"timing"`
 	MediaSections []*MediaSection `json:"media_sections"`
-	Attributes   []string      `json:"attributes,omitempty"`
+	Attributes    []string        `json:"attributes,omitempty"`
 }
 
 // MediaSection represents an SDP media section (m= line)
 type MediaSection struct {
-	MediaType   string   `json:"media_type"`
-	Port        int      `json:"port"`
-	Protocol    string   `json:"protocol"`
-	Formats     []string `json:"formats"`
-	Attributes  []string `json:"attributes,omitempty"`
-	Direction   string   `json:"direction,omitempty"` // sendrecv, sendonly, recvonly, inactive
-	SSRC        uint32   `json:"ssrc,omitempty"`
-	SSRCGroup   []uint32 `json:"ssrc_group,omitempty"`
+	MediaType  string   `json:"media_type"`
+	Port       int      `json:"port"`
+	Protocol   string   `json:"protocol"`
+	Formats    []string `json:"formats"`
+	Attributes []string `json:"attributes,omitempty"`
+	Direction  string   `json:"direction,omitempty"` // sendrecv, sendonly, recvonly, inactive
+	SSRC       uint32   `json:"ssrc,omitempty"`
+	SSRCGroup  []uint32 `json:"ssrc_group,omitempty"`
 }
 
 // CodecNegotiator handles codec negotiation between peers
@@ -392,27 +392,27 @@ func (n *CodecNegotiator) generateVideoAnswer(codec *Codec) string {
 func (s *SDP) Marshal() string {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("v=%d\n", s.Version))
-	builder.WriteString(fmt.Sprintf("o=%s\n", s.Origin))
-	builder.WriteString(fmt.Sprintf("s=%s\n", s.SessionName))
-	builder.WriteString(fmt.Sprintf("c=%s\n", s.Connection))
-	builder.WriteString(fmt.Sprintf("t=%s\n", s.Timing))
+	fmt.Fprintf(&builder, "v=%d\n", s.Version)
+	fmt.Fprintf(&builder, "o=%s\n", s.Origin)
+	fmt.Fprintf(&builder, "s=%s\n", s.SessionName)
+	fmt.Fprintf(&builder, "c=%s\n", s.Connection)
+	fmt.Fprintf(&builder, "t=%s\n", s.Timing)
 
 	for _, attr := range s.Attributes {
-		builder.WriteString(fmt.Sprintf("a=%s\n", attr))
+		fmt.Fprintf(&builder, "a=%s\n", attr)
 	}
 
 	for _, media := range s.MediaSections {
 		formats := strings.Join(media.Formats, " ")
-		builder.WriteString(fmt.Sprintf("m=%s %d %s %s\n",
-			media.MediaType, media.Port, media.Protocol, formats))
+		fmt.Fprintf(&builder, "m=%s %d %s %s\n",
+			media.MediaType, media.Port, media.Protocol, formats)
 
 		for _, attr := range media.Attributes {
-			builder.WriteString(fmt.Sprintf("a=%s\n", attr))
+			fmt.Fprintf(&builder, "a=%s\n", attr)
 		}
 
 		if media.Direction != "" {
-			builder.WriteString(fmt.Sprintf("a=%s\n", media.Direction))
+			fmt.Fprintf(&builder, "a=%s\n", media.Direction)
 		}
 	}
 

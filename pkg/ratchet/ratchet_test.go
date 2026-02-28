@@ -381,15 +381,15 @@ func TestSessionState_Serialization(t *testing.T) {
 	}
 
 	state := &DoubleRatchetState{
-		SessionID:           "test",
-		RootKey:             rootKey,
-		SendingChainKey:     chainKey,
-		SendingChainCount:   5,
-		DHSendingKeyPub:     dhPub,
-		DHSendingKeyPriv:    dhPriv,
-		DHReceivingKeyPub:   dhPub,
-		SkippedKeys:         make(map[string][]byte),
-		IsInitiator:         true,
+		SessionID:         "test",
+		RootKey:           rootKey,
+		SendingChainKey:   chainKey,
+		SendingChainCount: 5,
+		DHSendingKeyPub:   dhPub,
+		DHSendingKeyPriv:  dhPriv,
+		DHReceivingKeyPub: dhPub,
+		SkippedKeys:       make(map[string][]byte),
+		IsInitiator:       true,
 	}
 
 	serializable := state.GetSessionState()

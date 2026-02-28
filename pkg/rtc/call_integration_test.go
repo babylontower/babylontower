@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tyler-smith/go-bip39"
 	"babylontower/pkg/identity"
+
+	"github.com/tyler-smith/go-bip39"
 )
 
 // TestWebRTCOfferAnswerExchange tests WebRTC offer/answer exchange via messaging
@@ -41,13 +42,13 @@ a=sendrecv
 	// Alice creates call session
 	callType := "audio-video"
 	session := &testCallSession{
-		CallID:       generateCallID(),
-		CallerPub:    alice.IKSignPub,
-		CalleePub:    bob.IKSignPub,
-		CallType:     callType,
-		State:        CallStateRing,
-		LocalSDP:     offerSDP,
-		CreatedAt:    uint64(time.Now().Unix()),
+		CallID:    generateCallID(),
+		CallerPub: alice.IKSignPub,
+		CalleePub: bob.IKSignPub,
+		CallType:  callType,
+		State:     CallStateRing,
+		LocalSDP:  offerSDP,
+		CreatedAt: uint64(time.Now().Unix()),
 	}
 
 	t.Logf("Call session created: %s", session.CallID)
@@ -152,14 +153,14 @@ func TestICECandidateExchange(t *testing.T) {
 	// Alice sends candidates to Bob
 	for _, candidate := range aliceCandidates {
 		iceMsg := &SignalingMessage{
-			Type:      MSG_TYPE_ICE,
-			CallID:    session.CallID,
-			FromPub:   alice.IKSignPub,
-			ToPub:     bob.IKSignPub,
-			Candidate: candidate.Candidate,
-			SDPMid:    candidate.SDPMid,
+			Type:       MSG_TYPE_ICE,
+			CallID:     session.CallID,
+			FromPub:    alice.IKSignPub,
+			ToPub:      bob.IKSignPub,
+			Candidate:  candidate.Candidate,
+			SDPMid:     candidate.SDPMid,
 			MLineIndex: candidate.MLineIndex,
-			Timestamp: uint64(time.Now().Unix()),
+			Timestamp:  uint64(time.Now().Unix()),
 		}
 
 		iceMsg.Signature = signSignalingMessage(iceMsg, alice.IKSignPriv)
@@ -180,14 +181,14 @@ func TestICECandidateExchange(t *testing.T) {
 
 	for _, candidate := range bobCandidates {
 		iceMsg := &SignalingMessage{
-			Type:      MSG_TYPE_ICE,
-			CallID:    session.CallID,
-			FromPub:   bob.IKSignPub,
-			ToPub:     alice.IKSignPub,
-			Candidate: candidate.Candidate,
-			SDPMid:    candidate.SDPMid,
+			Type:       MSG_TYPE_ICE,
+			CallID:     session.CallID,
+			FromPub:    bob.IKSignPub,
+			ToPub:      alice.IKSignPub,
+			Candidate:  candidate.Candidate,
+			SDPMid:     candidate.SDPMid,
 			MLineIndex: candidate.MLineIndex,
-			Timestamp: uint64(time.Now().Unix()),
+			Timestamp:  uint64(time.Now().Unix()),
 		}
 
 		iceMsg.Signature = signSignalingMessage(iceMsg, bob.IKSignPriv)
@@ -282,12 +283,12 @@ func TestGroupCallMeshTopology(t *testing.T) {
 
 	// Create group call session
 	groupCall := &GrouptestCallSession{
-		CallID:     generateCallID(),
-		CreatorPub: participants[0].IKSignPub,
-		CallType:   "audio-video",
-		State:      CallStateActive,
+		CallID:       generateCallID(),
+		CreatorPub:   participants[0].IKSignPub,
+		CallType:     "audio-video",
+		State:        CallStateActive,
 		Participants: make(map[string]*GroupCallParticipant),
-		Topology:   TopologyMesh,
+		Topology:     TopologyMesh,
 	}
 
 	// Add participants to mesh
@@ -306,15 +307,15 @@ func TestGroupCallMeshTopology(t *testing.T) {
 	// For N participants, there are N*(N-1)/2 connections
 	expectedConnections := len(participants) * (len(participants) - 1) / 2
 
-	t.Logf("Mesh topology: %d participants → %d peer-to-peer connections", 
+	t.Logf("Mesh topology: %d participants → %d peer-to-peer connections",
 		len(participants), expectedConnections)
 
 	// Verify each participant has connection to others
 	for pubID, participant := range groupCall.Participants {
 		connections := len(groupCall.Participants) - 1 // All except self
-		t.Logf("  %s...%s: %d connections", 
+		t.Logf("  %s...%s: %d connections",
 			pubID[:8], pubID[8:16], connections)
-		
+
 		if participant.State != ParticipantStateConnected {
 			t.Errorf("Participant should be connected")
 		}

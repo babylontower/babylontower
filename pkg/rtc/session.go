@@ -13,6 +13,7 @@ import (
 	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"github.com/google/uuid"
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
@@ -38,11 +39,11 @@ const (
 
 // Hangup reasons
 const (
-	HangupNormal    = "normal"
-	HangupBusy      = "busy"
-	HangupDeclined  = "declined"
-	HangupTimeout   = "timeout"
-	HangupError     = "error"
+	HangupNormal   = "normal"
+	HangupBusy     = "busy"
+	HangupDeclined = "declined"
+	HangupTimeout  = "timeout"
+	HangupError    = "error"
 )
 
 // Call timeouts
@@ -83,13 +84,13 @@ type CallSession struct {
 	RemoteICECandidates []string
 
 	// Media session
-	MediaKey    []byte // Derived media encryption key
-	SSRCLocal   uint32 // Our SSRC
-	SSRCRemote  uint32 // Remote SSRC
+	MediaKey   []byte // Derived media encryption key
+	SSRCLocal  uint32 // Our SSRC
+	SSRCRemote uint32 // Remote SSRC
 
 	// Timing
-	ConnectedAt *time.Time // When the call became active
-	EndedAt     *time.Time // When the call ended
+	ConnectedAt  *time.Time // When the call became active
+	EndedAt      *time.Time // When the call ended
 	HangupReason string
 }
 
@@ -98,15 +99,15 @@ type SessionManager struct {
 	mu       sync.RWMutex
 	sessions map[string]*CallSession // key: call_id
 
-	storage storage.Storage
+	storage  storage.Storage
 	identity *identity.Identity
 
 	// Callbacks
-	onOfferReceived   func(session *CallSession)
-	onAnswerReceived  func(session *CallSession)
-	onICECandidate    func(session *CallSession, candidate string)
-	onCallEnded       func(session *CallSession)
-	onStateChanged    func(session *CallSession, oldState, newState string)
+	onOfferReceived  func(session *CallSession)
+	onAnswerReceived func(session *CallSession)
+	onICECandidate   func(session *CallSession, candidate string)
+	onCallEnded      func(session *CallSession)
+	onStateChanged   func(session *CallSession, oldState, newState string)
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -557,10 +558,10 @@ func (s *CallSession) ToRTCAnswer() *pb.RTCAnswer {
 // ToRTCIceCandidate creates an RTCIceCandidate protobuf message
 func (s *CallSession) ToRTCIceCandidate(candidate string, sdpMid string, mlineIdx uint32) *pb.RTCIceCandidate {
 	return &pb.RTCIceCandidate{
-		Candidate:     candidate,
-		SdpMid:        sdpMid,
-		SdpMlineIdx:   mlineIdx,
-		CallId:        s.CallID,
+		Candidate:   candidate,
+		SdpMid:      sdpMid,
+		SdpMlineIdx: mlineIdx,
+		CallId:      s.CallID,
 	}
 }
 

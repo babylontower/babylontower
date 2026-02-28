@@ -19,11 +19,11 @@ func setupTestStorage(t *testing.T) (*Storage, func()) {
 	require.NoError(t, err)
 
 	config := &pb.MailboxConfig{
-		MaxMessagesPerTarget:    100,
-		MaxMessageSize:          1024 * 1024, // 1 MB
-		MaxTotalBytesPerTarget:  10 * 1024 * 1024, // 10 MB
-		DefaultTtlSeconds:       3600, // 1 hour
-		DepositRateLimit:        10,
+		MaxMessagesPerTarget:   100,
+		MaxMessageSize:         1024 * 1024,      // 1 MB
+		MaxTotalBytesPerTarget: 10 * 1024 * 1024, // 10 MB
+		DefaultTtlSeconds:      3600,             // 1 hour
+		DepositRateLimit:       10,
 	}
 
 	storage, err := NewStorage(db, config)
@@ -114,11 +114,11 @@ func TestStorage_QuotaExceeded(t *testing.T) {
 	}()
 
 	config := &pb.MailboxConfig{
-		MaxMessagesPerTarget:    3, // Very low limit for testing
-		MaxMessageSize:          1024,
-		MaxTotalBytesPerTarget:  10 * 1024,
-		DefaultTtlSeconds:       3600,
-		DepositRateLimit:        100,
+		MaxMessagesPerTarget:   3, // Very low limit for testing
+		MaxMessageSize:         1024,
+		MaxTotalBytesPerTarget: 10 * 1024,
+		DefaultTtlSeconds:      3600,
+		DepositRateLimit:       100,
 	}
 
 	storage, err := NewStorage(db, config)
@@ -199,11 +199,11 @@ func TestStorage_CleanupExpired(t *testing.T) {
 	}()
 
 	config := &pb.MailboxConfig{
-		MaxMessagesPerTarget:    100,
-		MaxMessageSize:          1024,
-		MaxTotalBytesPerTarget:  10 * 1024,
-		DefaultTtlSeconds:       1, // 1 second TTL for testing
-		DepositRateLimit:        100,
+		MaxMessagesPerTarget:   100,
+		MaxMessageSize:         1024,
+		MaxTotalBytesPerTarget: 10 * 1024,
+		DefaultTtlSeconds:      1, // 1 second TTL for testing
+		DepositRateLimit:       100,
 	}
 
 	storage, err := NewStorage(db, config)

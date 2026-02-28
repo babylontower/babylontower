@@ -9,14 +9,15 @@ import (
 
 	"babylontower/pkg/crypto"
 	pb "babylontower/pkg/proto"
+
 	"golang.org/x/crypto/curve25519"
 	"google.golang.org/protobuf/proto"
 )
 
 var (
-	ErrInvalidSignature   = errors.New("invalid signature")
-	ErrInvalidEnvelope    = errors.New("invalid envelope")
-	ErrDecryptionFailed   = errors.New("decryption failed")
+	ErrInvalidSignature = errors.New("invalid signature")
+	ErrInvalidEnvelope  = errors.New("invalid envelope")
+	ErrDecryptionFailed = errors.New("decryption failed")
 )
 
 // BuildMessage creates a new Message protobuf with the given text and timestamp

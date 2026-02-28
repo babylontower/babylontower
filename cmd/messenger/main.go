@@ -16,6 +16,7 @@ import (
 	"babylontower/pkg/messaging"
 	"babylontower/pkg/peerstore"
 	"babylontower/pkg/storage"
+
 	"github.com/ipfs/go-log/v2"
 	libp2ppeer "github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -30,12 +31,12 @@ var (
 )
 
 const (
-	DefaultDataDir     = ".babylontower"
-	IdentityFileName   = "identity.json"
-	StorageDirName     = "storage"
-	IPFSDirName        = "ipfs"
+	DefaultDataDir       = ".babylontower"
+	IdentityFileName     = "identity.json"
+	StorageDirName       = "storage"
+	IPFSDirName          = "ipfs"
 	peerSuccessThreshold = 0.5
-	peerMaxAge         = 7 * 24 * time.Hour
+	peerMaxAge           = 7 * 24 * time.Hour
 )
 
 func main() {
@@ -156,11 +157,11 @@ func run() error {
 	}
 
 	ipfsNode, err := ipfsnode.NewNode(&ipfsnode.Config{
-		RepoDir:          ipfsDir,
-		ProtocolID:       ipfsConfig.ProtocolID,
-		BootstrapPeers:   ipfsConfig.BootstrapPeers,
-		StoredPeers:      storedPeers,
-		EnableRelay:      ipfsConfig.EnableRelay,
+		RepoDir:            ipfsDir,
+		ProtocolID:         ipfsConfig.ProtocolID,
+		BootstrapPeers:     ipfsConfig.BootstrapPeers,
+		StoredPeers:        storedPeers,
+		EnableRelay:        ipfsConfig.EnableRelay,
 		EnableHolePunching: ipfsConfig.EnableHolePunching,
 	})
 	if err != nil {
@@ -405,7 +406,6 @@ func printNewIdentityInfo(ident *identity.Identity) {
 	fmt.Printf("WARNING: If you lose this mnemonic, you lose your identity!\n")
 	fmt.Printf("Store it in a secure location.\n\n")
 }
-
 
 func loadAndConnectStoredPeers(store *storage.BadgerStorage, ipfsConfig *config.IPFSConfig) ([]libp2ppeer.AddrInfo, error) {
 	peers, err := store.ListPeers(ipfsConfig.MaxStoredPeers)

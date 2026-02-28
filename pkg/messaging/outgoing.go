@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -89,9 +90,9 @@ func (s *Service) SendMessage(
 
 	// Create a copy of signed envelope with encrypted ephemeral key for local storage
 	signedEnvelopeForStorage := &pb.SignedEnvelope{
-		Envelope:              signedEnvelope.Envelope,
-		Signature:             signedEnvelope.Signature,
-		SenderPubkey:          signedEnvelope.SenderPubkey,
+		Envelope:               signedEnvelope.Envelope,
+		Signature:              signedEnvelope.Signature,
+		SenderPubkey:           signedEnvelope.SenderPubkey,
 		EncryptedEphemeralPriv: encryptedEphemeral,
 	}
 

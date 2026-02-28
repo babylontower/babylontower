@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tyler-smith/go-bip39"
 	"babylontower/pkg/identity"
+
+	"github.com/tyler-smith/go-bip39"
 )
 
 // TestX3DHSessionEstablishment tests complete X3DH session establishment between two parties

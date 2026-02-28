@@ -35,11 +35,11 @@ type CallManager struct {
 	config *CallConfig
 
 	// Event callbacks
-	onCallStarted    func(callID string, remoteIdentity []byte, callType string)
-	onCallConnected  func(callID string)
-	onCallEnded      func(callID string, reason string, duration time.Duration)
-	onIncomingCall   func(callID string, remoteIdentity []byte, callType string, sdp string)
-	onCallError      func(callID string, err error)
+	onCallStarted   func(callID string, remoteIdentity []byte, callType string)
+	onCallConnected func(callID string)
+	onCallEnded     func(callID string, reason string, duration time.Duration)
+	onIncomingCall  func(callID string, remoteIdentity []byte, callType string, sdp string)
+	onCallError     func(callID string, err error)
 }
 
 // CallConfig holds configuration for call management
@@ -61,12 +61,12 @@ type CallConfig struct {
 // DefaultCallConfig returns the default call configuration
 func DefaultCallConfig() *CallConfig {
 	return &CallConfig{
-		AutoAnswer:         false,
-		AutoAnswerTimeout:  0,
-		CallTimeout:        0, // No limit
-		EnableVideo:        true,
-		MaxICECandidates:   20,
-		ICEGatherTimeout:   ICEGatherTimeout,
+		AutoAnswer:        false,
+		AutoAnswerTimeout: 0,
+		CallTimeout:       0, // No limit
+		EnableVideo:       true,
+		MaxICECandidates:  20,
+		ICEGatherTimeout:  ICEGatherTimeout,
 	}
 }
 

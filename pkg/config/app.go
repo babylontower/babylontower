@@ -17,22 +17,22 @@ type AppConfig struct {
 
 // NetworkConfig holds network and libp2p settings.
 type NetworkConfig struct {
-	BootstrapPeers    []string      `mapstructure:"bootstrap_peers"`
-	DialTimeout       time.Duration `mapstructure:"dial_timeout"`
-	ConnectionTimeout time.Duration `mapstructure:"connection_timeout"`
-	BootstrapTimeout  time.Duration `mapstructure:"bootstrap_timeout"`
-	MaxConnections    int           `mapstructure:"max_connections"`
-	LowWater          int           `mapstructure:"low_water"`
-	HighWater          int           `mapstructure:"high_water"`
-	EnableRelay       bool          `mapstructure:"enable_relay"`
-	EnableHolePunching bool         `mapstructure:"enable_hole_punching"`
-	EnableAutoNAT     bool          `mapstructure:"enable_autonat"`
-	DHTMode           string        `mapstructure:"dht_mode"`
+	BootstrapPeers      []string      `mapstructure:"bootstrap_peers"`
+	DialTimeout         time.Duration `mapstructure:"dial_timeout"`
+	ConnectionTimeout   time.Duration `mapstructure:"connection_timeout"`
+	BootstrapTimeout    time.Duration `mapstructure:"bootstrap_timeout"`
+	MaxConnections      int           `mapstructure:"max_connections"`
+	LowWater            int           `mapstructure:"low_water"`
+	HighWater           int           `mapstructure:"high_water"`
+	EnableRelay         bool          `mapstructure:"enable_relay"`
+	EnableHolePunching  bool          `mapstructure:"enable_hole_punching"`
+	EnableAutoNAT       bool          `mapstructure:"enable_autonat"`
+	DHTMode             string        `mapstructure:"dht_mode"`
 	DHTBootstrapTimeout time.Duration `mapstructure:"dht_bootstrap_timeout"`
-	ListenAddrs       []string      `mapstructure:"listen_addrs"`
-	ProtocolID        string        `mapstructure:"protocol_id"`
-	MaxStoredPeers    int           `mapstructure:"max_stored_peers"`
-	MinPeerConnections int          `mapstructure:"min_peer_connections"`
+	ListenAddrs         []string      `mapstructure:"listen_addrs"`
+	ProtocolID          string        `mapstructure:"protocol_id"`
+	MaxStoredPeers      int           `mapstructure:"max_stored_peers"`
+	MinPeerConnections  int           `mapstructure:"min_peer_connections"`
 }
 
 // StorageConfig holds storage settings.
@@ -85,21 +85,21 @@ type IdentityConfig struct {
 // the ipfsnode package, keeping full backward compatibility.
 func (c *AppConfig) ToIPFSConfig() *IPFSConfig {
 	return &IPFSConfig{
-		BootstrapPeers:     c.Network.BootstrapPeers,
-		BootstrapTimeout:   c.Network.BootstrapTimeout,
-		MaxStoredPeers:     c.Network.MaxStoredPeers,
-		MinPeerConnections: c.Network.MinPeerConnections,
-		ConnectionTimeout:  c.Network.ConnectionTimeout,
-		DialTimeout:        c.Network.DialTimeout,
-		MaxConnections:     c.Network.MaxConnections,
-		LowWater:           c.Network.LowWater,
-		HighWater:          c.Network.HighWater,
-		EnableRelay:        c.Network.EnableRelay,
-		EnableHolePunching: c.Network.EnableHolePunching,
-		EnableAutoNAT:      c.Network.EnableAutoNAT,
-		DHTMode:            c.Network.DHTMode,
+		BootstrapPeers:      c.Network.BootstrapPeers,
+		BootstrapTimeout:    c.Network.BootstrapTimeout,
+		MaxStoredPeers:      c.Network.MaxStoredPeers,
+		MinPeerConnections:  c.Network.MinPeerConnections,
+		ConnectionTimeout:   c.Network.ConnectionTimeout,
+		DialTimeout:         c.Network.DialTimeout,
+		MaxConnections:      c.Network.MaxConnections,
+		LowWater:            c.Network.LowWater,
+		HighWater:           c.Network.HighWater,
+		EnableRelay:         c.Network.EnableRelay,
+		EnableHolePunching:  c.Network.EnableHolePunching,
+		EnableAutoNAT:       c.Network.EnableAutoNAT,
+		DHTMode:             c.Network.DHTMode,
 		DHTBootstrapTimeout: c.Network.DHTBootstrapTimeout,
-		ListenAddrs:        c.Network.ListenAddrs,
-		ProtocolID:         c.Network.ProtocolID,
+		ListenAddrs:         c.Network.ListenAddrs,
+		ProtocolID:          c.Network.ProtocolID,
 	}
 }

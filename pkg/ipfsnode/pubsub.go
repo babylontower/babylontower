@@ -184,16 +184,16 @@ func (n *Node) PublishWithPeerWait(topic string, data []byte, timeout time.Durat
 			select {
 			case <-ctx.Done():
 				peerCount := len(n.pubsub.ListPeers(topic))
-				logger.Warnw("publishing with no peers on topic", 
-					"topic", topic, 
+				logger.Warnw("publishing with no peers on topic",
+					"topic", topic,
 					"waited", timeout,
 					"peer_count", peerCount)
 				// Continue anyway - message may still propagate
 			case <-ticker.C:
 				peerCount := len(n.pubsub.ListPeers(topic))
 				if peerCount > 0 {
-					logger.Debugw("peers available for publish", 
-						"topic", topic, 
+					logger.Debugw("peers available for publish",
+						"topic", topic,
 						"peer_count", peerCount)
 					goto publish
 				}
@@ -215,8 +215,8 @@ publish:
 	}
 
 	peerCount := len(n.pubsub.ListPeers(topic))
-	logger.Debugw("published to topic", 
-		"topic", topic, 
+	logger.Debugw("published to topic",
+		"topic", topic,
 		"size", len(data),
 		"peers_on_topic", peerCount)
 
@@ -369,16 +369,16 @@ func (n *Node) GetTopicInfo(topic string) *TopicInfo {
 
 	// Get peers subscribed to the topic
 	peers := n.pubsub.ListPeers(topic)
-	
+
 	// Note: Direct mesh access is not exported in the public API
 	// We use peer count as an approximation of mesh size
 	meshSize := len(peers)
 
 	return &TopicInfo{
-		Topic:            topic,
-		MeshSize:         meshSize,
-		FanoutSize:       0, // Not accessible via public API
-		SubscribedPeers:  len(peers),
+		Topic:           topic,
+		MeshSize:        meshSize,
+		FanoutSize:      0, // Not accessible via public API
+		SubscribedPeers: len(peers),
 	}
 }
 
@@ -394,7 +394,7 @@ func (n *Node) RefreshDHT(ctx context.Context) error {
 	for i := 0; i < 3; i++ {
 		// Generate a random peer ID to query
 		randomID := peer.ID(fmt.Sprintf("12D3KooWRand%d", time.Now().UnixNano()+int64(i)))
-		
+
 		// Query closest peers
 		_, err := n.dht.GetClosestPeers(ctx, string(randomID))
 		if err != nil {

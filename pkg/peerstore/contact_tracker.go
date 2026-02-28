@@ -13,14 +13,15 @@ import (
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"github.com/multiformats/go-multiaddr"
 )
 
 // ContactTracker manages contact peer information and online status
 type ContactTracker struct {
-	storage storage.Storage
+	storage  storage.Storage
 	ipfsNode *ipfsnode.Node
-	mu      sync.RWMutex
+	mu       sync.RWMutex
 	// Cache of contact peer IDs for quick lookup (key: hex-encoded Ed25519 pubkey)
 	contactPeers map[string]*ContactPeerInfo
 	// Cache refresh interval
@@ -346,11 +347,11 @@ func (ct *ContactTracker) GetStats() ContactTrackerStats {
 	defer ct.mu.RUnlock()
 
 	stats := ContactTrackerStats{
-		TotalContacts:   len(ct.contactPeers),
-		OnlineContacts:  0,
-		ConnectedPeers:  0,
-		WithPeerID:      0,
-		LastRefresh:     ct.lastRefresh,
+		TotalContacts:  len(ct.contactPeers),
+		OnlineContacts: 0,
+		ConnectedPeers: 0,
+		WithPeerID:     0,
+		LastRefresh:    ct.lastRefresh,
 	}
 
 	for _, info := range ct.contactPeers {
@@ -370,9 +371,9 @@ func (ct *ContactTracker) GetStats() ContactTrackerStats {
 
 // ContactTrackerStats contains statistics about contact tracking
 type ContactTrackerStats struct {
-	TotalContacts   int
-	OnlineContacts  int
-	ConnectedPeers  int
-	WithPeerID      int
-	LastRefresh     time.Time
+	TotalContacts  int
+	OnlineContacts int
+	ConnectedPeers int
+	WithPeerID     int
+	LastRefresh    time.Time
 }

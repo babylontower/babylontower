@@ -11,6 +11,7 @@ import (
 
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"golang.org/x/crypto/ed25519"
 	"google.golang.org/protobuf/proto"
 )

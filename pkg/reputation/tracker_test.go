@@ -5,6 +5,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -244,7 +245,7 @@ func TestGetTier(t *testing.T) {
 
 	// Create record and manipulate score to test tier thresholds
 	record := tracker.GetOrCreateRecord(peerID)
-	
+
 	// Set metrics to achieve desired scores
 	// For TierBasic (0.2): all metrics at 0.2
 	record.mu.Lock()
@@ -442,14 +443,14 @@ func TestCompositeScoreComputation(t *testing.T) {
 
 	// Test with different weights
 	customConfig := &Config{
-		RelayReliabilityWeight:     0.5,
-		UptimeConsistencyWeight:    0.0,
-		MailboxReliabilityWeight:   0.5,
-		DHTResponsivenessWeight:    0.0,
-		ContentServingWeight:       0.0,
-		TierContributorThreshold:   DefaultTierContributorThreshold,
-		TierReliableThreshold:      DefaultTierReliableThreshold,
-		TierTrustedThreshold:       DefaultTierTrustedThreshold,
+		RelayReliabilityWeight:   0.5,
+		UptimeConsistencyWeight:  0.0,
+		MailboxReliabilityWeight: 0.5,
+		DHTResponsivenessWeight:  0.0,
+		ContentServingWeight:     0.0,
+		TierContributorThreshold: DefaultTierContributorThreshold,
+		TierReliableThreshold:    DefaultTierReliableThreshold,
+		TierTrustedThreshold:     DefaultTierTrustedThreshold,
 	}
 
 	record.updateCompositeScore(customConfig)

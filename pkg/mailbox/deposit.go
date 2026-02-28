@@ -17,9 +17,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 
-	pb "babylontower/pkg/proto"
 	"babylontower/pkg/crypto"
 	"babylontower/pkg/identity"
+	pb "babylontower/pkg/proto"
 )
 
 // DepositHandler handles incoming deposit requests from senders
@@ -33,7 +33,7 @@ type DepositHandler struct {
 }
 
 type rateLimitEntry struct {
-	count     uint32
+	count      uint32
 	hourBucket int64
 }
 

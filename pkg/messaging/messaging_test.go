@@ -8,6 +8,7 @@ import (
 	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"google.golang.org/protobuf/proto"
 )
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -426,7 +427,7 @@ func (s *MemoryStorage) SaveSenderKey(sk *pb.SenderKeyDistribution) error {
 	defer s.mu.Unlock()
 	groupKey := string(sk.GroupId)
 	senderKey := string(sk.SenderPub)
-	
+
 	if _, ok := s.senderKeys[groupKey]; !ok {
 		s.senderKeys[groupKey] = make(map[string]*pb.SenderKeyDistribution)
 	}

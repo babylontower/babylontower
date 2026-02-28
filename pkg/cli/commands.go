@@ -11,6 +11,7 @@ import (
 	"babylontower/pkg/ipfsnode"
 	"babylontower/pkg/messaging"
 	"babylontower/pkg/storage"
+
 	"github.com/ipfs/go-log/v2"
 	"github.com/mr-tron/base58"
 )
@@ -312,7 +313,7 @@ func (h *CommandHandler) handleGroupChat(args []string) {
 
 	h.output(FormatSuccess(fmt.Sprintf("Entered chat with group '%s'", state.Name)))
 	h.output(FormatInfo("Type a message to send, or empty line to exit"))
-	
+
 	// Note: Full group chat implementation would set chat mode similar to handleChat
 	// For the PoC, we just show the group info
 }

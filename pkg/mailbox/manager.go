@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v3"
-	"github.com/libp2p/go-libp2p-kad-dht"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"google.golang.org/protobuf/proto"
 
-	pb "babylontower/pkg/proto"
 	"babylontower/pkg/identity"
 	"babylontower/pkg/ipfsnode"
+	pb "babylontower/pkg/proto"
 )
 
 // Manager coordinates all mailbox operations
@@ -34,25 +34,25 @@ type Manager struct {
 
 // Config holds mailbox configuration
 type Config struct {
-	Enabled              bool
-	MaxMessagesPerTarget uint32
-	MaxMessageSize       uint64
+	Enabled                bool
+	MaxMessagesPerTarget   uint32
+	MaxMessageSize         uint64
 	MaxTotalBytesPerTarget uint64
-	DefaultTTLSeconds    uint64
-	DepositRateLimit     uint32
-	EnableContentRouting bool
+	DefaultTTLSeconds      uint64
+	DepositRateLimit       uint32
+	EnableContentRouting   bool
 }
 
 // DefaultConfig returns the default mailbox configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:              true,
-		MaxMessagesPerTarget: 500,
-		MaxMessageSize:       262144, // 256 KB
+		Enabled:                true,
+		MaxMessagesPerTarget:   500,
+		MaxMessageSize:         262144,   // 256 KB
 		MaxTotalBytesPerTarget: 67108864, // 64 MB
-		DefaultTTLSeconds:    604800,   // 7 days
-		DepositRateLimit:     100,      // 100 per hour
-		EnableContentRouting: false,
+		DefaultTTLSeconds:      604800,   // 7 days
+		DepositRateLimit:       100,      // 100 per hour
+		EnableContentRouting:   false,
 	}
 }
 
@@ -68,12 +68,12 @@ func NewManager(
 
 	// Convert config to protobuf config
 	protoConfig := &pb.MailboxConfig{
-		MaxMessagesPerTarget:    config.MaxMessagesPerTarget,
-		MaxMessageSize:          config.MaxMessageSize,
-		MaxTotalBytesPerTarget:  config.MaxTotalBytesPerTarget,
-		DefaultTtlSeconds:       config.DefaultTTLSeconds,
-		DepositRateLimit:        config.DepositRateLimit,
-		EnableContentRouting:    config.EnableContentRouting,
+		MaxMessagesPerTarget:   config.MaxMessagesPerTarget,
+		MaxMessageSize:         config.MaxMessageSize,
+		MaxTotalBytesPerTarget: config.MaxTotalBytesPerTarget,
+		DefaultTtlSeconds:      config.DefaultTTLSeconds,
+		DepositRateLimit:       config.DepositRateLimit,
+		EnableContentRouting:   config.EnableContentRouting,
 	}
 
 	// Create storage
@@ -84,14 +84,14 @@ func NewManager(
 	}
 
 	m := &Manager{
-		host:           h,
-		dht:            dht,
-		identity:       id,
-		storage:        storage,
-		config:         protoConfig,
-		ctx:            ctx,
-		cancel:         cancel,
-		isMailbox:      config.Enabled,
+		host:      h,
+		dht:       dht,
+		identity:  id,
+		storage:   storage,
+		config:    protoConfig,
+		ctx:       ctx,
+		cancel:    cancel,
+		isMailbox: config.Enabled,
 	}
 
 	// Create handlers

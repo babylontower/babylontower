@@ -42,9 +42,9 @@ func TestDepositRequest(t *testing.T) {
 
 func TestDepositResponse(t *testing.T) {
 	resp := &pb.DepositResponse{
-		RequestId:      12345,
-		Accepted:       true,
-		StoredUntil:    1234567890 + 604800,
+		RequestId:   12345,
+		Accepted:    true,
+		StoredUntil: 1234567890 + 604800,
 	}
 
 	assert.True(t, resp.Accepted)
@@ -110,12 +110,12 @@ func TestMailboxStats(t *testing.T) {
 
 func TestMailboxConfig(t *testing.T) {
 	config := &pb.MailboxConfig{
-		MaxMessagesPerTarget:    500,
-		MaxMessageSize:          262144,
-		MaxTotalBytesPerTarget:  67108864,
-		DefaultTtlSeconds:       604800,
-		DepositRateLimit:        100,
-		EnableContentRouting:    false,
+		MaxMessagesPerTarget:   500,
+		MaxMessageSize:         262144,
+		MaxTotalBytesPerTarget: 67108864,
+		DefaultTtlSeconds:      604800,
+		DepositRateLimit:       100,
+		EnableContentRouting:   false,
 	}
 
 	assert.Equal(t, uint32(500), config.MaxMessagesPerTarget)

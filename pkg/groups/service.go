@@ -11,6 +11,7 @@ import (
 
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/hkdf"
@@ -149,13 +150,13 @@ func (s *Service) AddMember(groupID []byte, memberPubkey, memberX25519Pubkey []b
 	}
 
 	newState := &GroupState{
-		GroupID:           state.GroupID,
-		Epoch:             state.Epoch + 1,
-		Name:              state.Name,
-		Description:       state.Description,
-		AvatarCID:         state.AvatarCID,
-		Type:              state.Type,
-		Members:           append(append([]GroupMember{}, state.Members...), GroupMember{
+		GroupID:     state.GroupID,
+		Epoch:       state.Epoch + 1,
+		Name:        state.Name,
+		Description: state.Description,
+		AvatarCID:   state.AvatarCID,
+		Type:        state.Type,
+		Members: append(append([]GroupMember{}, state.Members...), GroupMember{
 			Ed25519Pubkey: memberPubkey,
 			X25519Pubkey:  memberX25519Pubkey,
 			DisplayName:   displayName,

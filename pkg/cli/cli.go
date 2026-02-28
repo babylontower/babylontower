@@ -14,6 +14,7 @@ import (
 	"babylontower/pkg/ipfsnode"
 	"babylontower/pkg/messaging"
 	"babylontower/pkg/storage"
+
 	"github.com/chzyer/readline"
 )
 
@@ -31,14 +32,14 @@ type Config struct {
 
 // CLI represents the main command-line interface
 type CLI struct {
-	config      *Config
-	storage     storage.Storage
-	ipfsNode    *ipfsnode.Node
-	messaging   *messaging.Service
-	groups      *groups.Service
-	handler     *CommandHandler
-	rl          *readline.Instance
-	outputMu    sync.Mutex
+	config    *Config
+	storage   storage.Storage
+	ipfsNode  *ipfsnode.Node
+	messaging *messaging.Service
+	groups    *groups.Service
+	handler   *CommandHandler
+	rl        *readline.Instance
+	outputMu  sync.Mutex
 
 	// Identity keys
 	ed25519PubKey  ed25519.PublicKey

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/mr-tron/base58"
 )
 

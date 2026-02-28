@@ -12,36 +12,37 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
 // Protocol version constants
 const (
-	ProtocolVersion1 = 1
+	ProtocolVersion1   = 1
 	DefaultCipherSuite = 0x0001
 )
 
 // Topic prefixes for Protocol v1 routing
 const (
-	TopicDMPrefix      = "babylon-dm-"
-	TopicGroupPrefix   = "babylon-grp-"
-	TopicChannelPrefix = "babylon-ch-"
+	TopicDMPrefix         = "babylon-dm-"
+	TopicGroupPrefix      = "babylon-grp-"
+	TopicChannelPrefix    = "babylon-ch-"
 	TopicRevocationPrefix = "babylon-rev-"
-	TopicSyncPrefix    = "babylon-sync-"
+	TopicSyncPrefix       = "babylon-sync-"
 )
 
 // EnvelopeBuilder helps construct BabylonEnvelope messages
 type EnvelopeBuilder struct {
-	messageType    pb.MessageType
-	senderIdentity ed25519.PublicKey
-	senderDeviceID []byte
-	senderPrivKey  ed25519.PrivateKey
+	messageType       pb.MessageType
+	senderIdentity    ed25519.PublicKey
+	senderDeviceID    []byte
+	senderPrivKey     ed25519.PrivateKey
 	recipientIdentity ed25519.PublicKey
-	groupID        []byte
-	channelID      []byte
-	payload        []byte
-	x3dhHeader     *pb.X3DHHeader
-	cipherSuiteID  uint32
+	groupID           []byte
+	channelID         []byte
+	payload           []byte
+	x3dhHeader        *pb.X3DHHeader
+	cipherSuiteID     uint32
 }
 
 // NewEnvelopeBuilder creates a new envelope builder

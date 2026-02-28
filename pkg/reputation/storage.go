@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/dgraph-io/badger/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
@@ -69,23 +70,23 @@ func (s *Storage) LoadRecord(pid peer.ID) (*Record, error) {
 
 	// Convert protobuf record to local Record
 	metrics := &Metrics{
-		RelayReliability:        float64(protoRecord.Metrics.RelayReliability),
-		RelaySuccessCount:       protoRecord.Metrics.RelaySuccessCount,
-		RelayTotalCount:         protoRecord.Metrics.RelayTotalCount,
-		UptimeConsistency:       float64(protoRecord.Metrics.UptimeConsistency),
-		HoursOnline7d:           protoRecord.Metrics.HoursOnline_7D,
-		LastSeen:                time.Unix(int64(protoRecord.Metrics.LastSeen), 0),
-		MailboxReliability:      float64(protoRecord.Metrics.MailboxReliability),
-		MailboxRetrievedCount:   protoRecord.Metrics.MailboxRetrievedCount,
-		MailboxDepositedCount:   protoRecord.Metrics.MailboxDepositedCount,
-		DHTResponsiveness:       float64(protoRecord.Metrics.DhtResponsiveness),
-		AvgResponseMS:           float64(protoRecord.Metrics.AvgResponseMs),
-		DHTQueryCount:           protoRecord.Metrics.DhtQueryCount,
-		ContentServing:          float64(protoRecord.Metrics.ContentServing),
-		BlocksServedCount:       protoRecord.Metrics.BlocksServedCount,
-		BlocksRequestedCount:    protoRecord.Metrics.BlocksRequestedCount,
-		FirstObserved:           time.Unix(int64(protoRecord.Metrics.FirstObserved), 0),
-		ObservationCount:        protoRecord.Metrics.ObservationCount,
+		RelayReliability:      float64(protoRecord.Metrics.RelayReliability),
+		RelaySuccessCount:     protoRecord.Metrics.RelaySuccessCount,
+		RelayTotalCount:       protoRecord.Metrics.RelayTotalCount,
+		UptimeConsistency:     float64(protoRecord.Metrics.UptimeConsistency),
+		HoursOnline7d:         protoRecord.Metrics.HoursOnline_7D,
+		LastSeen:              time.Unix(int64(protoRecord.Metrics.LastSeen), 0),
+		MailboxReliability:    float64(protoRecord.Metrics.MailboxReliability),
+		MailboxRetrievedCount: protoRecord.Metrics.MailboxRetrievedCount,
+		MailboxDepositedCount: protoRecord.Metrics.MailboxDepositedCount,
+		DHTResponsiveness:     float64(protoRecord.Metrics.DhtResponsiveness),
+		AvgResponseMS:         float64(protoRecord.Metrics.AvgResponseMs),
+		DHTQueryCount:         protoRecord.Metrics.DhtQueryCount,
+		ContentServing:        float64(protoRecord.Metrics.ContentServing),
+		BlocksServedCount:     protoRecord.Metrics.BlocksServedCount,
+		BlocksRequestedCount:  protoRecord.Metrics.BlocksRequestedCount,
+		FirstObserved:         time.Unix(int64(protoRecord.Metrics.FirstObserved), 0),
+		ObservationCount:      protoRecord.Metrics.ObservationCount,
 	}
 
 	attestations := make([]*Attestation, len(protoRecord.Attestations))
@@ -151,23 +152,23 @@ func (s *Storage) ListRecords() ([]*Record, error) {
 
 			// Convert to local Record
 			metrics := &Metrics{
-				RelayReliability:        float64(protoRecord.Metrics.RelayReliability),
-				RelaySuccessCount:       protoRecord.Metrics.RelaySuccessCount,
-				RelayTotalCount:         protoRecord.Metrics.RelayTotalCount,
-				UptimeConsistency:       float64(protoRecord.Metrics.UptimeConsistency),
-				HoursOnline7d:           protoRecord.Metrics.HoursOnline_7D,
-				LastSeen:                time.Unix(int64(protoRecord.Metrics.LastSeen), 0),
-				MailboxReliability:      float64(protoRecord.Metrics.MailboxReliability),
-				MailboxRetrievedCount:   protoRecord.Metrics.MailboxRetrievedCount,
-				MailboxDepositedCount:   protoRecord.Metrics.MailboxDepositedCount,
-				DHTResponsiveness:       float64(protoRecord.Metrics.DhtResponsiveness),
-				AvgResponseMS:           float64(protoRecord.Metrics.AvgResponseMs),
-				DHTQueryCount:           protoRecord.Metrics.DhtQueryCount,
-				ContentServing:          float64(protoRecord.Metrics.ContentServing),
-				BlocksServedCount:       protoRecord.Metrics.BlocksServedCount,
-				BlocksRequestedCount:    protoRecord.Metrics.BlocksRequestedCount,
-				FirstObserved:           time.Unix(int64(protoRecord.Metrics.FirstObserved), 0),
-				ObservationCount:        protoRecord.Metrics.ObservationCount,
+				RelayReliability:      float64(protoRecord.Metrics.RelayReliability),
+				RelaySuccessCount:     protoRecord.Metrics.RelaySuccessCount,
+				RelayTotalCount:       protoRecord.Metrics.RelayTotalCount,
+				UptimeConsistency:     float64(protoRecord.Metrics.UptimeConsistency),
+				HoursOnline7d:         protoRecord.Metrics.HoursOnline_7D,
+				LastSeen:              time.Unix(int64(protoRecord.Metrics.LastSeen), 0),
+				MailboxReliability:    float64(protoRecord.Metrics.MailboxReliability),
+				MailboxRetrievedCount: protoRecord.Metrics.MailboxRetrievedCount,
+				MailboxDepositedCount: protoRecord.Metrics.MailboxDepositedCount,
+				DHTResponsiveness:     float64(protoRecord.Metrics.DhtResponsiveness),
+				AvgResponseMS:         float64(protoRecord.Metrics.AvgResponseMs),
+				DHTQueryCount:         protoRecord.Metrics.DhtQueryCount,
+				ContentServing:        float64(protoRecord.Metrics.ContentServing),
+				BlocksServedCount:     protoRecord.Metrics.BlocksServedCount,
+				BlocksRequestedCount:  protoRecord.Metrics.BlocksRequestedCount,
+				FirstObserved:         time.Unix(int64(protoRecord.Metrics.FirstObserved), 0),
+				ObservationCount:      protoRecord.Metrics.ObservationCount,
 			}
 
 			attestations := make([]*Attestation, len(protoRecord.Attestations))
@@ -246,12 +247,12 @@ func (s *Storage) LoadConfig() (*Config, error) {
 
 // GetStats returns statistics about stored reputation records
 type Stats struct {
-	TotalRecords     int
-	TierBasicCount   int
+	TotalRecords         int
+	TierBasicCount       int
 	TierContributorCount int
-	TierReliableCount  int
-	TierTrustedCount   int
-	AverageScore     float64
+	TierReliableCount    int
+	TierTrustedCount     int
+	AverageScore         float64
 }
 
 // GetStats computes statistics about reputation records

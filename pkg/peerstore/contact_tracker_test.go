@@ -23,8 +23,8 @@ func addTestContact(t *testing.T, store storage.Storage, id byte, peerID string)
 	t.Helper()
 	pk := makePubKey(id)
 	c := &pb.Contact{
-		PublicKey:    pk,
-		DisplayName:  "test-" + peerID,
+		PublicKey:   pk,
+		DisplayName: "test-" + peerID,
 		PeerId:      peerID,
 		Multiaddrs:  []string{"/ip4/127.0.0.1/tcp/4001"},
 		LastSeen:    1000,
@@ -56,8 +56,8 @@ func TestUpdateContact(t *testing.T) {
 	ct, _ := newTestTracker(t)
 
 	c := &pb.Contact{
-		PublicKey:    makePubKey(1),
-		DisplayName:  "Alice",
+		PublicKey:   makePubKey(1),
+		DisplayName: "Alice",
 		PeerId:      "peer-alice",
 		Multiaddrs:  []string{"/ip4/10.0.0.1/tcp/5000"},
 		LastSeen:    2000,
@@ -82,7 +82,7 @@ func TestGetContactPeerID(t *testing.T) {
 
 	require.NoError(t, ct.UpdateContact(&pb.Contact{
 		PublicKey: makePubKey(1),
-		PeerId:   "peer-1",
+		PeerId:    "peer-1",
 	}))
 
 	pid, ok := ct.GetContactPeerID(makePubKey(1))
@@ -92,7 +92,7 @@ func TestGetContactPeerID(t *testing.T) {
 	// Empty PeerID returns false
 	require.NoError(t, ct.UpdateContact(&pb.Contact{
 		PublicKey: makePubKey(2),
-		PeerId:   "",
+		PeerId:    "",
 	}))
 	_, ok = ct.GetContactPeerID(makePubKey(2))
 	assert.False(t, ok)

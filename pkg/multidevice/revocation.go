@@ -9,6 +9,7 @@ import (
 
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -66,7 +67,7 @@ func (rm *RevocationManager) signRevocation(cert *pb.RevocationCertificate) ([]b
 	data = append(data, cert.RevokedKey...)
 	data = append(data, []byte(cert.RevocationType)...)
 	data = append(data, []byte(cert.Reason)...)
-	
+
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.RevokedAt >> (56 - i*8))
@@ -84,7 +85,7 @@ func VerifyRevocation(cert *pb.RevocationCertificate, identityPub ed25519.Public
 	data = append(data, cert.RevokedKey...)
 	data = append(data, []byte(cert.RevocationType)...)
 	data = append(data, []byte(cert.Reason)...)
-	
+
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.RevokedAt >> (56 - i*8))
@@ -107,7 +108,7 @@ func (rm *RevocationManager) PublishRevocation(cert *pb.RevocationCertificate, i
 
 	// Publish to revocation topic
 	revocationTopic := rm.getRevocationTopic(rm.deviceManager.identitySignPub)
-	
+
 	certBytes, err := proto.Marshal(cert)
 	if err != nil {
 		return fmt.Errorf("failed to marshal certificate: %w", err)
@@ -169,7 +170,7 @@ func (rm *RevocationManager) IsDeviceRevoked(identityDoc *pb.IdentityDocument, d
 // GetActiveDevices returns devices that are not revoked
 func GetActiveDevices(identityDoc *pb.IdentityDocument) []*pb.DeviceCertificate {
 	active := make([]*pb.DeviceCertificate, 0, len(identityDoc.Devices))
-	
+
 	for _, device := range identityDoc.Devices {
 		revoked := false
 		for _, revocation := range identityDoc.Revocations {
@@ -189,7 +190,7 @@ func GetActiveDevices(identityDoc *pb.IdentityDocument) []*pb.DeviceCertificate 
 // CleanupRevokedDevices removes revoked devices from session cache
 func (fm *FanoutManager) CleanupRevokedDevices(identityPub []byte, identityDoc *pb.IdentityDocument) {
 	identityHex := hex.EncodeToString(identityPub)
-	
+
 	fm.sessMu.Lock()
 	defer fm.sessMu.Unlock()
 

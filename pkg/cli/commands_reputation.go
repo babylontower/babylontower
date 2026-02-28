@@ -113,7 +113,7 @@ func (h *CommandHandler) handleReputationList() {
 		metrics := sr.record.GetMetrics()
 		tier := sr.record.GetTier()
 		attestations := sr.record.GetAttestations()
-		
+
 		sb.WriteString(fmt.Sprintf("[%d] Peer: %s\n", i+1, sr.peerID[:16]))
 		sb.WriteString(fmt.Sprintf("    Score: %.3f (%s)\n", sr.score, tier.String()))
 		sb.WriteString(fmt.Sprintf("    Relay: %.2f (%d/%d)\n",

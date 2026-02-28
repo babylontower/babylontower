@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/mr-tron/base58"
 )
 

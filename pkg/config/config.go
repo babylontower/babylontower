@@ -14,9 +14,9 @@ const (
 	DefaultProtocolID = "/babylontower/1.0.0"
 
 	// Default timeouts
-	DefaultBootstrapTimeout   = 60 * time.Second
-	DefaultConnectionTimeout  = 30 * time.Second
-	DefaultDialTimeout        = 15 * time.Second
+	DefaultBootstrapTimeout    = 60 * time.Second
+	DefaultConnectionTimeout   = 30 * time.Second
+	DefaultDialTimeout         = 15 * time.Second
 	DefaultDHTBootstrapTimeout = 60 * time.Second
 
 	// Default connection limits
@@ -29,40 +29,40 @@ const (
 	DefaultMinPeerConnections = 10
 
 	// Default listen addresses
-	DefaultListenAddrTCP  = "/ip4/0.0.0.0/tcp/0"
-	DefaultListenAddrWS   = "/ip4/0.0.0.0/tcp/0/ws"
+	DefaultListenAddrTCP   = "/ip4/0.0.0.0/tcp/0"
+	DefaultListenAddrWS    = "/ip4/0.0.0.0/tcp/0/ws"
 	DefaultListenAddrTCPv6 = "/ip6/::/tcp/0"
 )
 
 // IPFSConfig holds configuration for the IPFS node (internal representation for ipfsnode package)
 type IPFSConfig struct {
 	// Bootstrap configuration
-	BootstrapPeers      []string        `json:"bootstrap_peers"`
-	BootstrapTimeout    time.Duration   `json:"bootstrap_timeout"`
+	BootstrapPeers   []string      `json:"bootstrap_peers"`
+	BootstrapTimeout time.Duration `json:"bootstrap_timeout"`
 
 	// Peer persistence
-	MaxStoredPeers      int             `json:"max_stored_peers"`
-	MinPeerConnections  int             `json:"min_peer_connections"`
+	MaxStoredPeers     int `json:"max_stored_peers"`
+	MinPeerConnections int `json:"min_peer_connections"`
 
 	// Connection management
-	ConnectionTimeout   time.Duration   `json:"connection_timeout"`
-	DialTimeout         time.Duration   `json:"dial_timeout"`
-	MaxConnections      int             `json:"max_connections"`
-	LowWater            int             `json:"low_water"`
-	HighWater           int             `json:"high_water"`
+	ConnectionTimeout time.Duration `json:"connection_timeout"`
+	DialTimeout       time.Duration `json:"dial_timeout"`
+	MaxConnections    int           `json:"max_connections"`
+	LowWater          int           `json:"low_water"`
+	HighWater         int           `json:"high_water"`
 
 	// NAT traversal
-	EnableRelay         bool            `json:"enable_relay"`
-	EnableHolePunching  bool            `json:"enable_hole_punching"`
-	EnableAutoNAT       bool            `json:"enable_autonat"`
+	EnableRelay        bool `json:"enable_relay"`
+	EnableHolePunching bool `json:"enable_hole_punching"`
+	EnableAutoNAT      bool `json:"enable_autonat"`
 
 	// DHT configuration
-	DHTMode             string          `json:"dht_mode"`
-	DHTBootstrapTimeout time.Duration   `json:"dht_bootstrap_timeout"`
+	DHTMode             string        `json:"dht_mode"`
+	DHTBootstrapTimeout time.Duration `json:"dht_bootstrap_timeout"`
 
 	// Network configuration
-	ListenAddrs         []string        `json:"listen_addrs"`
-	ProtocolID          string          `json:"protocol_id"`
+	ListenAddrs []string `json:"listen_addrs"`
+	ProtocolID  string   `json:"protocol_id"`
 }
 
 // DefaultIPFSConfig returns an IPFSConfig with sensible defaults
@@ -84,23 +84,23 @@ func DefaultIPFSConfig() *IPFSConfig {
 			"/ip4/178.62.158.147/tcp/4001/p2p/QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd",
 			"/ip4/178.62.61.185/tcp/4001/p2p/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3",
 		},
-		BootstrapTimeout:      DefaultBootstrapTimeout,
+		BootstrapTimeout: DefaultBootstrapTimeout,
 
 		// Peer storage
-		MaxStoredPeers:      DefaultMaxStoredPeers,
-		MinPeerConnections:  DefaultMinPeerConnections,
+		MaxStoredPeers:     DefaultMaxStoredPeers,
+		MinPeerConnections: DefaultMinPeerConnections,
 
 		// Connection management
-		ConnectionTimeout:   DefaultConnectionTimeout,
-		DialTimeout:         DefaultDialTimeout,
-		MaxConnections:      DefaultMaxConnections,
-		LowWater:            DefaultLowWater,
-		HighWater:           DefaultHighWater,
+		ConnectionTimeout: DefaultConnectionTimeout,
+		DialTimeout:       DefaultDialTimeout,
+		MaxConnections:    DefaultMaxConnections,
+		LowWater:          DefaultLowWater,
+		HighWater:         DefaultHighWater,
 
 		// NAT traversal
-		EnableRelay:         false,
-		EnableHolePunching:  true,
-		EnableAutoNAT:       true,
+		EnableRelay:        false,
+		EnableHolePunching: true,
+		EnableAutoNAT:      true,
 
 		// DHT
 		DHTMode:             "auto",
@@ -112,10 +112,9 @@ func DefaultIPFSConfig() *IPFSConfig {
 			DefaultListenAddrWS,
 			DefaultListenAddrTCPv6,
 		},
-		ProtocolID:          DefaultProtocolID,
+		ProtocolID: DefaultProtocolID,
 	}
 }
-
 
 // Validate validates the configuration
 func (c *IPFSConfig) Validate() error {
@@ -195,4 +194,3 @@ func (c *IPFSConfig) GetBootstrapPeerInfos() ([]multiaddr.Multiaddr, error) {
 	}
 	return addrs, nil
 }
-

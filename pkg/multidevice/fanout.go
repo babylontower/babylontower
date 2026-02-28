@@ -15,6 +15,7 @@ import (
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -34,8 +35,8 @@ type DeviceSession struct {
 	DHRatchet  []byte // Current DH ratchet key
 
 	// Metadata
-	CreatedAt   time.Time
-	LastUsedAt  time.Time
+	CreatedAt      time.Time
+	LastUsedAt     time.Time
 	MessageCounter uint32
 }
 
@@ -71,13 +72,13 @@ func NewFanoutManager(config *FanoutConfig) *FanoutManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &FanoutManager{
-		deviceManager:   config.DeviceManager,
-		storage:         config.Storage,
-		ipfsNode:        config.IPFSNode,
-		ctx:             ctx,
-		cancel:          cancel,
-		sessions:        make(map[string]map[string]*DeviceSession),
-		symmetricKeys:   make(map[string][]byte),
+		deviceManager: config.DeviceManager,
+		storage:       config.Storage,
+		ipfsNode:      config.IPFSNode,
+		ctx:           ctx,
+		cancel:        cancel,
+		sessions:      make(map[string]map[string]*DeviceSession),
+		symmetricKeys: make(map[string][]byte),
 	}
 }
 
@@ -129,9 +130,9 @@ func (fm *FanoutManager) sendWithFanout(
 	}
 
 	return &SendResult{
-		SuccessCount: successCount,
-		TotalDevices: len(recipientDevices),
-		DeviceResults: results,
+		SuccessCount:     successCount,
+		TotalDevices:     len(recipientDevices),
+		DeviceResults:    results,
 		OptimizationUsed: "fanout",
 	}, nil
 }
@@ -177,17 +178,17 @@ func (fm *FanoutManager) sendWithSymmetricKey(
 
 	// Build multi-device envelope
 	envelope := &pb.MultiDeviceEnvelope{
-		ProtocolVersion: 1,
-		MessageType:     pb.MessageType_DM_TEXT,
-		SenderIdentity:  fm.deviceManager.identitySignPub,
+		ProtocolVersion:   1,
+		MessageType:       pb.MessageType_DM_TEXT,
+		SenderIdentity:    fm.deviceManager.identitySignPub,
 		RecipientIdentity: recipientIdentityPub,
-		Timestamp:       uint64(time.Now().Unix()),
-		MessageId:       generateMessageID(),
-		Payload:         ciphertext,
-		SenderDeviceId:  fm.deviceManager.deviceID,
-		Nonce:           nonce,
-		CipherSuiteId:   0x0001,
-		EncryptedKeys:   make([]*pb.EncryptedDeviceKey, 0, len(keyResults)),
+		Timestamp:         uint64(time.Now().Unix()),
+		MessageId:         generateMessageID(),
+		Payload:           ciphertext,
+		SenderDeviceId:    fm.deviceManager.deviceID,
+		Nonce:             nonce,
+		CipherSuiteId:     0x0001,
+		EncryptedKeys:     make([]*pb.EncryptedDeviceKey, 0, len(keyResults)),
 	}
 
 	for _, ek := range keyResults {
@@ -250,9 +251,9 @@ func (fm *FanoutManager) sendToDevice(
 
 	// Build DMPayload
 	ratchetHeader := &pb.RatchetHeader{
-		DhRatchetPub:         session.DHRatchet,
-		PreviousChainLength:  0, // Would track in full implementation
-		MessageNumber:        session.MessageCounter,
+		DhRatchetPub:        session.DHRatchet,
+		PreviousChainLength: 0, // Would track in full implementation
+		MessageNumber:       session.MessageCounter,
 	}
 
 	payload := &pb.DMPayload{
@@ -441,19 +442,19 @@ func (fm *FanoutManager) encryptKeyForDevice(symKey []byte, device *pb.DeviceCer
 func (fm *FanoutManager) signBabylonEnvelope(envelope *pb.BabylonEnvelope) ([]byte, error) {
 	// Canonical serialization for signing (fields 1-10, 12)
 	data := make([]byte, 0, 4+4+32+32+8+16+len(envelope.Payload)+16+24+4)
-	
+
 	// Append fields in order
 	data = append(data, byte(envelope.ProtocolVersion))
 	data = append(data, byte(envelope.MessageType))
 	data = append(data, envelope.SenderIdentity...)
 	data = append(data, envelope.RecipientIdentity...)
-	
+
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(envelope.Timestamp >> (56 - i*8))
 	}
 	data = append(data, tsBytes...)
-	
+
 	data = append(data, envelope.MessageId...)
 	data = append(data, envelope.Payload...)
 	data = append(data, envelope.SenderDeviceId...)
@@ -552,7 +553,7 @@ func (fm *FanoutManager) Stop() error {
 
 // Common errors
 var (
-	ErrNoDevices      = errors.New("no recipient devices")
+	ErrNoDevices       = errors.New("no recipient devices")
 	ErrSessionNotFound = errors.New("session not found")
 	ErrKeyDistribution = errors.New("failed to distribute symmetric key")
 )

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/dgraph-io/badger/v3"
 	"google.golang.org/protobuf/proto"
 )
@@ -16,39 +17,39 @@ import (
 // Identity v1 storage key prefixes
 const (
 	// Identity v1 prefixes
-	identityPrefix    = "id:"    // Identity documents by identity pubkey hash
-	devicePrefix      = "dev:"   // Device certificates by device ID
-	spkPrefix         = "spk:"   // Signed prekeys by prekey ID
-	opkPrefix         = "opk:"   // One-time prekeys by prekey ID
-	sessionPrefix     = "dr:"    // Double Ratchet session state by session ID
-	prekeyBundlePrefix = "pb:"   // Prekey bundle cache by identity pubkey hash
+	identityPrefix     = "id:"  // Identity documents by identity pubkey hash
+	devicePrefix       = "dev:" // Device certificates by device ID
+	spkPrefix          = "spk:" // Signed prekeys by prekey ID
+	opkPrefix          = "opk:" // One-time prekeys by prekey ID
+	sessionPrefix      = "dr:"  // Double Ratchet session state by session ID
+	prekeyBundlePrefix = "pb:"  // Prekey bundle cache by identity pubkey hash
 )
 
 // IdentityDocumentRecord wraps a protobuf IdentityDocument with metadata
 type IdentityDocumentRecord struct {
-	Document      *pb.IdentityDocument `json:"document"`
-	FetchedAt     time.Time            `json:"fetched_at"`
-	Source        string               `json:"source"` // "local", "dht", "peer"
-	DocumentHash  []byte               `json:"document_hash"`
+	Document     *pb.IdentityDocument `json:"document"`
+	FetchedAt    time.Time            `json:"fetched_at"`
+	Source       string               `json:"source"` // "local", "dht", "peer"
+	DocumentHash []byte               `json:"document_hash"`
 }
 
 // SessionState stores Double Ratchet session state
 type SessionState struct {
-	SessionID              string    `json:"session_id"`
-	RemoteIdentityPub      []byte    `json:"remote_identity_pub"`
-	LocalIdentityPub       []byte    `json:"local_identity_pub"`
-	DHSendingKeyPriv       []byte    `json:"dh_sending_key_priv"`
-	DHSendingKeyPub        []byte    `json:"dh_sending_key_pub"`
-	DHReceivingPub         []byte    `json:"dh_receiving_pub"`
-	RootKey                []byte    `json:"root_key"`
-	SendingChainKey        []byte    `json:"sending_chain_key"`
-	SendingChainCounter    uint32    `json:"sending_chain_counter"`
-	ReceivingChainKey      []byte    `json:"receiving_chain_key"`
-	ReceivingChainCounter  uint32    `json:"receiving_chain_counter"`
-	SkippedKeys            []SkippedKey `json:"skipped_keys"`
-	CreatedAt              time.Time `json:"created_at"`
-	LastUsedAt             time.Time `json:"last_used_at"`
-	CipherSuiteID          uint32    `json:"cipher_suite_id"`
+	SessionID             string       `json:"session_id"`
+	RemoteIdentityPub     []byte       `json:"remote_identity_pub"`
+	LocalIdentityPub      []byte       `json:"local_identity_pub"`
+	DHSendingKeyPriv      []byte       `json:"dh_sending_key_priv"`
+	DHSendingKeyPub       []byte       `json:"dh_sending_key_pub"`
+	DHReceivingPub        []byte       `json:"dh_receiving_pub"`
+	RootKey               []byte       `json:"root_key"`
+	SendingChainKey       []byte       `json:"sending_chain_key"`
+	SendingChainCounter   uint32       `json:"sending_chain_counter"`
+	ReceivingChainKey     []byte       `json:"receiving_chain_key"`
+	ReceivingChainCounter uint32       `json:"receiving_chain_counter"`
+	SkippedKeys           []SkippedKey `json:"skipped_keys"`
+	CreatedAt             time.Time    `json:"created_at"`
+	LastUsedAt            time.Time    `json:"last_used_at"`
+	CipherSuiteID         uint32       `json:"cipher_suite_id"`
 }
 
 // SkippedKey stores a skipped message key for out-of-order delivery
@@ -60,11 +61,11 @@ type SkippedKey struct {
 
 // PrekeyBundleCache caches prekey bundles fetched from DHT
 type PrekeyBundleCache struct {
-	IdentityPub    []byte               `json:"identity_pub"`
-	SignedPrekeys  []*pb.SignedPrekey   `json:"signed_prekeys"`
-	OneTimePrekeys []*pb.OneTimePrekey  `json:"one_time_prekeys"`
-	FetchedAt      time.Time            `json:"fetched_at"`
-	ConsumedOPKs   map[uint64]bool      `json:"consumed_opks"` // Track consumed OPK IDs
+	IdentityPub    []byte              `json:"identity_pub"`
+	SignedPrekeys  []*pb.SignedPrekey  `json:"signed_prekeys"`
+	OneTimePrekeys []*pb.OneTimePrekey `json:"one_time_prekeys"`
+	FetchedAt      time.Time           `json:"fetched_at"`
+	ConsumedOPKs   map[uint64]bool     `json:"consumed_opks"` // Track consumed OPK IDs
 }
 
 // identityKey creates a key for identity document storage

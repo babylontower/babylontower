@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/stretchr/testify/assert"
 )
 

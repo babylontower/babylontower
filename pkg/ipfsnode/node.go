@@ -17,6 +17,7 @@ import (
 	"time"
 
 	bterrors "babylontower/pkg/errors"
+
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p"
@@ -35,7 +36,7 @@ import (
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/multiformats/go-multiaddr-dns"
+	madns "github.com/multiformats/go-multiaddr-dns"
 	"github.com/multiformats/go-multihash"
 )
 
@@ -952,7 +953,7 @@ func (n *Node) bootstrapDHT() error {
 	// Attempt if we have fewer than 3 connections OR if stored peers failed completely
 	currentPeers := len(n.host.Network().Peers())
 	storedPeersFailed := result.StoredPeersAttempted > 0 && result.StoredPeersConnected == 0
-	
+
 	if (currentPeers < 3 || storedPeersFailed) && len(n.config.BootstrapPeers) > 0 {
 		logger.Debugw("bootstrap stage 2: connecting to config peers",
 			"current_connections", currentPeers,
@@ -997,11 +998,11 @@ func (n *Node) bootstrapDHT() error {
 	} else {
 		// Both Stage 1 and Stage 2 failed - try passive DHT bootstrap
 		logger.Warnw("no bootstrap peers connected, attempting passive DHT bootstrap")
-		
+
 		// Give DHT more time to find peers passively
 		passiveCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		
+
 		select {
 		case <-n.dht.RefreshRoutingTable():
 			routingTableSize := len(n.dht.RoutingTable().ListPeers())
@@ -1013,7 +1014,7 @@ func (n *Node) bootstrapDHT() error {
 		case <-passiveCtx.Done():
 			logger.Warnw("passive DHT bootstrap timeout")
 		}
-		
+
 		if result.RoutingTableSize == 0 {
 			logger.Errorw("DHT bootstrap completely failed, no peers in routing table")
 			fmt.Println("\nWarning: No peers found. Try:")

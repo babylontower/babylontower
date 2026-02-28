@@ -12,6 +12,7 @@ import (
 
 	"babylontower/pkg/crypto"
 	"babylontower/pkg/identity"
+
 	"github.com/tyler-smith/go-bip39"
 )
 

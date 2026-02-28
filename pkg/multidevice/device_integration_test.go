@@ -13,9 +13,10 @@ import (
 	"time"
 
 	"babylontower/pkg/crypto"
-	pb "babylontower/pkg/proto"
-	"github.com/tyler-smith/go-bip39"
 	"babylontower/pkg/identity"
+	pb "babylontower/pkg/proto"
+
+	"github.com/tyler-smith/go-bip39"
 )
 
 // TestDeviceRegistration tests device registration and certificate generation
@@ -235,17 +236,17 @@ func TestVectorClockConflictResolution(t *testing.T) {
 
 	// Device 1 makes update
 	update1 := Update{
-		DeviceID: "device1",
+		DeviceID:    "device1",
 		VectorClock: map[string]uint64{"device1": 1},
-		Data: "Contact A added by Device 1",
+		Data:        "Contact A added by Device 1",
 	}
 	clock["device1"] = 1
 
 	// Device 2 makes concurrent update
 	update2 := Update{
-		DeviceID: "device2",
+		DeviceID:    "device2",
 		VectorClock: map[string]uint64{"device2": 1},
-		Data: "Contact B added by Device 2",
+		Data:        "Contact B added by Device 2",
 	}
 	clock["device2"] = 1
 
@@ -260,9 +261,9 @@ func TestVectorClockConflictResolution(t *testing.T) {
 
 	// Device 1 makes another update (should supersede first)
 	update3 := Update{
-		DeviceID: "device1",
+		DeviceID:    "device1",
 		VectorClock: map[string]uint64{"device1": 2, "device2": 1},
-		Data: "Contact C added by Device 1",
+		Data:        "Contact C added by Device 1",
 	}
 
 	// update3 happens-after update1

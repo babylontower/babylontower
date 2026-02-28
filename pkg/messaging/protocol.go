@@ -12,6 +12,7 @@ import (
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/reputation"
 	"babylontower/pkg/storage"
+
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
@@ -49,15 +50,15 @@ type MessageEvent struct {
 
 // Service is the main messaging service that handles all protocol operations
 type Service struct {
-	config      *Config
-	storage     storage.Storage
-	ipfsNode    *ipfsnode.Node
+	config       *Config
+	storage      storage.Storage
+	ipfsNode     *ipfsnode.Node
 	subscription *ipfsnode.Subscription
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	isStarted  bool
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	isStarted bool
 
 	// Channel for incoming message events
 	messageChan chan *MessageEvent
@@ -74,11 +75,11 @@ type Service struct {
 
 // ContactPeerInfo contains cached information about a contact's peer presence
 type ContactPeerInfo struct {
-	PeerID        string
-	Multiaddrs    []string
-	LastSeen      time.Time
-	IsOnline      bool
-	Connected     bool
+	PeerID     string
+	Multiaddrs []string
+	LastSeen   time.Time
+	IsOnline   bool
+	Connected  bool
 }
 
 // NewService creates a new messaging service
@@ -646,7 +647,7 @@ type SendResultWithRetry = SendResult
 // It ensures we have good connectivity to peers subscribed to contact topics
 func (s *Service) OptimizePubSubMesh(contactPubKey []byte) error {
 	topic := ipfsnode.TopicFromPublicKey(contactPubKey)
-	
+
 	// Get topic info
 	topicInfo := s.ipfsNode.GetTopicInfo(topic)
 	if topicInfo == nil {

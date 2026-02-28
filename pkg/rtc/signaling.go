@@ -10,6 +10,7 @@ import (
 	"babylontower/pkg/identity"
 	"babylontower/pkg/messaging"
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -37,10 +38,10 @@ type SignalingService struct {
 	mu sync.RWMutex
 
 	// Callbacks for signaling events
-	onIncomingOffer   func(callID string, remoteIdentity []byte, callType string, sdp string)
-	onIncomingAnswer  func(callID string, remoteIdentity []byte, sdp string)
-	onIncomingICE     func(callID string, remoteIdentity []byte, candidate string, sdpMid string, mlineIdx uint32)
-	onIncomingHangup  func(callID string, remoteIdentity []byte, reason string)
+	onIncomingOffer  func(callID string, remoteIdentity []byte, callType string, sdp string)
+	onIncomingAnswer func(callID string, remoteIdentity []byte, sdp string)
+	onIncomingICE    func(callID string, remoteIdentity []byte, candidate string, sdpMid string, mlineIdx uint32)
+	onIncomingHangup func(callID string, remoteIdentity []byte, reason string)
 }
 
 // NewSignalingService creates a new RTC signaling service

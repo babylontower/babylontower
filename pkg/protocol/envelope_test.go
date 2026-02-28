@@ -5,8 +5,9 @@ import (
 	"crypto/ed25519"
 	"testing"
 
-	pb "babylontower/pkg/proto"
 	"babylontower/pkg/identity"
+	pb "babylontower/pkg/proto"
+
 	"github.com/tyler-smith/go-bip39"
 	"google.golang.org/protobuf/proto"
 )
@@ -187,9 +188,9 @@ func TestParseDMPayload(t *testing.T) {
 
 	payload := &pb.DMPayload{
 		RatchetHeader: &pb.RatchetHeader{
-			DhRatchetPub:       make([]byte, 32),
+			DhRatchetPub:        make([]byte, 32),
 			PreviousChainLength: 0,
-			MessageNumber:      0,
+			MessageNumber:       0,
 		},
 		Content: &pb.DMPayload_Text{
 			Text: textMsg,
@@ -441,9 +442,9 @@ func TestEnvelopeGroupMessage(t *testing.T) {
 	groupID := []byte("test-group-123456789012345678901")
 
 	groupPayload := &pb.GroupPayload{
-		Epoch:       1,
-		ChainIndex:  0,
-		Content:     &pb.GroupPayload_Text{Text: &pb.TextMessage{Text: "Group message"}},
+		Epoch:      1,
+		ChainIndex: 0,
+		Content:    &pb.GroupPayload_Text{Text: &pb.TextMessage{Text: "Group message"}},
 	}
 
 	payloadBytes, _ := proto.Marshal(groupPayload)

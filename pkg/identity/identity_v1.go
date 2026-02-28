@@ -10,6 +10,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 )
@@ -32,11 +33,11 @@ const (
 	DeviceIDSize = 16 // SHA256(DK_sign.pub)[:16]
 
 	// Prekey management
-	OPKTargetCount   = 100 // Target number of one-time prekeys
+	OPKTargetCount        = 100 // Target number of one-time prekeys
 	OPKReplenishThreshold = 20  // Generate more when below this
-	OPKBatchSize       = 80   // Number to generate in a batch
-	SPKRotationDays    = 7    // SPK rotation interval
-	SPKOverlapHours    = 24   // Overlap period for SPK rotation
+	OPKBatchSize          = 80  // Number to generate in a batch
+	SPKRotationDays       = 7   // SPK rotation interval
+	SPKOverlapHours       = 24  // Overlap period for SPK rotation
 )
 
 // IdentityV1 represents a v1 identity with master keys and device keys
@@ -48,16 +49,16 @@ type IdentityV1 struct {
 	IKDHPub    *[32]byte
 
 	// Device keys (random, not derived from mnemonic)
-	DeviceID      []byte
-	DKSignPub     ed25519.PublicKey
-	DKSignPriv    ed25519.PrivateKey
-	DKDHPriv      *[32]byte
-	DKDHPub       *[32]byte
+	DeviceID   []byte
+	DKSignPub  ed25519.PublicKey
+	DKSignPriv ed25519.PrivateKey
+	DKDHPriv   *[32]byte
+	DKDHPub    *[32]byte
 
 	// Device metadata
-	DeviceName  string
-	CreatedAt   time.Time
-	ExpiresAt   time.Time // 0 = no expiry
+	DeviceName string
+	CreatedAt  time.Time
+	ExpiresAt  time.Time // 0 = no expiry
 
 	// Mnemonic (for recovery)
 	Mnemonic string
@@ -266,13 +267,13 @@ func (i *IdentityV1) CreateDeviceCertificate() (*pb.DeviceCertificate, error) {
 	}
 
 	cert := &pb.DeviceCertificate{
-		DeviceId:     i.DeviceID,
+		DeviceId:      i.DeviceID,
 		DeviceSignPub: i.DKSignPub,
-		DeviceDhPub:  i.DKDHPub[:],
-		DeviceName:   i.DeviceName,
-		CreatedAt:    uint64(i.CreatedAt.Unix()),
-		ExpiresAt:    expiresAt,
-		IdentityPub:  i.IKSignPub,
+		DeviceDhPub:   i.DKDHPub[:],
+		DeviceName:    i.DeviceName,
+		CreatedAt:     uint64(i.CreatedAt.Unix()),
+		ExpiresAt:     expiresAt,
+		IdentityPub:   i.IKSignPub,
 	}
 
 	// Sign the certificate fields (1-7)

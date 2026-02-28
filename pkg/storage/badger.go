@@ -10,6 +10,7 @@ import (
 
 	bterrors "babylontower/pkg/errors"
 	pb "babylontower/pkg/proto"
+
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
@@ -19,13 +20,13 @@ var logger = log.Logger("babylontower/storage")
 
 const (
 	// Key prefixes
-	contactPrefix    = "c:"
-	messagePrefix    = "m:"
-	peerPrefix       = "p:"
-	configPrefix     = "cfg:"
-	groupPrefix      = "g:"
-	senderKeyPrefix  = "sk:"
-	blacklistPrefix  = "bl:"
+	contactPrefix   = "c:"
+	messagePrefix   = "m:"
+	peerPrefix      = "p:"
+	configPrefix    = "cfg:"
+	groupPrefix     = "g:"
+	senderKeyPrefix = "sk:"
+	blacklistPrefix = "bl:"
 
 	// Key component sizes
 	pubKeySize    = 32
@@ -284,7 +285,7 @@ func (s *BadgerStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, o
 
 			item := it.Item()
 			key := item.Key()
-			
+
 			// Extract timestamp from key (format: prefix + pubkey + timestamp + nonce)
 			// timestamp starts at position: len(prefix) + len(pubkey) = 2 + 32 = 34
 			tsStart := len(messagePrefix) + len(contactPubKey)
@@ -292,7 +293,7 @@ func (s *BadgerStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, o
 				continue
 			}
 			timestamp := binary.BigEndian.Uint64(key[tsStart : tsStart+timestampSize])
-			
+
 			// Extract nonce (after timestamp)
 			nonceStart := tsStart + timestampSize
 			if nonceStart >= len(key) {

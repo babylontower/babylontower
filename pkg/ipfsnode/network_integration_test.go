@@ -180,7 +180,7 @@ func TestMultiNodeNetworkFormation(t *testing.T) {
 	for i := 0; i < nodeCount; i++ {
 		nextIdx := (i + 1) % nodeCount
 		addr := nodes[nextIdx].Multiaddrs()[0]
-		
+
 		err := nodes[i].ConnectToPeer(addr)
 		if err != nil {
 			t.Logf("Warning: Failed to connect node %d to node %d: %v", i+1, nextIdx+1, err)
@@ -200,7 +200,7 @@ func TestMultiNodeNetworkFormation(t *testing.T) {
 	for i := 0; i < nodeCount; i++ {
 		// Get connection count
 		connections := len(nodes[i].ConnectedPeers())
-		
+
 		// Get DHT routing table size
 		routingTableSize := nodes[i].DHT().RoutingTable().Size()
 
@@ -465,7 +465,7 @@ func TestDHTBootstrap(t *testing.T) {
 func BenchmarkNodeStartup(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		tmpDir, _ := os.MkdirTemp("", "babylon-bench-*")
-		
+
 		config := DefaultConfig()
 		config.RepoDir = tmpDir
 		config.BootstrapPeers = []string{}

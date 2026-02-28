@@ -15,6 +15,7 @@ import (
 	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 )
@@ -115,8 +116,8 @@ type Subscription interface {
 
 // PubSubMessage represents a PubSub message
 type PubSubMessage struct {
-	Data      []byte
-	From      string
+	Data       []byte
+	From       string
 	ReceivedAt time.Time
 }
 
@@ -137,11 +138,11 @@ type GroupCallConfig struct {
 // DefaultGroupCallConfig returns the default group call configuration
 func DefaultGroupCallConfig() *GroupCallConfig {
 	return &GroupCallConfig{
-		AutoSwitchToSFU:                true,
-		MaxParticipants:                SFUTopologyMaxParticipants,
-		EnableVideo:                    true,
-		MediaBufferDuration:            5 * time.Second,
-		ParticipantInactivityTimeout:   ParticipantTimeout,
+		AutoSwitchToSFU:              true,
+		MaxParticipants:              SFUTopologyMaxParticipants,
+		EnableVideo:                  true,
+		MediaBufferDuration:          5 * time.Second,
+		ParticipantInactivityTimeout: ParticipantTimeout,
 	}
 }
 

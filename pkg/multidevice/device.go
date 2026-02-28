@@ -9,6 +9,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -85,7 +86,7 @@ func (dm *DeviceManager) RegisterNewDevice() (*pb.DeviceCertificate, error) {
 
 	// Create device certificate
 	cert := &pb.DeviceCertificate{
-		DeviceId:     deviceID,
+		DeviceId:      deviceID,
 		DeviceSignPub: deviceSignPub,
 		DeviceDhPub:   deviceDHPub,
 		DeviceName:    dm.deviceName,
@@ -119,20 +120,20 @@ func (dm *DeviceManager) signDeviceCertificate(cert *pb.DeviceCertificate) ([]by
 	data = append(data, cert.DeviceSignPub...)
 	data = append(data, cert.DeviceDhPub...)
 	data = append(data, []byte(cert.DeviceName)...)
-	
+
 	// Append timestamps as big-endian bytes
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.CreatedAt >> (56 - i*8))
 	}
 	data = append(data, tsBytes...)
-	
+
 	tsBytes = make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.ExpiresAt >> (56 - i*8))
 	}
 	data = append(data, tsBytes...)
-	
+
 	data = append(data, cert.IdentityPub...)
 
 	// Sign with identity key
@@ -148,19 +149,19 @@ func VerifyDeviceCertificate(cert *pb.DeviceCertificate) error {
 	data = append(data, cert.DeviceSignPub...)
 	data = append(data, cert.DeviceDhPub...)
 	data = append(data, []byte(cert.DeviceName)...)
-	
+
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.CreatedAt >> (56 - i*8))
 	}
 	data = append(data, tsBytes...)
-	
+
 	tsBytes = make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.ExpiresAt >> (56 - i*8))
 	}
 	data = append(data, tsBytes...)
-	
+
 	data = append(data, cert.IdentityPub...)
 
 	valid := ed25519.Verify(cert.IdentityPub, data, cert.Signature)

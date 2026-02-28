@@ -14,9 +14,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 
-	pb "babylontower/pkg/proto"
 	"babylontower/pkg/crypto"
 	"babylontower/pkg/identity"
+	pb "babylontower/pkg/proto"
 )
 
 // RetrievalHandler handles message retrieval by recipients

@@ -5,14 +5,15 @@ import (
 	"fmt"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/dgraph-io/badger/v3"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
 	// Key prefixes for channels
-	channelPrefix      = "ch:"
-	channelPostPrefix  = "chp:"
+	channelPrefix     = "ch:"
+	channelPostPrefix = "chp:"
 )
 
 // channelKey creates a key for channel storage

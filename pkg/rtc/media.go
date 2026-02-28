@@ -58,9 +58,9 @@ func NewMediaService() *MediaService {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &MediaService{
-		ctx:   ctx,
+		ctx:    ctx,
 		cancel: cancel,
-		stats: &MediaStats{},
+		stats:  &MediaStats{},
 	}
 }
 
