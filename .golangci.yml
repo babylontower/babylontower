@@ -4,9 +4,14 @@ run:
   go: "1.25"
 
 linters:
+  default: none
   enable:
     - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
+    - perfsprint
+
+issues:
+  exclude-use-default: false
