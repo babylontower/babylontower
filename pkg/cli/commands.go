@@ -229,14 +229,14 @@ func (h *CommandHandler) handleListGroups() {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n=== Groups ===\n")
+	fmt.Fprintf(&sb, "\n=== Groups ===\n")
 	for i, state := range groupStates {
-		sb.WriteString(fmt.Sprintf("[%d] %s (Epoch: %d, Members: %d)\n", 
-			i+1, state.Name, state.Epoch, len(state.Members)))
-		sb.WriteString(fmt.Sprintf("    ID: %x\n", state.GroupID[:8]))
-		sb.WriteString(fmt.Sprintf("    Description: %s\n", state.Description))
+		fmt.Fprintf(&sb, "[%d] %s (Epoch: %d, Members: %d)\n",
+			i+1, state.Name, state.Epoch, len(state.Members))
+		fmt.Fprintf(&sb, "    ID: %x\n", state.GroupID[:8])
+		fmt.Fprintf(&sb, "    Description: %s\n", state.Description)
 	}
-	sb.WriteString("================\n")
+	fmt.Fprintf(&sb, "================\n")
 	h.output(sb.String())
 }
 
