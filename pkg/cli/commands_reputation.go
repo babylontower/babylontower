@@ -55,13 +55,13 @@ func (h *CommandHandler) handleReputationSummary() {
 
 		avgScore := totalScore / float64(len(records))
 
-		sb.WriteString(fmt.Sprintf("Total peers tracked: %d\n", len(records)))
-		sb.WriteString(fmt.Sprintf("Average reputation score: %.2f\n", avgScore))
+		fmt.Fprintf(&sb, "Total peers tracked: %d\n", len(records))
+		fmt.Fprintf(&sb, "Average reputation score: %.2f\n", avgScore)
 		sb.WriteString("\nTier distribution:\n")
-		sb.WriteString(fmt.Sprintf("  Trusted (0.8-1.0):     %d peers\n", tierCounts[reputation.TierTrusted]))
-		sb.WriteString(fmt.Sprintf("  Reliable (0.6-0.8):    %d peers\n", tierCounts[reputation.TierReliable]))
-		sb.WriteString(fmt.Sprintf("  Contributor (0.3-0.6): %d peers\n", tierCounts[reputation.TierContributor]))
-		sb.WriteString(fmt.Sprintf("  Basic (0.0-0.3):       %d peers\n", tierCounts[reputation.TierBasic]))
+		fmt.Fprintf(&sb, "  Trusted (0.8-1.0):     %d peers\n", tierCounts[reputation.TierTrusted])
+		fmt.Fprintf(&sb, "  Reliable (0.6-0.8):    %d peers\n", tierCounts[reputation.TierReliable])
+		fmt.Fprintf(&sb, "  Contributor (0.3-0.6): %d peers\n", tierCounts[reputation.TierContributor])
+		fmt.Fprintf(&sb, "  Basic (0.0-0.3):       %d peers\n", tierCounts[reputation.TierBasic])
 	}
 
 	sb.WriteString("\nUse /reputation list to see all peers\n")
@@ -113,29 +113,29 @@ func (h *CommandHandler) handleReputationList() {
 		metrics := sr.record.GetMetrics()
 		tier := sr.record.GetTier()
 		attestations := sr.record.GetAttestations()
-		
-		sb.WriteString(fmt.Sprintf("[%d] Peer: %s\n", i+1, sr.peerID[:16]))
-		sb.WriteString(fmt.Sprintf("    Score: %.3f (%s)\n", sr.score, tier.String()))
-		sb.WriteString(fmt.Sprintf("    Relay: %.2f (%d/%d)\n",
+
+		fmt.Fprintf(&sb, "[%d] Peer: %s\n", i+1, sr.peerID[:16])
+		fmt.Fprintf(&sb, "    Score: %.3f (%s)\n", sr.score, tier.String())
+		fmt.Fprintf(&sb, "    Relay: %.2f (%d/%d)\n",
 			metrics.RelayReliability,
 			metrics.RelaySuccessCount,
-			metrics.RelayTotalCount))
-		sb.WriteString(fmt.Sprintf("    Uptime: %.2f (%dh/168h)\n",
+			metrics.RelayTotalCount)
+		fmt.Fprintf(&sb, "    Uptime: %.2f (%dh/168h)\n",
 			metrics.UptimeConsistency,
-			metrics.HoursOnline7d))
-		sb.WriteString(fmt.Sprintf("    Mailbox: %.2f (%d/%d)\n",
+			metrics.HoursOnline7d)
+		fmt.Fprintf(&sb, "    Mailbox: %.2f (%d/%d)\n",
 			metrics.MailboxReliability,
 			metrics.MailboxRetrievedCount,
-			metrics.MailboxDepositedCount))
-		sb.WriteString(fmt.Sprintf("    DHT: %.2f (%.0fms avg)\n",
+			metrics.MailboxDepositedCount)
+		fmt.Fprintf(&sb, "    DHT: %.2f (%.0fms avg)\n",
 			metrics.DHTResponsiveness,
-			metrics.AvgResponseMS))
-		sb.WriteString(fmt.Sprintf("    Content: %.2f (%d/%d)\n",
+			metrics.AvgResponseMS)
+		fmt.Fprintf(&sb, "    Content: %.2f (%d/%d)\n",
 			metrics.ContentServing,
 			metrics.BlocksServedCount,
-			metrics.BlocksRequestedCount))
+			metrics.BlocksRequestedCount)
 		if len(attestations) > 0 {
-			sb.WriteString(fmt.Sprintf("    Attestations: %d\n", len(attestations)))
+			fmt.Fprintf(&sb, "    Attestations: %d\n", len(attestations))
 		}
 		sb.WriteString("\n")
 	}
@@ -175,16 +175,16 @@ func (h *CommandHandler) handleReputationTier(args []string) {
 	peers := tracker.GetPeersByTier(targetTier)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n=== %s Tier Peers ===\n\n", targetTier.String()))
+	fmt.Fprintf(&sb, "\n=== %s Tier Peers ===\n\n", targetTier.String())
 
 	if len(peers) == 0 {
-		sb.WriteString(fmt.Sprintf("No peers in %s tier.\n", targetTier.String()))
+		fmt.Fprintf(&sb, "No peers in %s tier.\n", targetTier.String())
 	} else {
 		for i, pid := range peers {
 			record := tracker.GetRecord(pid)
 			if record != nil {
-				sb.WriteString(fmt.Sprintf("[%d] %s - Score: %.3f\n",
-					i+1, string(pid)[:16], record.GetCompositeScore()))
+				fmt.Fprintf(&sb, "[%d] %s - Score: %.3f\n",
+					i+1, string(pid)[:16], record.GetCompositeScore())
 			}
 		}
 	}
@@ -215,7 +215,7 @@ func (h *CommandHandler) handleReputationTop(args []string) {
 	topPeers := tracker.GetTopPeers(n)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n=== Top %d Peers by Reputation ===\n\n", len(topPeers)))
+	fmt.Fprintf(&sb, "\n=== Top %d Peers by Reputation ===\n\n", len(topPeers))
 
 	if len(topPeers) == 0 {
 		sb.WriteString("No reputation records yet.\n")
@@ -223,8 +223,8 @@ func (h *CommandHandler) handleReputationTop(args []string) {
 		for i, pid := range topPeers {
 			record := tracker.GetRecord(pid)
 			if record != nil {
-				sb.WriteString(fmt.Sprintf("[%d] %s - Score: %.3f (%s)\n",
-					i+1, string(pid)[:16], record.GetCompositeScore(), record.GetTier().String()))
+				fmt.Fprintf(&sb, "[%d] %s - Score: %.3f (%s)\n",
+					i+1, string(pid)[:16], record.GetCompositeScore(), record.GetTier().String())
 			}
 		}
 	}

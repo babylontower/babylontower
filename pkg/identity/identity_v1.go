@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 )
@@ -32,11 +34,11 @@ const (
 	DeviceIDSize = 16 // SHA256(DK_sign.pub)[:16]
 
 	// Prekey management
-	OPKTargetCount   = 100 // Target number of one-time prekeys
+	OPKTargetCount        = 100 // Target number of one-time prekeys
 	OPKReplenishThreshold = 20  // Generate more when below this
-	OPKBatchSize       = 80   // Number to generate in a batch
-	SPKRotationDays    = 7    // SPK rotation interval
-	SPKOverlapHours    = 24   // Overlap period for SPK rotation
+	OPKBatchSize          = 80  // Number to generate in a batch
+	SPKRotationDays       = 7   // SPK rotation interval
+	SPKOverlapHours       = 24  // Overlap period for SPK rotation
 )
 
 // IdentityV1 represents a v1 identity with master keys and device keys
@@ -48,16 +50,16 @@ type IdentityV1 struct {
 	IKDHPub    *[32]byte
 
 	// Device keys (random, not derived from mnemonic)
-	DeviceID      []byte
-	DKSignPub     ed25519.PublicKey
-	DKSignPriv    ed25519.PrivateKey
-	DKDHPriv      *[32]byte
-	DKDHPub       *[32]byte
+	DeviceID   []byte
+	DKSignPub  ed25519.PublicKey
+	DKSignPriv ed25519.PrivateKey
+	DKDHPriv   *[32]byte
+	DKDHPub    *[32]byte
 
 	// Device metadata
-	DeviceName  string
-	CreatedAt   time.Time
-	ExpiresAt   time.Time // 0 = no expiry
+	DeviceName string
+	CreatedAt  time.Time
+	ExpiresAt  time.Time // 0 = no expiry
 
 	// Mnemonic (for recovery)
 	Mnemonic string
@@ -266,13 +268,13 @@ func (i *IdentityV1) CreateDeviceCertificate() (*pb.DeviceCertificate, error) {
 	}
 
 	cert := &pb.DeviceCertificate{
-		DeviceId:     i.DeviceID,
+		DeviceId:      i.DeviceID,
 		DeviceSignPub: i.DKSignPub,
-		DeviceDhPub:  i.DKDHPub[:],
-		DeviceName:   i.DeviceName,
-		CreatedAt:    uint64(i.CreatedAt.Unix()),
-		ExpiresAt:    expiresAt,
-		IdentityPub:  i.IKSignPub,
+		DeviceDhPub:   i.DKDHPub[:],
+		DeviceName:    i.DeviceName,
+		CreatedAt:     uint64(i.CreatedAt.Unix()),
+		ExpiresAt:     expiresAt,
+		IdentityPub:   i.IKSignPub,
 	}
 
 	// Sign the certificate fields (1-7)
@@ -308,7 +310,7 @@ func SignDeviceCertificate(ikSignPriv ed25519.PrivateKey, cert *pb.DeviceCertifi
 // VerifyDeviceCertificate verifies a DeviceCertificate signature
 func VerifyDeviceCertificate(cert *pb.DeviceCertificate) error {
 	if len(cert.IdentityPub) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid identity public key length")
+		return errors.New("invalid identity public key length")
 	}
 
 	// Reconstruct the signed data
@@ -326,7 +328,7 @@ func VerifyDeviceCertificate(cert *pb.DeviceCertificate) error {
 	data = append(data, cert.IdentityPub...)
 
 	if !ed25519.Verify(cert.IdentityPub, data, cert.Signature) {
-		return fmt.Errorf("invalid device certificate signature")
+		return errors.New("invalid device certificate signature")
 	}
 
 	return nil
@@ -390,7 +392,7 @@ func SignSignedPrekey(ikSignPriv ed25519.PrivateKey, spk *pb.SignedPrekey) ([]by
 // VerifySignedPrekey verifies a SignedPrekey signature
 func VerifySignedPrekey(spk *pb.SignedPrekey, identityPub ed25519.PublicKey) error {
 	if len(identityPub) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid identity public key length")
+		return errors.New("invalid identity public key length")
 	}
 
 	// Reconstruct the signed data
@@ -408,7 +410,7 @@ func VerifySignedPrekey(spk *pb.SignedPrekey, identityPub ed25519.PublicKey) err
 	data = append(data, expBytes...)
 
 	if !ed25519.Verify(identityPub, data, spk.Signature) {
-		return fmt.Errorf("invalid signed prekey signature")
+		return errors.New("invalid signed prekey signature")
 	}
 
 	return nil

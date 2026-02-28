@@ -4,14 +4,14 @@
 package rtc
 
 import (
-	"bytes"
 	"crypto/rand"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/tyler-smith/go-bip39"
 	"babylontower/pkg/identity"
+
+	"github.com/tyler-smith/go-bip39"
 )
 
 // TestWebRTCOfferAnswerExchange tests WebRTC offer/answer exchange via messaging
@@ -21,8 +21,8 @@ func TestWebRTCOfferAnswerExchange(t *testing.T) {
 
 	alice, bob := setupTwoUsers(t)
 
-	t.Logf("Alice: %s", alice.GetFingerprint())
-	t.Logf("Bob: %s", bob.GetFingerprint())
+	t.Logf("Alice: %s", alice.IdentityFingerprint())
+	t.Logf("Bob: %s", bob.IdentityFingerprint())
 
 	// Create mock SDP offer (in real implementation, this comes from WebRTC)
 	offerSDP := `v=0
@@ -41,14 +41,14 @@ a=sendrecv
 
 	// Alice creates call session
 	callType := "audio-video"
-	session := &CallSession{
-		CallID:       generateCallID(),
-		CallerPub:    alice.IKPub,
-		CalleePub:    bob.IKPub,
-		CallType:     callType,
-		State:        CallStateRing,
-		LocalSDP:     offerSDP,
-		CreatedAt:    uint64(time.Now().Unix()),
+	session := &testCallSession{
+		CallID:    generateCallID(),
+		CallerPub: alice.IKSignPub,
+		CalleePub: bob.IKSignPub,
+		CallType:  callType,
+		State:     CallStateRing,
+		LocalSDP:  offerSDP,
+		CreatedAt: uint64(time.Now().Unix()),
 	}
 
 	t.Logf("Call session created: %s", session.CallID)
@@ -59,20 +59,20 @@ a=sendrecv
 	offerMsg := &SignalingMessage{
 		Type:      MSG_TYPE_OFFER,
 		CallID:    session.CallID,
-		FromPub:   alice.IKPub,
-		ToPub:     bob.IKPub,
+		FromPub:   alice.IKSignPub,
+		ToPub:     bob.IKSignPub,
 		SDP:       offerSDP,
 		Timestamp: uint64(time.Now().Unix()),
 	}
 
 	// Sign offer
-	signature := signSignalingMessage(offerMsg, alice.IKPriv)
+	signature := signSignalingMessage(offerMsg, alice.IKSignPriv)
 	offerMsg.Signature = signature
 
 	t.Logf("Offer message signed and sent")
 
 	// Bob receives and verifies offer
-	err := verifySignalingMessage(offerMsg, alice.IKPub)
+	err := verifySignalingMessage(offerMsg, alice.IKSignPub)
 	if err != nil {
 		t.Fatalf("Offer verification failed: %v", err)
 	}
@@ -98,17 +98,17 @@ a=sendrecv
 	answerMsg := &SignalingMessage{
 		Type:      MSG_TYPE_ANSWER,
 		CallID:    session.CallID,
-		FromPub:   bob.IKPub,
-		ToPub:     alice.IKPub,
+		FromPub:   bob.IKSignPub,
+		ToPub:     alice.IKSignPub,
 		SDP:       answerSDP,
 		Timestamp: uint64(time.Now().Unix()),
 	}
 
-	signature = signSignalingMessage(answerMsg, bob.IKPriv)
+	signature = signSignalingMessage(answerMsg, bob.IKSignPriv)
 	answerMsg.Signature = signature
 
 	// Alice receives and verifies answer
-	err = verifySignalingMessage(answerMsg, bob.IKPub)
+	err = verifySignalingMessage(answerMsg, bob.IKSignPub)
 	if err != nil {
 		t.Fatalf("Answer verification failed: %v", err)
 	}
@@ -134,10 +134,10 @@ func TestICECandidateExchange(t *testing.T) {
 	alice, bob := setupTwoUsers(t)
 
 	// Create call session
-	session := &CallSession{
+	session := &testCallSession{
 		CallID:    generateCallID(),
-		CallerPub: alice.IKPub,
-		CalleePub: bob.IKPub,
+		CallerPub: alice.IKSignPub,
+		CalleePub: bob.IKSignPub,
 		CallType:  "audio",
 		State:     CallStateActive,
 	}
@@ -153,20 +153,20 @@ func TestICECandidateExchange(t *testing.T) {
 	// Alice sends candidates to Bob
 	for _, candidate := range aliceCandidates {
 		iceMsg := &SignalingMessage{
-			Type:      MSG_TYPE_ICE,
-			CallID:    session.CallID,
-			FromPub:   alice.IKPub,
-			ToPub:     bob.IKPub,
-			Candidate: candidate.Candidate,
-			SDPMid:    candidate.SDPMid,
+			Type:       MSG_TYPE_ICE,
+			CallID:     session.CallID,
+			FromPub:    alice.IKSignPub,
+			ToPub:      bob.IKSignPub,
+			Candidate:  candidate.Candidate,
+			SDPMid:     candidate.SDPMid,
 			MLineIndex: candidate.MLineIndex,
-			Timestamp: uint64(time.Now().Unix()),
+			Timestamp:  uint64(time.Now().Unix()),
 		}
 
-		iceMsg.Signature = signSignalingMessage(iceMsg, alice.IKPriv)
+		iceMsg.Signature = signSignalingMessage(iceMsg, alice.IKSignPriv)
 
 		// Bob receives and verifies
-		err := verifySignalingMessage(iceMsg, alice.IKPub)
+		err := verifySignalingMessage(iceMsg, alice.IKSignPub)
 		if err != nil {
 			t.Fatalf("ICE candidate verification failed: %v", err)
 		}
@@ -181,19 +181,19 @@ func TestICECandidateExchange(t *testing.T) {
 
 	for _, candidate := range bobCandidates {
 		iceMsg := &SignalingMessage{
-			Type:      MSG_TYPE_ICE,
-			CallID:    session.CallID,
-			FromPub:   bob.IKPub,
-			ToPub:     alice.IKPub,
-			Candidate: candidate.Candidate,
-			SDPMid:    candidate.SDPMid,
+			Type:       MSG_TYPE_ICE,
+			CallID:     session.CallID,
+			FromPub:    bob.IKSignPub,
+			ToPub:      alice.IKSignPub,
+			Candidate:  candidate.Candidate,
+			SDPMid:     candidate.SDPMid,
 			MLineIndex: candidate.MLineIndex,
-			Timestamp: uint64(time.Now().Unix()),
+			Timestamp:  uint64(time.Now().Unix()),
 		}
 
-		iceMsg.Signature = signSignalingMessage(iceMsg, bob.IKPriv)
+		iceMsg.Signature = signSignalingMessage(iceMsg, bob.IKSignPriv)
 
-		err := verifySignalingMessage(iceMsg, bob.IKPub)
+		err := verifySignalingMessage(iceMsg, bob.IKSignPub)
 		if err != nil {
 			t.Fatalf("ICE candidate verification failed: %v", err)
 		}
@@ -215,10 +215,10 @@ func TestCallStateManagement(t *testing.T) {
 
 	alice, bob := setupTwoUsers(t)
 
-	session := &CallSession{
+	session := &testCallSession{
 		CallID:    generateCallID(),
-		CallerPub: alice.IKPub,
-		CalleePub: bob.IKPub,
+		CallerPub: alice.IKSignPub,
+		CalleePub: bob.IKSignPub,
 		CallType:  "audio",
 		State:     CallStateInit,
 	}
@@ -244,16 +244,16 @@ func TestCallStateManagement(t *testing.T) {
 	hangupMsg := &SignalingMessage{
 		Type:      MSG_TYPE_HANGUP,
 		CallID:    session.CallID,
-		FromPub:   alice.IKPub,
-		ToPub:     bob.IKPub,
+		FromPub:   alice.IKSignPub,
+		ToPub:     bob.IKSignPub,
 		Reason:    "Normal call clearing",
 		Timestamp: uint64(time.Now().Unix()),
 	}
 
-	hangupMsg.Signature = signSignalingMessage(hangupMsg, alice.IKPriv)
+	hangupMsg.Signature = signSignalingMessage(hangupMsg, alice.IKSignPriv)
 
 	// Verify and process hangup
-	err := verifySignalingMessage(hangupMsg, alice.IKPub)
+	err := verifySignalingMessage(hangupMsg, alice.IKSignPub)
 	if err != nil {
 		t.Fatalf("Hangup verification failed: %v", err)
 	}
@@ -282,19 +282,19 @@ func TestGroupCallMeshTopology(t *testing.T) {
 	t.Logf("Group call with %d participants", len(participants))
 
 	// Create group call session
-	groupCall := &GroupCallSession{
-		CallID:     generateCallID(),
-		CreatorPub: participants[0].IKPub,
-		CallType:   "audio-video",
-		State:      CallStateActive,
+	groupCall := &GrouptestCallSession{
+		CallID:       generateCallID(),
+		CreatorPub:   participants[0].IKSignPub,
+		CallType:     "audio-video",
+		State:        CallStateActive,
 		Participants: make(map[string]*GroupCallParticipant),
-		Topology:   TopologyMesh,
+		Topology:     TopologyMesh,
 	}
 
 	// Add participants to mesh
 	for i, p := range participants {
-		groupCall.Participants[string(p.IKPub)] = &GroupCallParticipant{
-			IdentityPub: p.IKPub,
+		groupCall.Participants[string(p.IKSignPub)] = &GroupCallParticipant{
+			IdentityPub: p.IKSignPub,
 			DeviceID:    fmt.Sprintf("device-%d", i),
 			JoinedAt:    uint64(time.Now().Unix()),
 			State:       ParticipantStateConnected,
@@ -307,15 +307,15 @@ func TestGroupCallMeshTopology(t *testing.T) {
 	// For N participants, there are N*(N-1)/2 connections
 	expectedConnections := len(participants) * (len(participants) - 1) / 2
 
-	t.Logf("Mesh topology: %d participants → %d peer-to-peer connections", 
+	t.Logf("Mesh topology: %d participants → %d peer-to-peer connections",
 		len(participants), expectedConnections)
 
 	// Verify each participant has connection to others
 	for pubID, participant := range groupCall.Participants {
 		connections := len(groupCall.Participants) - 1 // All except self
-		t.Logf("  %s...%s: %d connections", 
+		t.Logf("  %s...%s: %d connections",
 			pubID[:8], pubID[8:16], connections)
-		
+
 		if participant.State != ParticipantStateConnected {
 			t.Errorf("Participant should be connected")
 		}
@@ -339,9 +339,9 @@ func TestSFURelayForLargeGroups(t *testing.T) {
 	t.Logf("Large group call with %d participants", len(participants))
 
 	// Create group call with SFU topology
-	groupCall := &GroupCallSession{
+	groupCall := &GrouptestCallSession{
 		CallID:       generateCallID(),
-		CreatorPub:   participants[0].IKPub,
+		CreatorPub:   participants[0].IKSignPub,
 		CallType:     "audio-video",
 		State:        CallStateActive,
 		Participants: make(map[string]*GroupCallParticipant),
@@ -351,9 +351,9 @@ func TestSFURelayForLargeGroups(t *testing.T) {
 
 	// Add participants
 	for _, p := range participants {
-		groupCall.Participants[string(p.IKPub)] = &GroupCallParticipant{
-			IdentityPub: p.IKPub,
-			DeviceID:    fmt.Sprintf("device-%s", p.GetFingerprint()[:8]),
+		groupCall.Participants[string(p.IKSignPub)] = &GroupCallParticipant{
+			IdentityPub: p.IKSignPub,
+			DeviceID:    fmt.Sprintf("device-%s", p.IdentityFingerprint()[:8]),
 			JoinedAt:    uint64(time.Now().Unix()),
 			State:       ParticipantStateConnected,
 		}
@@ -388,16 +388,16 @@ func TestSFURelayForLargeGroups(t *testing.T) {
 	t.Log("✓ Suitable for large groups (>6 participants)")
 }
 
-// BenchmarkCallSessionCreation benchmarks call session creation
+// BenchmarktestCallSessionCreation benchmarks call session creation
 func BenchmarkCallSessionCreation(b *testing.B) {
 	alice, bob := setupTwoUsers(&testing.T{})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		session := &CallSession{
+		session := &testCallSession{
 			CallID:    generateCallID(),
-			CallerPub: alice.IKPub,
-			CalleePub: bob.IKPub,
+			CallerPub: alice.IKSignPub,
+			CalleePub: bob.IKSignPub,
 			CallType:  "audio-video",
 			State:     CallStateInit,
 		}
@@ -411,37 +411,36 @@ func BenchmarkSignalingMessageSigning(b *testing.B) {
 	msg := &SignalingMessage{
 		Type:      MSG_TYPE_OFFER,
 		CallID:    "test-call-id",
-		FromPub:   alice.IKPub,
-		ToPub:     alice.IKPub,
+		FromPub:   alice.IKSignPub,
+		ToPub:     alice.IKSignPub,
 		SDP:       "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n",
 		Timestamp: uint64(time.Now().Unix()),
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		signature := signSignalingMessage(msg, alice.IKPriv)
+		signature := signSignalingMessage(msg, alice.IKSignPriv)
 		_ = signature
 	}
 }
 
 // Helper types and functions
 
-type CallState int32
+// CallState type alias for test structs (actual constants are untyped strings in session.go)
+type CallState = string
 
+// ParticipantState type for test structs
+type ParticipantState string
+
+// Additional call state constants used in tests but not in session.go
 const (
-	CallStateInit CallState = iota
-	CallStateRing
-	CallStateActive
-	CallStateEnded
+	CallStateInit = "init"
+	CallStateRing = "ringing"
 )
 
-type ParticipantState int32
-
+// ParticipantState constants for tests
 const (
-	ParticipantStateInit ParticipantState = iota
-	ParticipantStateConnecting
-	ParticipantStateConnected
-	ParticipantStateDisconnected
+	ParticipantStateConnected ParticipantState = "connected"
 )
 
 type GroupCallTopology int32
@@ -460,7 +459,7 @@ const (
 	MSG_TYPE_HANGUP
 )
 
-type CallSession struct {
+type testCallSession struct {
 	CallID    string
 	CallerPub []byte
 	CalleePub []byte
@@ -472,7 +471,7 @@ type CallSession struct {
 	EndedAt   uint64
 }
 
-type GroupCallSession struct {
+type GrouptestCallSession struct {
 	CallID       string
 	CreatorPub   []byte
 	CallType     string
@@ -538,7 +537,7 @@ func generateCallID() string {
 }
 
 func signSignalingMessage(msg *SignalingMessage, privKey []byte) []byte {
-	data := serializeSignalingMessage(msg)
+	_ = serializeSignalingMessage(msg)
 	// In real implementation, use ed25519.Sign
 	// For testing, use simplified signature
 	signature := make([]byte, 64)

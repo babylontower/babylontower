@@ -11,6 +11,7 @@ import (
 	"babylontower/pkg/ipfsnode"
 	"babylontower/pkg/messaging"
 	"babylontower/pkg/storage"
+
 	"github.com/ipfs/go-log/v2"
 	"github.com/mr-tron/base58"
 )
@@ -229,14 +230,14 @@ func (h *CommandHandler) handleListGroups() {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n=== Groups ===\n")
+	fmt.Fprintf(&sb, "\n=== Groups ===\n")
 	for i, state := range groupStates {
-		sb.WriteString(fmt.Sprintf("[%d] %s (Epoch: %d, Members: %d)\n", 
-			i+1, state.Name, state.Epoch, len(state.Members)))
-		sb.WriteString(fmt.Sprintf("    ID: %x\n", state.GroupID[:8]))
-		sb.WriteString(fmt.Sprintf("    Description: %s\n", state.Description))
+		fmt.Fprintf(&sb, "[%d] %s (Epoch: %d, Members: %d)\n",
+			i+1, state.Name, state.Epoch, len(state.Members))
+		fmt.Fprintf(&sb, "    ID: %x\n", state.GroupID[:8])
+		fmt.Fprintf(&sb, "    Description: %s\n", state.Description)
 	}
-	sb.WriteString("================\n")
+	fmt.Fprintf(&sb, "================\n")
 	h.output(sb.String())
 }
 
@@ -312,7 +313,7 @@ func (h *CommandHandler) handleGroupChat(args []string) {
 
 	h.output(FormatSuccess(fmt.Sprintf("Entered chat with group '%s'", state.Name)))
 	h.output(FormatInfo("Type a message to send, or empty line to exit"))
-	
+
 	// Note: Full group chat implementation would set chat mode similar to handleChat
 	// For the PoC, we just show the group info
 }

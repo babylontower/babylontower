@@ -3,12 +3,15 @@ package storage
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	pb "babylontower/pkg/proto"
+
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
@@ -18,13 +21,13 @@ var logger = log.Logger("babylontower/storage")
 
 const (
 	// Key prefixes
-	contactPrefix    = "c:"
-	messagePrefix    = "m:"
-	peerPrefix       = "p:"
-	configPrefix     = "cfg:"
-	groupPrefix      = "g:"
-	senderKeyPrefix  = "sk:"
-	blacklistPrefix  = "bl:"
+	contactPrefix   = "c:"
+	messagePrefix   = "m:"
+	peerPrefix      = "p:"
+	configPrefix    = "cfg:"
+	groupPrefix     = "g:"
+	senderKeyPrefix = "sk:"
+	blacklistPrefix = "bl:"
 
 	// Key component sizes
 	pubKeySize    = 32
@@ -154,10 +157,10 @@ func (s *BadgerStorage) GetContactX25519Key(pubKey []byte) ([]byte, error) {
 		return nil, err
 	}
 	if contact == nil {
-		return nil, fmt.Errorf("contact not found")
+		return nil, errors.New("contact not found")
 	}
 	if len(contact.X25519PublicKey) == 0 {
-		return nil, fmt.Errorf("contact X25519 public key not stored")
+		return nil, errors.New("contact X25519 public key not stored")
 	}
 	return contact.X25519PublicKey, nil
 }
@@ -283,7 +286,7 @@ func (s *BadgerStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, o
 
 			item := it.Item()
 			key := item.Key()
-			
+
 			// Extract timestamp from key (format: prefix + pubkey + timestamp + nonce)
 			// timestamp starts at position: len(prefix) + len(pubkey) = 2 + 32 = 34
 			tsStart := len(messagePrefix) + len(contactPubKey)
@@ -291,7 +294,7 @@ func (s *BadgerStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, o
 				continue
 			}
 			timestamp := binary.BigEndian.Uint64(key[tsStart : tsStart+timestampSize])
-			
+
 			// Extract nonce (after timestamp)
 			nonceStart := tsStart + timestampSize
 			if nonceStart >= len(key) {
@@ -636,7 +639,7 @@ func (s *BadgerStorage) PrunePeers(maxAgeDays int, keepCount int) error {
 		if err != nil {
 			return fmt.Errorf("failed to delete stale peers: %w", err)
 		}
-		logger.Infof("Pruned %d stale peers", len(peersToDelete))
+		logger.Debugw("pruned stale peers", "count", len(peersToDelete))
 	}
 
 	return nil
@@ -773,11 +776,11 @@ func (s *BadgerStorage) IsBlacklisted(peerID string) (bool, error) {
 	// Check if entry has expired
 	if entry.IsExpired() {
 		// Auto-remove expired entry
-		go func() {
+		bterrors.SafeGo("blacklist-expire-cleanup", func() {
 			if err := s.DeleteConfig(string(blacklistKey(peerID))); err != nil {
 				logger.Debugw("failed to delete expired blacklist entry", "peer", peerID, "error", err)
 			}
-		}()
+		})
 		return false, nil
 	}
 

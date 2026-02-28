@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -54,7 +55,7 @@ func (h *CommandHandler) handleChatInput(input string) bool {
 // sendMessage sends a message to the current chat contact
 func (h *CommandHandler) sendMessage(text string) error {
 	if h.chatContactPubKey == nil {
-		return fmt.Errorf("no active chat")
+		return errors.New("no active chat")
 	}
 
 	contact, err := h.storage.GetContact(h.chatContactPubKey)
@@ -62,11 +63,11 @@ func (h *CommandHandler) sendMessage(text string) error {
 		return fmt.Errorf("failed to get contact: %w", err)
 	}
 	if contact == nil {
-		return fmt.Errorf("contact not found")
+		return errors.New("contact not found")
 	}
 
 	if len(contact.X25519PublicKey) != 32 {
-		return fmt.Errorf("recipient X25519 key not available - ask contact to share their X25519 public key")
+		return errors.New("recipient X25519 key not available - ask contact to share their X25519 public key")
 	}
 
 	result, err := h.messaging.SendMessageToContact(text, h.chatContactPubKey, contact.X25519PublicKey)
@@ -80,7 +81,7 @@ func (h *CommandHandler) sendMessage(text string) error {
 	}
 	h.output(FormatMessage(msg, h.chatContactName, true))
 
-	logger.Debugw("message sent via service", "cid", result.CID, "text", text)
+	logger.Debugw("message sent via service", "cid", result.CID, "text_len", len(text))
 	return nil
 }
 
@@ -134,7 +135,7 @@ func (h *CommandHandler) handleHistory(args []string) {
 func (h *CommandHandler) loadAndDisplayHistory(contactPubKey []byte, limit int) {
 	messages, err := h.messaging.GetDecryptedMessagesWithMeta(contactPubKey, limit, 0)
 	if err != nil {
-		logger.Debugw("failed to load history", "error", err)
+		logger.Warnw("failed to load history", "error", err)
 		return
 	}
 
@@ -174,7 +175,7 @@ func (h *CommandHandler) findContact(contactArg string) (*pb.Contact, error) {
 
 	pubKey, err := decodePublicKey(contactArg)
 	if err != nil {
-		return nil, fmt.Errorf("invalid contact identifier. Use index or valid public key")
+		return nil, errors.New("invalid contact identifier. Use index or valid public key")
 	}
 
 	contact, err := h.storage.GetContact(pubKey)
@@ -182,7 +183,7 @@ func (h *CommandHandler) findContact(contactArg string) (*pb.Contact, error) {
 		return nil, fmt.Errorf("failed to find contact: %v", err)
 	}
 	if contact == nil {
-		return nil, fmt.Errorf("contact not found. Use /add to add them first")
+		return nil, errors.New("contact not found. Use /add to add them first")
 	}
 
 	return contact, nil

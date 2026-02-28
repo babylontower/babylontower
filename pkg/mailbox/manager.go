@@ -2,18 +2,19 @@ package mailbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v3"
-	"github.com/libp2p/go-libp2p-kad-dht"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"google.golang.org/protobuf/proto"
 
-	pb "babylontower/pkg/proto"
 	"babylontower/pkg/identity"
 	"babylontower/pkg/ipfsnode"
+	pb "babylontower/pkg/proto"
 )
 
 // Manager coordinates all mailbox operations
@@ -34,25 +35,25 @@ type Manager struct {
 
 // Config holds mailbox configuration
 type Config struct {
-	Enabled              bool
-	MaxMessagesPerTarget uint32
-	MaxMessageSize       uint64
+	Enabled                bool
+	MaxMessagesPerTarget   uint32
+	MaxMessageSize         uint64
 	MaxTotalBytesPerTarget uint64
-	DefaultTTLSeconds    uint64
-	DepositRateLimit     uint32
-	EnableContentRouting bool
+	DefaultTTLSeconds      uint64
+	DepositRateLimit       uint32
+	EnableContentRouting   bool
 }
 
 // DefaultConfig returns the default mailbox configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:              true,
-		MaxMessagesPerTarget: 500,
-		MaxMessageSize:       262144, // 256 KB
+		Enabled:                true,
+		MaxMessagesPerTarget:   500,
+		MaxMessageSize:         262144,   // 256 KB
 		MaxTotalBytesPerTarget: 67108864, // 64 MB
-		DefaultTTLSeconds:    604800,   // 7 days
-		DepositRateLimit:     100,      // 100 per hour
-		EnableContentRouting: false,
+		DefaultTTLSeconds:      604800,   // 7 days
+		DepositRateLimit:       100,      // 100 per hour
+		EnableContentRouting:   false,
 	}
 }
 
@@ -68,12 +69,12 @@ func NewManager(
 
 	// Convert config to protobuf config
 	protoConfig := &pb.MailboxConfig{
-		MaxMessagesPerTarget:    config.MaxMessagesPerTarget,
-		MaxMessageSize:          config.MaxMessageSize,
-		MaxTotalBytesPerTarget:  config.MaxTotalBytesPerTarget,
-		DefaultTtlSeconds:       config.DefaultTTLSeconds,
-		DepositRateLimit:        config.DepositRateLimit,
-		EnableContentRouting:    config.EnableContentRouting,
+		MaxMessagesPerTarget:   config.MaxMessagesPerTarget,
+		MaxMessageSize:         config.MaxMessageSize,
+		MaxTotalBytesPerTarget: config.MaxTotalBytesPerTarget,
+		DefaultTtlSeconds:      config.DefaultTTLSeconds,
+		DepositRateLimit:       config.DepositRateLimit,
+		EnableContentRouting:   config.EnableContentRouting,
 	}
 
 	// Create storage
@@ -84,14 +85,14 @@ func NewManager(
 	}
 
 	m := &Manager{
-		host:           h,
-		dht:            dht,
-		identity:       id,
-		storage:        storage,
-		config:         protoConfig,
-		ctx:            ctx,
-		cancel:         cancel,
-		isMailbox:      config.Enabled,
+		host:      h,
+		dht:       dht,
+		identity:  id,
+		storage:   storage,
+		config:    protoConfig,
+		ctx:       ctx,
+		cancel:    cancel,
+		isMailbox: config.Enabled,
 	}
 
 	// Create handlers
@@ -157,7 +158,7 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 	}
 
 	if len(mailboxes) == 0 {
-		return fmt.Errorf("no mailbox nodes available for recipient")
+		return errors.New("no mailbox nodes available for recipient")
 	}
 
 	// Try to deposit to at least one mailbox
@@ -177,7 +178,7 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 	if lastErr != nil {
 		return lastErr
 	}
-	return fmt.Errorf("failed to deposit to any mailbox")
+	return errors.New("failed to deposit to any mailbox")
 }
 
 // RetrieveMessages retrieves messages from mailbox nodes
@@ -324,7 +325,7 @@ func (m *Manager) acknowledgeOnRemoteMailboxes(ctx context.Context, messageIDs [
 // AnnounceAsMailbox announces this node as a mailbox for a target
 func (m *Manager) AnnounceAsMailbox(targetPubkey []byte) error {
 	if !m.isMailbox || m.announcement == nil {
-		return fmt.Errorf("mailbox not enabled")
+		return errors.New("mailbox not enabled")
 	}
 
 	_, err := m.announcement.AnnounceMailbox(targetPubkey, m.config)

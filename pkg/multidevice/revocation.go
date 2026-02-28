@@ -4,16 +4,17 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
-	"github.com/ipfs/go-log/v2"
+
 	"google.golang.org/protobuf/proto"
 )
 
-var revocationLogger = log.Logger("babylontower/multidevice/revocation")
+// logger is declared in sync.go for this package
 
 // RevocationManager handles device revocation
 type RevocationManager struct {
@@ -55,7 +56,7 @@ func (rm *RevocationManager) RevokeDevice(deviceID []byte, reason string) (*pb.R
 	}
 	cert.Signature = signature
 
-	revocationLogger.Infow("device revoked", "device", hex.EncodeToString(deviceID), "reason", reason)
+	logger.Infow("device revoked", "device", hex.EncodeToString(deviceID), "reason", reason)
 
 	return cert, nil
 }
@@ -67,7 +68,7 @@ func (rm *RevocationManager) signRevocation(cert *pb.RevocationCertificate) ([]b
 	data = append(data, cert.RevokedKey...)
 	data = append(data, []byte(cert.RevocationType)...)
 	data = append(data, []byte(cert.Reason)...)
-	
+
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.RevokedAt >> (56 - i*8))
@@ -85,7 +86,7 @@ func VerifyRevocation(cert *pb.RevocationCertificate, identityPub ed25519.Public
 	data = append(data, cert.RevokedKey...)
 	data = append(data, []byte(cert.RevocationType)...)
 	data = append(data, []byte(cert.Reason)...)
-	
+
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(cert.RevokedAt >> (56 - i*8))
@@ -94,7 +95,7 @@ func VerifyRevocation(cert *pb.RevocationCertificate, identityPub ed25519.Public
 
 	valid := ed25519.Verify(identityPub, data, cert.Signature)
 	if !valid {
-		return fmt.Errorf("invalid revocation signature")
+		return errors.New("invalid revocation signature")
 	}
 
 	return nil
@@ -108,7 +109,7 @@ func (rm *RevocationManager) PublishRevocation(cert *pb.RevocationCertificate, i
 
 	// Publish to revocation topic
 	revocationTopic := rm.getRevocationTopic(rm.deviceManager.identitySignPub)
-	
+
 	certBytes, err := proto.Marshal(cert)
 	if err != nil {
 		return fmt.Errorf("failed to marshal certificate: %w", err)
@@ -118,7 +119,7 @@ func (rm *RevocationManager) PublishRevocation(cert *pb.RevocationCertificate, i
 	_ = revocationTopic
 	_ = certBytes
 
-	revocationLogger.Info("revocation published")
+	logger.Info("revocation published")
 	return nil
 }
 
@@ -137,7 +138,7 @@ func (rm *RevocationManager) HandleRevocation(cert *pb.RevocationCertificate) er
 
 	// Check if this is our identity
 	if string(cert.RevokedKey) == string(rm.deviceManager.deviceID) {
-		revocationLogger.Warn("own device was revoked")
+		logger.Warn("own device was revoked")
 		// In full implementation, would notify user and potentially disable device
 		return nil
 	}
@@ -170,7 +171,7 @@ func (rm *RevocationManager) IsDeviceRevoked(identityDoc *pb.IdentityDocument, d
 // GetActiveDevices returns devices that are not revoked
 func GetActiveDevices(identityDoc *pb.IdentityDocument) []*pb.DeviceCertificate {
 	active := make([]*pb.DeviceCertificate, 0, len(identityDoc.Devices))
-	
+
 	for _, device := range identityDoc.Devices {
 		revoked := false
 		for _, revocation := range identityDoc.Revocations {
@@ -190,7 +191,7 @@ func GetActiveDevices(identityDoc *pb.IdentityDocument) []*pb.DeviceCertificate 
 // CleanupRevokedDevices removes revoked devices from session cache
 func (fm *FanoutManager) CleanupRevokedDevices(identityPub []byte, identityDoc *pb.IdentityDocument) {
 	identityHex := hex.EncodeToString(identityPub)
-	
+
 	fm.sessMu.Lock()
 	defer fm.sessMu.Unlock()
 
@@ -209,7 +210,7 @@ func (fm *FanoutManager) CleanupRevokedDevices(identityPub []byte, identityDoc *
 	for deviceID, session := range identitySessions {
 		if !activeDevices[hex.EncodeToString(session.DeviceID)] {
 			delete(identitySessions, deviceID)
-			revocationLogger.Infow("cleaned up revoked device session", "device", deviceID)
+			logger.Infow("cleaned up revoked device session", "device", deviceID)
 		}
 	}
 }

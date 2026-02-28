@@ -5,13 +5,14 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/mr-tron/base58"
 )
 
 // Storage errors
 var (
-	ErrGroupNotFound      = errors.New("group not found")
-	ErrSenderKeyNotFound  = errors.New("sender key not found")
+	ErrGroupNotFound     = errors.New("group not found")
+	ErrSenderKeyNotFound = errors.New("sender key not found")
 )
 
 // PeerSource indicates where a peer was discovered
@@ -54,10 +55,10 @@ func (p *PeerRecord) IsStale(maxAge time.Duration) bool {
 
 // BlacklistEntry represents a blacklisted peer
 type BlacklistEntry struct {
-	PeerID    string    `json:"peer_id"`
-	Reason    string    `json:"reason"`
+	PeerID        string    `json:"peer_id"`
+	Reason        string    `json:"reason"`
 	BlacklistedAt time.Time `json:"blacklisted_at"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"` // Empty = permanent
+	ExpiresAt     time.Time `json:"expires_at,omitempty"` // Empty = permanent
 }
 
 // IsExpired returns true if the blacklist entry has expired

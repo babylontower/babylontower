@@ -5,21 +5,23 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"babylontower/pkg/crypto"
+	bterrors "babylontower/pkg/errors"
 	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"github.com/google/uuid"
-	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
 
-var groupCallLogger = log.Logger("babylontower/rtc/groupcall")
+// logger is declared in session.go for this package
 
 // Group call constants
 const (
@@ -115,8 +117,8 @@ type Subscription interface {
 
 // PubSubMessage represents a PubSub message
 type PubSubMessage struct {
-	Data      []byte
-	From      string
+	Data       []byte
+	From       string
 	ReceivedAt time.Time
 }
 
@@ -137,11 +139,11 @@ type GroupCallConfig struct {
 // DefaultGroupCallConfig returns the default group call configuration
 func DefaultGroupCallConfig() *GroupCallConfig {
 	return &GroupCallConfig{
-		AutoSwitchToSFU:                true,
-		MaxParticipants:                SFUTopologyMaxParticipants,
-		EnableVideo:                    true,
-		MediaBufferDuration:            5 * time.Second,
-		ParticipantInactivityTimeout:   ParticipantTimeout,
+		AutoSwitchToSFU:              true,
+		MaxParticipants:              SFUTopologyMaxParticipants,
+		EnableVideo:                  true,
+		MediaBufferDuration:          5 * time.Second,
+		ParticipantInactivityTimeout: ParticipantTimeout,
 	}
 }
 
@@ -174,7 +176,7 @@ func NewGroupCallManager(
 
 // Start begins the group call manager
 func (gcm *GroupCallManager) Start() error {
-	gcmLogger.Info("Group call manager started")
+	logger.Info("Group call manager started")
 	return nil
 }
 
@@ -196,7 +198,7 @@ func (gcm *GroupCallManager) Stop() {
 	gcm.cancel()
 	gcm.wg.Wait()
 
-	gcmLogger.Info("Group call manager stopped")
+	logger.Info("Group call manager stopped")
 }
 
 // CreateGroupCall creates a new group call
@@ -251,11 +253,10 @@ func (gcm *GroupCallManager) CreateGroupCall(
 
 	// Subscribe to group call topic
 	if err := gcm.subscribeToGroupCallTopic(groupID); err != nil {
-		gcmLogger.Warnf("Failed to subscribe to group call topic: %v", err)
+		logger.Warnw("failed to subscribe to group call topic", "error", err)
 	}
 
-	gcmLogger.Infof("Created group call %s for group %s (type: %s)",
-		callID, hex.EncodeToString(groupID)[:16], callType.String())
+	logger.Infow("created group call", "call", callID, "group", hex.EncodeToString(groupID)[:16], "type", callType.String())
 
 	return session, nil
 }
@@ -304,7 +305,7 @@ func (gcm *GroupCallManager) JoinGroupCall(callID string, displayName string) (*
 
 	// Check if we need to switch to SFU mode
 	if gcm.config.AutoSwitchToSFU && len(session.Participants) >= SFUTopologyMinParticipants {
-		gcmLogger.Infof("Switching group call %s to SFU mode (%d participants)", callID, len(session.Participants))
+		logger.Infow("switching group call to SFU mode", "call", callID, "participants", len(session.Participants))
 		session.CallType = pb.GroupCallType_GROUP_CALL_TYPE_SFU
 		gcm.runSFUElection(session)
 	}
@@ -330,10 +331,10 @@ func (gcm *GroupCallManager) JoinGroupCall(callID string, displayName string) (*
 	joinMsg.Signature = signature
 
 	if err := gcm.publishToGroupCallTopic(session.GroupId, joinMsg); err != nil {
-		gcmLogger.Warnf("Failed to publish join message: %v", err)
+		logger.Warnw("failed to publish join message", "error", err)
 	}
 
-	gcmLogger.Infof("Joined group call %s as %s", callID, displayName)
+	logger.Infow("joined group call", "call", callID, "display_name", displayName)
 
 	return session, nil
 }
@@ -381,15 +382,15 @@ func (gcm *GroupCallManager) LeaveGroupCall(callID string, reason string) error 
 		return crypto.Sign(gcm.identity.Ed25519PrivKey, data)
 	}()
 	if err != nil {
-		gcmLogger.Warnf("Failed to sign leave message: %v", err)
+		logger.Warnw("failed to sign leave message", "error", err)
 	}
 	leaveMsg.Signature = signature
 
 	if err := gcm.publishToGroupCallTopic(session.GroupId, leaveMsg); err != nil {
-		gcmLogger.Warnf("Failed to publish leave message: %v", err)
+		logger.Warnw("failed to publish leave message", "error", err)
 	}
 
-	gcmLogger.Infof("Left group call %s (reason: %s)", callID, reason)
+	logger.Infow("left group call", "call", callID, "reason", reason)
 
 	// If we were the SFU, trigger re-election
 	if ourParticipant.IsSfu {
@@ -414,7 +415,7 @@ func (gcm *GroupCallManager) EndGroupCall(callID string, reason string) error {
 
 	// Only owner can end the call
 	if !session.Participants[0].IsOwner || !bytes.Equal(session.Participants[0].IdentityPubkey, gcm.identity.Ed25519PubKey) {
-		return fmt.Errorf("only the call owner can end the call")
+		return errors.New("only the call owner can end the call")
 	}
 
 	gcm.endCallInternal(session, reason)
@@ -430,14 +431,13 @@ func (gcm *GroupCallManager) endCallInternal(session *GroupCallSession, reason s
 
 	// Unsubscribe from group call topic
 	if err := gcm.unsubscribeFromGroupCallTopic(session.GroupId); err != nil {
-		gcmLogger.Warnf("Failed to unsubscribe from group call topic: %v", err)
+		logger.Warnw("failed to unsubscribe from group call topic", "error", err)
 	}
 
 	// Remove from active calls
 	delete(gcm.calls, session.CallId)
 
-	gcmLogger.Infof("Ended group call %s (reason: %s, duration: %v)",
-		session.CallId, reason, time.Duration(session.EndedAt-session.StartedAt)*time.Second)
+	logger.Infow("ended group call", "call", session.CallId, "reason", reason, "duration", time.Duration(session.EndedAt-session.StartedAt)*time.Second)
 }
 
 // GetGroupCall retrieves a group call session
@@ -481,8 +481,7 @@ func (gcm *GroupCallManager) runSFUElection(session *GroupCallSession) {
 	// First participant (lowest pubkey) becomes SFU candidate
 	candidate := session.Participants[0]
 
-	gcmLogger.Infof("Running SFU election for call %s, candidate: %s",
-		session.CallId, hex.EncodeToString(candidate.IdentityPubkey)[:16])
+	logger.Infow("running SFU election", "call", session.CallId, "candidate", hex.EncodeToString(candidate.IdentityPubkey)[:16])
 
 	// Sign the election message
 	electionMsg := &pb.GroupCallSFUElection{
@@ -499,18 +498,18 @@ func (gcm *GroupCallManager) runSFUElection(session *GroupCallSession) {
 		return crypto.Sign(gcm.identity.Ed25519PrivKey, data)
 	}()
 	if err != nil {
-		gcmLogger.Warnf("Failed to sign SFU election message: %v", err)
+		logger.Warnw("failed to sign SFU election message", "error", err)
 		return
 	}
 	electionMsg.Signature = signature
 
 	if err := gcm.publishToGroupCallTopic(session.GroupId, electionMsg); err != nil {
-		gcmLogger.Warnf("Failed to publish SFU election message: %v", err)
+		logger.Warnw("failed to publish SFU election message", "error", err)
 		return
 	}
 
 	// Start election timeout
-	go func() {
+	bterrors.SafeGo("rtc-sfu-election", func() {
 		select {
 		case <-time.After(SFUElectionTimeout):
 			session.mu.Lock()
@@ -520,8 +519,7 @@ func (gcm *GroupCallManager) runSFUElection(session *GroupCallSession) {
 			candidate.IsSfu = true
 			session.SfuIdentity = candidate.IdentityPubkey
 
-			gcmLogger.Infof("SFU elected for call %s: %s",
-				session.CallId, hex.EncodeToString(candidate.IdentityPubkey)[:16])
+			logger.Infow("SFU elected", "call", session.CallId, "sfu", hex.EncodeToString(candidate.IdentityPubkey)[:16])
 
 			if session.onSFUElected != nil {
 				session.onSFUElected(session, candidate.IdentityPubkey)
@@ -532,7 +530,7 @@ func (gcm *GroupCallManager) runSFUElection(session *GroupCallSession) {
 		case <-gcm.ctx.Done():
 			return
 		}
-	}()
+	})
 }
 
 // broadcastStateUpdate broadcasts the current group call state
@@ -554,13 +552,13 @@ func (gcm *GroupCallManager) broadcastStateUpdate(session *GroupCallSession) {
 		return crypto.Sign(gcm.identity.Ed25519PrivKey, data)
 	}()
 	if err != nil {
-		gcmLogger.Warnf("Failed to sign state update: %v", err)
+		logger.Warnw("failed to sign state update", "error", err)
 		return
 	}
 	stateUpdate.Signature = signature
 
 	if err := gcm.publishToGroupCallTopic(session.GroupId, stateUpdate); err != nil {
-		gcmLogger.Warnf("Failed to broadcast state update: %v", err)
+		logger.Warnw("failed to broadcast state update", "error", err)
 	}
 }
 
@@ -579,7 +577,7 @@ func (gcm *GroupCallManager) subscribeToGroupCallTopic(groupID []byte) error {
 		messages: make(chan *PubSubMessage, 100),
 	}
 
-	gcmLogger.Debugf("Subscribed to group call topic: %s", topic)
+	logger.Debugw("subscribed to group call topic", "topic", topic)
 	return nil
 }
 
@@ -595,7 +593,7 @@ func (gcm *GroupCallManager) unsubscribeFromGroupCallTopic(groupID []byte) error
 	sub.Cancel()
 	delete(gcm.subscriptions, topic)
 
-	gcmLogger.Debugf("Unsubscribed from group call topic: %s", topic)
+	logger.Debugw("unsubscribed from group call topic", "topic", topic)
 	return nil
 }
 
@@ -603,14 +601,14 @@ func (gcm *GroupCallManager) unsubscribeFromGroupCallTopic(groupID []byte) error
 func (gcm *GroupCallManager) publishToGroupCallTopic(groupID []byte, message proto.Message) error {
 	// In a real implementation, this would publish to the actual PubSub topic
 	// For now, we just log
-	gcmLogger.Debugf("Published to group call topic %s: %T", deriveGroupCallTopic(groupID), message)
+	logger.Debugw("published to group call topic", "topic", deriveGroupCallTopic(groupID))
 	return nil
 }
 
 // deriveGroupCallTopic derives a PubSub topic from a group ID
 func deriveGroupCallTopic(groupID []byte) string {
 	hash := sha256.Sum256(groupID)
-	return fmt.Sprintf("babylon-grpcall-%s", hex.EncodeToString(hash[:8]))
+	return "babylon-grpcall-" + hex.EncodeToString(hash[:8])
 }
 
 // computeDeviceID computes a device ID from an identity pubkey
@@ -706,7 +704,7 @@ func (session *GroupCallSession) GetParticipant(identityPubkey []byte) (*pb.Part
 		}
 	}
 
-	return nil, fmt.Errorf("participant not found")
+	return nil, errors.New("participant not found")
 }
 
 // Duration returns the duration of the group call
@@ -726,4 +724,4 @@ func (session *GroupCallSession) Duration() time.Duration {
 	return time.Duration(endTime-session.StartedAt) * time.Second
 }
 
-var gcmLogger = groupCallLogger
+// gcmLogger alias removed — using package-level logger from session.go

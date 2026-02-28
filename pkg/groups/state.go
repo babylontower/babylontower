@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"golang.org/x/crypto/ed25519"
 	"google.golang.org/protobuf/proto"
 )
@@ -183,18 +185,18 @@ func (gs *GroupState) ToProto() *pb.GroupState {
 	}
 
 	return &pb.GroupState{
-		GroupId:         gs.GroupID,
-		Epoch:           gs.Epoch,
-		Name:            gs.Name,
-		Description:     gs.Description,
-		AvatarCid:       gs.AvatarCID,
-		Type:            pb.GroupType(gs.Type),
-		Members:         members,
-		CreatorPubkey:   gs.CreatorPubkey,
-		CreatedAt:       gs.CreatedAt,
-		UpdatedAt:       gs.UpdatedAt,
-		StateSignature:  gs.StateSignature,
-		PreviousHash:    gs.PreviousStateHash,
+		GroupId:        gs.GroupID,
+		Epoch:          gs.Epoch,
+		Name:           gs.Name,
+		Description:    gs.Description,
+		AvatarCid:      gs.AvatarCID,
+		Type:           pb.GroupType(gs.Type),
+		Members:        members,
+		CreatorPubkey:  gs.CreatorPubkey,
+		CreatedAt:      gs.CreatedAt,
+		UpdatedAt:      gs.UpdatedAt,
+		StateSignature: gs.StateSignature,
+		PreviousHash:   gs.PreviousStateHash,
 	}
 }
 
@@ -313,7 +315,7 @@ func ValidateStateUpdate(update *GroupStateUpdate, currentState *GroupState) err
 
 	if len(update.PreviousStateHash) > 0 && len(currentState.PreviousStateHash) > 0 {
 		if string(update.PreviousStateHash) != string(currentHash) {
-			return fmt.Errorf("previous state hash mismatch")
+			return errors.New("previous state hash mismatch")
 		}
 	}
 
@@ -334,7 +336,7 @@ func ValidateStateUpdate(update *GroupStateUpdate, currentState *GroupState) err
 	}
 
 	if !updaterIsAdmin {
-		return fmt.Errorf("updater is not an admin or owner")
+		return errors.New("updater is not an admin or owner")
 	}
 
 	// Verify updater's signature
@@ -359,7 +361,7 @@ func ValidateStateUpdate(update *GroupStateUpdate, currentState *GroupState) err
 	}
 
 	if !ed25519.Verify(update.UpdaterPubkey, data, update.UpdaterSignature) {
-		return fmt.Errorf("invalid updater signature")
+		return errors.New("invalid updater signature")
 	}
 
 	return nil
@@ -493,7 +495,7 @@ func (gs *GroupState) AddMember(member GroupMember) error {
 	// Check if member already exists
 	for _, m := range gs.Members {
 		if string(m.Ed25519Pubkey) == string(member.Ed25519Pubkey) {
-			return fmt.Errorf("member already in group")
+			return errors.New("member already in group")
 		}
 	}
 
@@ -508,12 +510,12 @@ func (gs *GroupState) RemoveMember(pubkey []byte) error {
 		if string(member.Ed25519Pubkey) == string(pubkey) {
 			// Don't allow creator to be removed
 			if string(pubkey) == string(gs.CreatorPubkey) {
-				return fmt.Errorf("cannot remove group creator")
+				return errors.New("cannot remove group creator")
 			}
 			gs.Members = append(gs.Members[:i], gs.Members[i+1:]...)
 			gs.UpdatedAt = uint64(time.Now().Unix())
 			return nil
 		}
 	}
-	return fmt.Errorf("member not found")
+	return errors.New("member not found")
 }

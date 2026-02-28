@@ -5,15 +5,15 @@ package mailbox
 
 import (
 	"bytes"
-	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"testing"
 	"time"
 
 	"babylontower/pkg/crypto"
-	"github.com/tyler-smith/go-bip39"
 	"babylontower/pkg/identity"
+
+	"github.com/tyler-smith/go-bip39"
 )
 
 // TestOfflineMessageStorage tests message encryption for offline delivery
@@ -30,20 +30,20 @@ func TestOfflineMessageStorage(t *testing.T) {
 	bobMnemonic, _ := bip39.NewMnemonic(bobEntropy)
 	bob, _ := identity.NewIdentityV1(bobMnemonic, "Bob")
 
-	t.Logf("Alice: %s", alice.GetFingerprint())
-	t.Logf("Bob: %s", bob.GetFingerprint())
+	t.Logf("Alice: %s", alice.IdentityFingerprint())
+	t.Logf("Bob: %s", bob.IdentityFingerprint())
 
 	// Create mailbox storage (simulated relay node)
 	mailbox := NewInMemoryMailbox()
 
 	// Alice encrypts message for Bob's offline mailbox
 	message := "Hello Bob! This is an offline message."
-	
+
 	// Derive mailbox encryption key from Bob's identity
-	mailboxKey := deriveMailboxKey(bob.IKPub)
+	mailboxKey := deriveMailboxKey(bob.IKSignPub)
 
 	// Encrypt message
-	ciphertext, err := crypto.Encrypt([]byte(message), mailboxKey)
+	nonce, ciphertext, err := crypto.EncryptWithSharedSecret(mailboxKey, []byte(message))
 	if err != nil {
 		t.Fatalf("Encryption failed: %v", err)
 	}
@@ -52,10 +52,11 @@ func TestOfflineMessageStorage(t *testing.T) {
 
 	// Store in mailbox with metadata
 	mailboxMsg := &MailboxMessage{
-		Ciphertext:  ciphertext,
-		SenderPub:   alice.IKPub,
-		Timestamp:   uint64(time.Now().Unix()),
-		RecipientPub: bob.IKPub,
+		Ciphertext:   ciphertext,
+		Nonce:        nonce,
+		SenderPub:    alice.IKSignPub,
+		Timestamp:    uint64(time.Now().Unix()),
+		RecipientPub: bob.IKSignPub,
 	}
 
 	err = mailbox.Store(mailboxMsg)
@@ -66,7 +67,7 @@ func TestOfflineMessageStorage(t *testing.T) {
 	t.Logf("Message stored in mailbox")
 
 	// Verify message count
-	count := mailbox.GetMessageCount(bob.IKPub)
+	count := mailbox.GetMessageCount(bob.IKSignPub)
 	if count != 1 {
 		t.Errorf("Expected 1 message in mailbox, got %d", count)
 	}
@@ -94,15 +95,16 @@ func TestMailboxRetrieval(t *testing.T) {
 		"Message 3 from Alice",
 	}
 
-	mailboxKey := deriveMailboxKey(bob.IKPub)
+	mailboxKey := deriveMailboxKey(bob.IKSignPub)
 
 	for _, msg := range messages {
-		ciphertext, _ := crypto.Encrypt([]byte(msg), mailboxKey)
+		nonce, ciphertext, _ := crypto.EncryptWithSharedSecret(mailboxKey, []byte(msg))
 		mailboxMsg := &MailboxMessage{
 			Ciphertext:   ciphertext,
-			SenderPub:    alice.IKPub,
+			Nonce:        nonce,
+			SenderPub:    alice.IKSignPub,
 			Timestamp:    uint64(time.Now().Unix()),
-			RecipientPub: bob.IKPub,
+			RecipientPub: bob.IKSignPub,
 		}
 		mailbox.Store(mailboxMsg)
 	}
@@ -110,7 +112,7 @@ func TestMailboxRetrieval(t *testing.T) {
 	t.Logf("Stored %d messages while Bob offline", len(messages))
 
 	// Bob comes online and retrieves messages
-	retrievedMsgs := mailbox.Retrieve(bob.IKPub)
+	retrievedMsgs := mailbox.Retrieve(bob.IKSignPub)
 
 	t.Logf("Bob retrieved %d messages", len(retrievedMsgs))
 
@@ -120,7 +122,7 @@ func TestMailboxRetrieval(t *testing.T) {
 
 	// Bob decrypts all messages
 	for i, retrieved := range retrievedMsgs {
-		plaintext, err := crypto.Decrypt(retrieved.Ciphertext, mailboxKey)
+		plaintext, err := crypto.DecryptWithSharedSecret(mailboxKey, retrieved.Nonce, retrieved.Ciphertext)
 		if err != nil {
 			t.Fatalf("Decryption failed for message %d: %v", i, err)
 		}
@@ -165,19 +167,14 @@ func TestOPKReplenishment(t *testing.T) {
 
 	t.Logf("Bob replenished with %d new OPKs (IDs 4-8)", len(newOPKs))
 
-	// In real implementation, new OPKs would be:
-	// 1. Encrypted and stored in mailbox
-	// 2. Published to DHT for discovery
-	// 3. Consumed atomically to prevent race conditions
-
 	if len(newOPKs) != 5 {
 		t.Errorf("Expected 5 new OPKs, got %d", len(newOPKs))
 	}
 
 	// Verify OPK IDs are sequential
 	expectedStartID := uint64(4)
-	if newOPKs[0].PrekeyID != expectedStartID {
-		t.Errorf("Expected first OPK ID %d, got %d", expectedStartID, newOPKs[0].PrekeyID)
+	if newOPKs[0].PrekeyId != expectedStartID {
+		t.Errorf("Expected first OPK ID %d, got %d", expectedStartID, newOPKs[0].PrekeyId)
 	}
 
 	t.Log("\n=== Acceptance Criteria ===")
@@ -195,7 +192,7 @@ func TestMailboxTopicSubscription(t *testing.T) {
 	_, bob := setupTwoUsers(t)
 
 	// Derive mailbox topic from Bob's identity
-	mailboxTopic := deriveMailboxTopic(bob.IKPub)
+	mailboxTopic := deriveMailboxTopic(bob.IKSignPub)
 
 	t.Logf("Mailbox topic: %s", mailboxTopic)
 
@@ -204,11 +201,6 @@ func TestMailboxTopicSubscription(t *testing.T) {
 	if len(mailboxTopic) <= len(expectedPrefix) || mailboxTopic[:len(expectedPrefix)] != expectedPrefix {
 		t.Errorf("Mailbox topic format incorrect: %s", mailboxTopic)
 	}
-
-	// In real implementation:
-	// 1. Bob subscribes to mailbox topic on relay nodes
-	// 2. Alice publishes message CID to this topic
-	// 3. Bob receives notification and fetches message
 
 	t.Log("\n=== Acceptance Criteria ===")
 	t.Log("✓ Mailbox topic derived from identity")
@@ -220,11 +212,6 @@ func TestMailboxTopicSubscription(t *testing.T) {
 // Spec reference: specs/testing.md - Relay node discovery and storage
 func TestRelayNodeDiscovery(t *testing.T) {
 	t.Log("=== Relay Node Discovery Test ===")
-
-	// In real implementation, relay nodes would:
-	// 1. Advertise mailbox service via DHT
-	// 2. Store encrypted messages for offline users
-	// 3. Authenticate users via identity signatures
 
 	// Simulated relay node info
 	relayNode := &RelayNodeInfo{
@@ -259,12 +246,12 @@ func TestRelayNodeDiscovery(t *testing.T) {
 // BenchmarkMailboxEncryption benchmarks message encryption for mailbox
 func BenchmarkMailboxEncryption(b *testing.B) {
 	_, bob := setupTwoUsers(&testing.T{})
-	mailboxKey := deriveMailboxKey(bob.IKPub)
+	mailboxKey := deriveMailboxKey(bob.IKSignPub)
 	message := []byte("Test message for mailbox benchmark")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := crypto.Encrypt(message, mailboxKey)
+		_, _, err := crypto.EncryptWithSharedSecret(mailboxKey, message)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -274,13 +261,13 @@ func BenchmarkMailboxEncryption(b *testing.B) {
 // BenchmarkMailboxDecryption benchmarks message decryption from mailbox
 func BenchmarkMailboxDecryption(b *testing.B) {
 	_, bob := setupTwoUsers(&testing.T{})
-	mailboxKey := deriveMailboxKey(bob.IKPub)
+	mailboxKey := deriveMailboxKey(bob.IKSignPub)
 	message := []byte("Test message for mailbox benchmark")
-	ciphertext, _ := crypto.Encrypt(message, mailboxKey)
+	nonce, ciphertext, _ := crypto.EncryptWithSharedSecret(mailboxKey, message)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := crypto.Decrypt(ciphertext, mailboxKey)
+		_, err := crypto.DecryptWithSharedSecret(mailboxKey, nonce, ciphertext)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -291,6 +278,7 @@ func BenchmarkMailboxDecryption(b *testing.B) {
 
 type MailboxMessage struct {
 	Ciphertext   []byte
+	Nonce        []byte
 	SenderPub    []byte
 	Timestamp    uint64
 	RecipientPub []byte

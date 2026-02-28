@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -14,9 +15,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 
-	pb "babylontower/pkg/proto"
 	"babylontower/pkg/crypto"
 	"babylontower/pkg/identity"
+	pb "babylontower/pkg/proto"
 )
 
 // RetrievalHandler handles message retrieval by recipients
@@ -161,15 +162,15 @@ func (dh *DepositHandler) handleAckRequest(ctx context.Context, reader *bufio.Re
 // validateRetrievalRequest validates a retrieval request
 func (dh *DepositHandler) validateRetrievalRequest(req *pb.RetrievalRequest) error {
 	if len(req.RecipientPubkey) != 32 {
-		return fmt.Errorf("invalid recipient pubkey length")
+		return errors.New("invalid recipient pubkey length")
 	}
 
 	if len(req.Nonce) != 32 {
-		return fmt.Errorf("invalid nonce length")
+		return errors.New("invalid nonce length")
 	}
 
 	if len(req.RecipientSignature) == 0 {
-		return fmt.Errorf("missing recipient signature")
+		return errors.New("missing recipient signature")
 	}
 
 	// Verify signature
@@ -178,13 +179,15 @@ func (dh *DepositHandler) validateRetrievalRequest(req *pb.RetrievalRequest) err
 		Nonce:           req.Nonce,
 		Timestamp:       req.Timestamp,
 	}
-	_, err := proto.Marshal(canonical)
+	dataForSigning, err := proto.Marshal(canonical)
 	if err != nil {
-		return fmt.Errorf("failed to marshal for verification")
+		return errors.New("failed to marshal for verification")
 	}
 
-	// Note: In PoC we skip actual signature verification
-	// TODO: Verify Ed25519 signature against req.RecipientPubkey
+	// Verify Ed25519 signature against recipient pubkey
+	if !crypto.Verify(req.RecipientPubkey, dataForSigning, req.RecipientSignature) {
+		return errors.New("invalid recipient signature")
+	}
 
 	return nil
 }
@@ -192,11 +195,11 @@ func (dh *DepositHandler) validateRetrievalRequest(req *pb.RetrievalRequest) err
 // validateAckRequest validates an acknowledgment request
 func (dh *DepositHandler) validateAckRequest(req *pb.AcknowledgmentRequest) error {
 	if len(req.RecipientPubkey) != 32 {
-		return fmt.Errorf("invalid recipient pubkey length")
+		return errors.New("invalid recipient pubkey length")
 	}
 
 	if len(req.RecipientSignature) == 0 {
-		return fmt.Errorf("missing recipient signature")
+		return errors.New("missing recipient signature")
 	}
 
 	// Verify signature
@@ -205,13 +208,15 @@ func (dh *DepositHandler) validateAckRequest(req *pb.AcknowledgmentRequest) erro
 		MessageIds:      req.MessageIds,
 		Timestamp:       req.Timestamp,
 	}
-	_, err := proto.Marshal(canonical)
+	dataForSigning, err := proto.Marshal(canonical)
 	if err != nil {
-		return fmt.Errorf("failed to marshal for verification")
+		return errors.New("failed to marshal for verification")
 	}
 
-	// Note: In PoC we skip actual signature verification
-	// TODO: Verify Ed25519 signature against req.RecipientPubkey
+	// Verify Ed25519 signature against recipient pubkey
+	if !crypto.Verify(req.RecipientPubkey, dataForSigning, req.RecipientSignature) {
+		return errors.New("invalid recipient signature")
+	}
 
 	return nil
 }
@@ -328,7 +333,7 @@ func RetrieveFromMailbox(ctx context.Context, h host.Host, mailboxPeerID string,
 	}
 
 	if msgType != 0x02 {
-		return nil, fmt.Errorf("unexpected response type")
+		return nil, errors.New("unexpected response type")
 	}
 
 	resp := &pb.RetrievalResponse{}
@@ -388,7 +393,7 @@ func AcknowledgeMessages(ctx context.Context, h host.Host, mailboxPeerID string,
 	}
 
 	if msgType != 0x03 {
-		return nil, fmt.Errorf("unexpected response type")
+		return nil, errors.New("unexpected response type")
 	}
 
 	resp := &pb.AcknowledgmentResponse{}

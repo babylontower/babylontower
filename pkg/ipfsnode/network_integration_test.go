@@ -7,13 +7,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"sync"
 	"testing"
 	"time"
-
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
 )
 
 // TestTwoNodePubSub tests publish/subscribe between two IPFS nodes
@@ -21,7 +16,7 @@ import (
 func TestTwoNodePubSub(t *testing.T) {
 	t.Log("=== Two-Node PubSub Test ===")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Create temporary directories for nodes
@@ -75,7 +70,7 @@ func TestTwoNodePubSub(t *testing.T) {
 	addr1 := node1.Multiaddrs()[0]
 	t.Logf("Node 1 address: %s", addr1)
 
-	err = node2.Connect(ctx, addr1)
+	err = node2.ConnectToPeer(addr1)
 	if err != nil {
 		t.Fatalf("Failed to connect node 2 to node 1: %v", err)
 	}
@@ -100,7 +95,7 @@ func TestTwoNodePubSub(t *testing.T) {
 
 	// Node 2 publishes message
 	message := "Hello from Node 2!"
-	err = node2.Publish(ctx, topic, []byte(message))
+	err = node2.Publish(topic, []byte(message))
 	if err != nil {
 		t.Fatalf("Node 2 publish failed: %v", err)
 	}
@@ -109,13 +104,13 @@ func TestTwoNodePubSub(t *testing.T) {
 
 	// Node 1 receives message
 	select {
-	case msg := <-sub1.Messages:
+	case msg := <-sub1.Messages():
 		t.Logf("Node 1 received: %s", string(msg.Data))
 		if string(msg.Data) != message {
 			t.Errorf("Message content mismatch: got %s, want %s", msg.Data, message)
 		}
-		if msg.From != node2.PeerID() {
-			t.Errorf("Message sender mismatch: got %s, want %s", msg.From, node2.PeerID())
+		if msg.From.String() != node2.PeerID() {
+			t.Errorf("Message sender mismatch: got %s, want %s", msg.From.String(), node2.PeerID())
 		}
 		t.Log("✓ Message received correctly")
 
@@ -150,8 +145,8 @@ func TestMultiNodeNetworkFormation(t *testing.T) {
 		defer os.RemoveAll(tmpDir)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	_, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
 
 	// Create and start all nodes
 	for i := 0; i < nodeCount; i++ {
@@ -185,8 +180,8 @@ func TestMultiNodeNetworkFormation(t *testing.T) {
 	for i := 0; i < nodeCount; i++ {
 		nextIdx := (i + 1) % nodeCount
 		addr := nodes[nextIdx].Multiaddrs()[0]
-		
-		err := nodes[i].Connect(ctx, addr)
+
+		err := nodes[i].ConnectToPeer(addr)
 		if err != nil {
 			t.Logf("Warning: Failed to connect node %d to node %d: %v", i+1, nextIdx+1, err)
 		}
@@ -204,8 +199,8 @@ func TestMultiNodeNetworkFormation(t *testing.T) {
 
 	for i := 0; i < nodeCount; i++ {
 		// Get connection count
-		connections := nodes[i].ConnectionManager().ConnCount()
-		
+		connections := len(nodes[i].ConnectedPeers())
+
 		// Get DHT routing table size
 		routingTableSize := nodes[i].DHT().RoutingTable().Size()
 
@@ -284,8 +279,8 @@ func TestPubSubMessageDelivery(t *testing.T) {
 	subs := make([]*Subscription, nodeCount)
 	cleanupFns := make([]func(), nodeCount)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	_, cancel3 := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel3()
 
 	// Create nodes
 	tmpDirs := make([]string, nodeCount)
@@ -324,7 +319,7 @@ func TestPubSubMessageDelivery(t *testing.T) {
 	// Connect all nodes to first node (star topology)
 	for i := 1; i < nodeCount; i++ {
 		addr := nodes[0].Multiaddrs()[0]
-		if err := nodes[i].Connect(ctx, addr); err != nil {
+		if err := nodes[i].ConnectToPeer(addr); err != nil {
 			t.Fatalf("Failed to connect node %d: %v", i, err)
 		}
 	}
@@ -345,7 +340,7 @@ func TestPubSubMessageDelivery(t *testing.T) {
 
 	// Node 0 publishes message
 	message := "Broadcast message from Node 0"
-	if err := nodes[0].Publish(ctx, topic, []byte(message)); err != nil {
+	if err := nodes[0].Publish(topic, []byte(message)); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
 
@@ -356,7 +351,7 @@ func TestPubSubMessageDelivery(t *testing.T) {
 	for i := 0; i < nodeCount; i++ {
 		go func(idx int) {
 			select {
-			case msg := <-subs[idx].Messages:
+			case msg := <-subs[idx].Messages():
 				if string(msg.Data) == message {
 					received <- idx
 				}
@@ -395,8 +390,8 @@ done:
 func TestDHTBootstrap(t *testing.T) {
 	t.Log("=== DHT Bootstrap Test ===")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	_, cancel4 := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel4()
 
 	// Create bootstrap node (simulating public bootstrap node)
 	bootstrapDir, _ := os.MkdirTemp("", "babylon-bootstrap-*")
@@ -449,7 +444,7 @@ func TestDHTBootstrap(t *testing.T) {
 	t.Logf("DHT routing table size: %d", routingTableSize)
 
 	// Check connections
-	connCount := clientNode.ConnectionManager().ConnCount()
+	connCount := len(clientNode.ConnectedPeers())
 	t.Logf("Connection count: %d", connCount)
 
 	t.Log("\n=== Acceptance Criteria ===")
@@ -470,7 +465,7 @@ func TestDHTBootstrap(t *testing.T) {
 func BenchmarkNodeStartup(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		tmpDir, _ := os.MkdirTemp("", "babylon-bench-*")
-		
+
 		config := DefaultConfig()
 		config.RepoDir = tmpDir
 		config.BootstrapPeers = []string{}
@@ -497,7 +492,7 @@ func BenchmarkPubSubThroughput(b *testing.B) {
 	defer os.RemoveAll(tmpDir1)
 	defer os.RemoveAll(tmpDir2)
 
-	ctx := context.Background()
+	_ = context.Background()
 
 	config1 := DefaultConfig()
 	config1.RepoDir = tmpDir1
@@ -516,7 +511,7 @@ func BenchmarkPubSubThroughput(b *testing.B) {
 	defer stopNode(node2)()
 
 	// Connect nodes
-	node2.Connect(ctx, node1.Multiaddrs()[0])
+	node2.ConnectToPeer(node1.Multiaddrs()[0])
 	time.Sleep(500 * time.Millisecond)
 
 	// Subscribe
@@ -528,7 +523,7 @@ func BenchmarkPubSubThroughput(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		node1.Publish(ctx, "bench-topic", message)
-		<-sub.Messages
+		node1.Publish("bench-topic", message)
+		<-sub.Messages()
 	}
 }

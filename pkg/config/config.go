@@ -3,9 +3,8 @@
 package config
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/multiformats/go-multiaddr"
@@ -16,9 +15,9 @@ const (
 	DefaultProtocolID = "/babylontower/1.0.0"
 
 	// Default timeouts
-	DefaultBootstrapTimeout   = 60 * time.Second
-	DefaultConnectionTimeout  = 30 * time.Second
-	DefaultDialTimeout        = 15 * time.Second
+	DefaultBootstrapTimeout    = 60 * time.Second
+	DefaultConnectionTimeout   = 30 * time.Second
+	DefaultDialTimeout         = 15 * time.Second
 	DefaultDHTBootstrapTimeout = 60 * time.Second
 
 	// Default connection limits
@@ -31,50 +30,40 @@ const (
 	DefaultMinPeerConnections = 10
 
 	// Default listen addresses
-	DefaultListenAddrTCP  = "/ip4/0.0.0.0/tcp/0"
-	DefaultListenAddrWS   = "/ip4/0.0.0.0/tcp/0/ws"
+	DefaultListenAddrTCP   = "/ip4/0.0.0.0/tcp/0"
+	DefaultListenAddrWS    = "/ip4/0.0.0.0/tcp/0/ws"
 	DefaultListenAddrTCPv6 = "/ip6/::/tcp/0"
 )
 
-// PeerSource indicates where a peer was discovered
-type PeerSource string
-
-const (
-	SourceBootstrap   PeerSource = "bootstrap"
-	SourceDHT         PeerSource = "dht"
-	SourceMDNS        PeerSource = "mdns"
-	SourcePeerExchange PeerSource = "peer_exchange"
-)
-
-// IPFSConfig holds configuration for the IPFS node
+// IPFSConfig holds configuration for the IPFS node (internal representation for ipfsnode package)
 type IPFSConfig struct {
 	// Bootstrap configuration
-	BootstrapPeers      []string        `json:"bootstrap_peers"`
-	BootstrapTimeout    time.Duration   `json:"bootstrap_timeout"`
+	BootstrapPeers   []string      `json:"bootstrap_peers"`
+	BootstrapTimeout time.Duration `json:"bootstrap_timeout"`
 
 	// Peer persistence
-	MaxStoredPeers      int             `json:"max_stored_peers"`
-	MinPeerConnections  int             `json:"min_peer_connections"`
+	MaxStoredPeers     int `json:"max_stored_peers"`
+	MinPeerConnections int `json:"min_peer_connections"`
 
 	// Connection management
-	ConnectionTimeout   time.Duration   `json:"connection_timeout"`
-	DialTimeout         time.Duration   `json:"dial_timeout"`
-	MaxConnections      int             `json:"max_connections"`
-	LowWater            int             `json:"low_water"`
-	HighWater           int             `json:"high_water"`
+	ConnectionTimeout time.Duration `json:"connection_timeout"`
+	DialTimeout       time.Duration `json:"dial_timeout"`
+	MaxConnections    int           `json:"max_connections"`
+	LowWater          int           `json:"low_water"`
+	HighWater         int           `json:"high_water"`
 
 	// NAT traversal
-	EnableRelay         bool            `json:"enable_relay"`
-	EnableHolePunching  bool            `json:"enable_hole_punching"`
-	EnableAutoNAT       bool            `json:"enable_autonat"`
+	EnableRelay        bool `json:"enable_relay"`
+	EnableHolePunching bool `json:"enable_hole_punching"`
+	EnableAutoNAT      bool `json:"enable_autonat"`
 
 	// DHT configuration
-	DHTMode             string          `json:"dht_mode"`
-	DHTBootstrapTimeout time.Duration   `json:"dht_bootstrap_timeout"`
+	DHTMode             string        `json:"dht_mode"`
+	DHTBootstrapTimeout time.Duration `json:"dht_bootstrap_timeout"`
 
 	// Network configuration
-	ListenAddrs         []string        `json:"listen_addrs"`
-	ProtocolID          string          `json:"protocol_id"`
+	ListenAddrs []string `json:"listen_addrs"`
+	ProtocolID  string   `json:"protocol_id"`
 }
 
 // DefaultIPFSConfig returns an IPFSConfig with sensible defaults
@@ -96,23 +85,23 @@ func DefaultIPFSConfig() *IPFSConfig {
 			"/ip4/178.62.158.147/tcp/4001/p2p/QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd",
 			"/ip4/178.62.61.185/tcp/4001/p2p/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3",
 		},
-		BootstrapTimeout:      DefaultBootstrapTimeout,
+		BootstrapTimeout: DefaultBootstrapTimeout,
 
 		// Peer storage
-		MaxStoredPeers:      DefaultMaxStoredPeers,
-		MinPeerConnections:  DefaultMinPeerConnections,
+		MaxStoredPeers:     DefaultMaxStoredPeers,
+		MinPeerConnections: DefaultMinPeerConnections,
 
 		// Connection management
-		ConnectionTimeout:   DefaultConnectionTimeout,
-		DialTimeout:         DefaultDialTimeout,
-		MaxConnections:      DefaultMaxConnections,
-		LowWater:            DefaultLowWater,
-		HighWater:           DefaultHighWater,
+		ConnectionTimeout: DefaultConnectionTimeout,
+		DialTimeout:       DefaultDialTimeout,
+		MaxConnections:    DefaultMaxConnections,
+		LowWater:          DefaultLowWater,
+		HighWater:         DefaultHighWater,
 
 		// NAT traversal
-		EnableRelay:         false,
-		EnableHolePunching:  true,
-		EnableAutoNAT:       true,
+		EnableRelay:        false,
+		EnableHolePunching: true,
+		EnableAutoNAT:      true,
 
 		// DHT
 		DHTMode:             "auto",
@@ -124,37 +113,8 @@ func DefaultIPFSConfig() *IPFSConfig {
 			DefaultListenAddrWS,
 			DefaultListenAddrTCPv6,
 		},
-		ProtocolID:          DefaultProtocolID,
+		ProtocolID: DefaultProtocolID,
 	}
-}
-
-// LoadFromFile loads configuration from a JSON file
-func LoadFromFile(path string) (*IPFSConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	config := DefaultIPFSConfig()
-	if err := json.Unmarshal(data, config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	return config, nil
-}
-
-// SaveToFile saves configuration to a JSON file
-func (c *IPFSConfig) SaveToFile(path string) error {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
 }
 
 // Validate validates the configuration
@@ -175,24 +135,24 @@ func (c *IPFSConfig) Validate() error {
 
 	// Validate connection limits
 	if c.LowWater < 0 {
-		return fmt.Errorf("low_water must be non-negative")
+		return errors.New("low_water must be non-negative")
 	}
 	if c.HighWater < c.LowWater {
-		return fmt.Errorf("high_water must be >= low_water")
+		return errors.New("high_water must be >= low_water")
 	}
 	if c.MaxConnections < c.HighWater {
-		return fmt.Errorf("max_connections must be >= high_water")
+		return errors.New("max_connections must be >= high_water")
 	}
 
 	// Validate timeouts
 	if c.BootstrapTimeout <= 0 {
-		return fmt.Errorf("bootstrap_timeout must be positive")
+		return errors.New("bootstrap_timeout must be positive")
 	}
 	if c.ConnectionTimeout <= 0 {
-		return fmt.Errorf("connection_timeout must be positive")
+		return errors.New("connection_timeout must be positive")
 	}
 	if c.DialTimeout <= 0 {
-		return fmt.Errorf("dial_timeout must be positive")
+		return errors.New("dial_timeout must be positive")
 	}
 
 	// Validate DHT mode
@@ -205,10 +165,10 @@ func (c *IPFSConfig) Validate() error {
 
 	// Validate peer storage
 	if c.MaxStoredPeers < 10 {
-		return fmt.Errorf("max_stored_peers must be >= 10")
+		return errors.New("max_stored_peers must be >= 10")
 	}
 	if c.MinPeerConnections < 1 {
-		return fmt.Errorf("min_peer_connections must be >= 1")
+		return errors.New("min_peer_connections must be >= 1")
 	}
 
 	return nil
@@ -234,76 +194,4 @@ func (c *IPFSConfig) GetBootstrapPeerInfos() ([]multiaddr.Multiaddr, error) {
 		addrs = append(addrs, ma)
 	}
 	return addrs, nil
-}
-
-// ToMap converts the config to a map for storage
-func (c *IPFSConfig) ToMap() (map[string]string, error) {
-	data, err := json.Marshal(c)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]string{
-		"ipfs_config": string(data),
-	}, nil
-}
-
-// FromMap loads the config from a map
-func (c *IPFSConfig) FromMap(m map[string]string) error {
-	data, ok := m["ipfs_config"]
-	if !ok {
-		return fmt.Errorf("ipfs_config key not found")
-	}
-
-	return json.Unmarshal([]byte(data), c)
-}
-
-// PeerRecord represents a discovered peer for persistence
-type PeerRecord struct {
-	PeerID        string    `json:"peer_id"`
-	Multiaddrs    []string  `json:"multiaddrs"`
-	FirstSeen     time.Time `json:"first_seen"`
-	LastSeen      time.Time `json:"last_seen"`
-	LastConnected time.Time `json:"last_connected"`
-	ConnectCount  int       `json:"connect_count"`
-	FailCount     int       `json:"fail_count"`
-	Source        PeerSource `json:"source"`
-	Protocols     []string  `json:"protocols"`
-	LatencyMs     int64     `json:"latency_ms"`
-}
-
-// SuccessRate returns the connection success rate (0.0 to 1.0)
-func (p *PeerRecord) SuccessRate() float64 {
-	total := p.ConnectCount + p.FailCount
-	if total == 0 {
-		return 0.0
-	}
-	return float64(p.ConnectCount) / float64(total)
-}
-
-// IsStale returns true if the peer hasn't been seen recently
-func (p *PeerRecord) IsStale(maxAge time.Duration) bool {
-	return time.Since(p.LastSeen) > maxAge
-}
-
-// ToMap converts the peer record to a map for storage
-func (p *PeerRecord) ToMap() (map[string]string, error) {
-	data, err := json.Marshal(p)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]string{
-		p.PeerID: string(data),
-	}, nil
-}
-
-// FromMap loads a peer record from a map
-func (p *PeerRecord) FromMap(m map[string]string, peerID string) error {
-	data, ok := m[peerID]
-	if !ok {
-		return fmt.Errorf("peer %s not found", peerID)
-	}
-
-	return json.Unmarshal([]byte(data), p)
 }

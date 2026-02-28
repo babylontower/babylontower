@@ -130,4 +130,4 @@ fi
 
 # Run the messenger
 cd "$PROJECT_ROOT"
-exec "$BINARY"
+exec "$BINARY" -log-level info

@@ -205,14 +205,15 @@ type DoubleRatchetState struct {
 	RemoteIdentityPub ed25519.PublicKey
 
 	// DH ratchet keys
-	DHSendingKeyPriv   *[32]byte
-	DHSendingKeyPub    *[32]byte
-	DHReceivingKeyPub  *[32]byte
+	DHSendingKeyPriv  *[32]byte
+	DHSendingKeyPub   *[32]byte
+	DHReceivingKeyPub *[32]byte
 
 	// Root and chain keys
-	RootKey           []byte
-	SendingChainKey   []byte
-	SendingChainCount uint32
+	RootKey                 []byte
+	SendingChainKey         []byte
+	SendingChainCount       uint32
+	PreviousSendingChainLen uint32 // Length of previous sending chain (for header)
 
 	ReceivingChainKey   []byte
 	ReceivingChainCount uint32
@@ -286,7 +287,7 @@ func NewDoubleRatchetStateResponder(
 		SessionID:           sessionID,
 		LocalIdentityPub:    localIdentityPub,
 		RemoteIdentityPub:   remoteIdentityPub,
-		DHSendingKeyPriv:    localSPKPriv,  // Reuse SPK for first ratchet
+		DHSendingKeyPriv:    localSPKPriv, // Reuse SPK for first ratchet
 		DHSendingKeyPub:     localSPKPub,
 		DHReceivingKeyPub:   nil, // Not set until first message received
 		RootKey:             sharedSecret,

@@ -3,6 +3,7 @@ package ratchet
 import (
 	"crypto/ed25519"
 	"crypto/hmac"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,16 +13,16 @@ import (
 
 // RatchetHeader is included with each encrypted message
 type RatchetHeader struct {
-	DHRatchetPub      *[32]byte // Current DH ratchet public key
-	PreviousChainLen  uint32    // Length of previous sending chain
-	MessageNumber     uint32    // Index in current sending chain
+	DHRatchetPub     *[32]byte // Current DH ratchet public key
+	PreviousChainLen uint32    // Length of previous sending chain
+	MessageNumber    uint32    // Index in current sending chain
 }
 
 // EncryptedMessage is the output of Encrypt
 type EncryptedMessage struct {
-	Header       *RatchetHeader
-	Ciphertext   []byte
-	Nonce        []byte
+	Header     *RatchetHeader
+	Ciphertext []byte
+	Nonce      []byte
 }
 
 // Encrypt encrypts a message using the Double Ratchet
@@ -57,7 +58,7 @@ func (s *DoubleRatchetState) Encrypt(plaintext, associatedData []byte) (*Encrypt
 	// Create header
 	header := &RatchetHeader{
 		DHRatchetPub:     s.DHSendingKeyPub,
-		PreviousChainLen: 0, // Set appropriately for chain changes
+		PreviousChainLen: s.PreviousSendingChainLen,
 		MessageNumber:    s.SendingChainCount,
 	}
 
@@ -65,15 +66,19 @@ func (s *DoubleRatchetState) Encrypt(plaintext, associatedData []byte) (*Encrypt
 	s.SendingChainCount++
 	s.LastUsedAt = time.Now().Unix()
 
+	// Build result before cleanup
+	result := &EncryptedMessage{
+		Header:     header,
+		Ciphertext: ciphertext,
+		Nonce:      make([]byte, len(nonce)),
+	}
+	copy(result.Nonce, nonce)
+
 	// Clean up
 	zeroBytes(messageKey)
 	zeroBytes(nonce)
 
-	return &EncryptedMessage{
-		Header:     header,
-		Ciphertext: ciphertext,
-		Nonce:      nonce,
-	}, nil
+	return result, nil
 }
 
 // Decrypt decrypts a message using the Double Ratchet
@@ -87,8 +92,19 @@ func (s *DoubleRatchetState) Decrypt(header *RatchetHeader, ciphertext, associat
 			}
 		}
 	} else if header.DHRatchetPub != nil && s.DHReceivingKeyPub == nil {
-		// First message from sender - set receiving key
+		// First message from sender - set receiving key and derive receiving chain
 		s.DHReceivingKeyPub = header.DHRatchetPub
+
+		// Derive receiving chain from DH output
+		dhOutput, err := curve25519.X25519(s.DHSendingKeyPriv[:], header.DHRatchetPub[:])
+		if err != nil {
+			return nil, fmt.Errorf("initial DH ratchet failed: %w", err)
+		}
+		newRootKey, newChainKey := KDF_RK(s.RootKey, dhOutput)
+		zeroBytes(dhOutput)
+		s.RootKey = newRootKey
+		s.ReceivingChainKey = newChainKey
+		s.ReceivingChainCount = 0
 	}
 
 	// Check if this is a skipped message
@@ -133,7 +149,7 @@ func (s *DoubleRatchetState) Decrypt(header *RatchetHeader, ciphertext, associat
 // dhRatchetSend performs a DH ratchet step for sending
 func (s *DoubleRatchetState) dhRatchetSend() error {
 	if s.DHReceivingKeyPub == nil {
-		return fmt.Errorf("no receiving key set")
+		return errors.New("no receiving key set")
 	}
 
 	// Generate new ratchet key pair
@@ -157,6 +173,7 @@ func (s *DoubleRatchetState) dhRatchetSend() error {
 	if s.DHSendingKeyPriv != nil {
 		zeroBytes(s.DHSendingKeyPriv[:])
 	}
+	s.PreviousSendingChainLen = s.SendingChainCount
 	s.DHSendingKeyPriv = newPriv
 	s.DHSendingKeyPub = newPub
 	s.RootKey = newRootKey
@@ -168,11 +185,8 @@ func (s *DoubleRatchetState) dhRatchetSend() error {
 
 // dhRatchetReceive performs a DH ratchet step for receiving
 func (s *DoubleRatchetState) dhRatchetReceive(header *RatchetHeader) error {
-	// Store previous chain length for skipped key handling
-	prevChainLen := s.SendingChainCount
-
-	// Skip remaining messages in current receiving chain
-	s.cacheSkippedKeys(prevChainLen)
+	// Cache remaining keys from the current receiving chain before switching
+	s.cacheSkippedKeys(header.PreviousChainLen)
 
 	// DH ratchet step
 	dhOutput, err := curve25519.X25519(s.DHSendingKeyPriv[:], header.DHRatchetPub[:])
@@ -216,7 +230,7 @@ func (s *DoubleRatchetState) advanceReceivingChain(targetNum uint32) error {
 // skipMessages handles out-of-order messages by caching skipped keys
 func (s *DoubleRatchetState) skipMessages(header *RatchetHeader) error {
 	if s.ReceivingChainKey == nil {
-		return fmt.Errorf("receiving chain not initialized")
+		return errors.New("receiving chain not initialized")
 	}
 
 	currentCount := s.ReceivingChainCount
@@ -239,10 +253,27 @@ func (s *DoubleRatchetState) skipMessages(header *RatchetHeader) error {
 	return nil
 }
 
-// cacheSkippedKeys caches remaining keys in current chain
+// cacheSkippedKeys caches remaining keys in the current receiving chain
+// before a DH ratchet switch. prevChainLen is the number of messages the
+// sender indicated it sent on the previous chain (from PreviousChainLen header).
 func (s *DoubleRatchetState) cacheSkippedKeys(prevChainLen uint32) {
-	// Implementation for caching skipped keys when ratchet changes
-	// This is a simplified version - full implementation would cache all remaining keys
+	if s.ReceivingChainKey == nil {
+		return
+	}
+	// Cache keys from current receiving chain position up to prevChainLen
+	for s.ReceivingChainCount < prevChainLen {
+		newChainKey, skippedKey := KDF_CK(s.ReceivingChainKey)
+		s.ReceivingChainKey = newChainKey
+
+		key := s.skippedKeyString(s.DHReceivingKeyPub, s.ReceivingChainCount)
+		if len(s.SkippedKeys) < MaxSkippedKeys {
+			s.SkippedKeys[key] = skippedKey
+		} else {
+			zeroBytes(skippedKey)
+		}
+
+		s.ReceivingChainCount++
+	}
 }
 
 // getSkippedKey retrieves a cached skipped key

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -244,7 +245,7 @@ func TestGetTier(t *testing.T) {
 
 	// Create record and manipulate score to test tier thresholds
 	record := tracker.GetOrCreateRecord(peerID)
-	
+
 	// Set metrics to achieve desired scores
 	// For TierBasic (0.2): all metrics at 0.2
 	record.mu.Lock()
@@ -442,14 +443,14 @@ func TestCompositeScoreComputation(t *testing.T) {
 
 	// Test with different weights
 	customConfig := &Config{
-		RelayReliabilityWeight:     0.5,
-		UptimeConsistencyWeight:    0.0,
-		MailboxReliabilityWeight:   0.5,
-		DHTResponsivenessWeight:    0.0,
-		ContentServingWeight:       0.0,
-		TierContributorThreshold:   DefaultTierContributorThreshold,
-		TierReliableThreshold:      DefaultTierReliableThreshold,
-		TierTrustedThreshold:       DefaultTierTrustedThreshold,
+		RelayReliabilityWeight:   0.5,
+		UptimeConsistencyWeight:  0.0,
+		MailboxReliabilityWeight: 0.5,
+		DHTResponsivenessWeight:  0.0,
+		ContentServingWeight:     0.0,
+		TierContributorThreshold: DefaultTierContributorThreshold,
+		TierReliableThreshold:    DefaultTierReliableThreshold,
+		TierTrustedThreshold:     DefaultTierTrustedThreshold,
 	}
 
 	record.updateCompositeScore(customConfig)
@@ -538,6 +539,129 @@ func TestAddAttestationNotTrusted(t *testing.T) {
 	err := tracker.AddAttestation(attestation)
 	assert.Error(t, err)
 	assert.Equal(t, ErrAttesterNotTrusted, err)
+}
+
+func TestTierThresholdBoundaries(t *testing.T) {
+	selfPeerID := peer.ID("test-peer")
+	tracker := NewTracker(selfPeerID, "identity-pub", nil)
+
+	tests := []struct {
+		name     string
+		score    float64
+		expected Tier
+	}{
+		{"just below contributor", 0.29, TierBasic},
+		{"at contributor threshold", 0.30, TierContributor},
+		{"just above contributor", 0.31, TierContributor},
+		{"just below reliable", 0.59, TierContributor},
+		{"at reliable threshold", 0.60, TierReliable},
+		{"just above reliable", 0.61, TierReliable},
+		{"just below trusted", 0.79, TierReliable},
+		{"at trusted threshold", 0.80, TierTrusted},
+		{"just above trusted", 0.81, TierTrusted},
+		{"maximum", 1.0, TierTrusted},
+		{"zero", 0.0, TierBasic},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			peerID := peer.ID(string(rune('A' + i)))
+			record := tracker.GetOrCreateRecord(peerID)
+
+			// Set all metrics to the same value to get uniform composite score
+			record.mu.Lock()
+			record.metrics.RelayReliability = tt.score
+			record.metrics.UptimeConsistency = tt.score
+			record.metrics.MailboxReliability = tt.score
+			record.metrics.DHTResponsiveness = tt.score
+			record.metrics.ContentServing = tt.score
+			record.updateCompositeScore(tracker.config)
+			record.mu.Unlock()
+
+			assert.Equal(t, tt.expected, tracker.GetTier(peerID), "score=%.2f", tt.score)
+		})
+	}
+}
+
+func TestCompositeScoreWeightedAverage(t *testing.T) {
+	selfPeerID := peer.ID("test-peer")
+	tracker := NewTracker(selfPeerID, "identity-pub", nil)
+
+	peerID := peer.ID("peer-1")
+	record := tracker.GetOrCreateRecord(peerID)
+
+	// Set heterogeneous metrics
+	record.mu.Lock()
+	record.metrics.RelayReliability = 1.0   // weight 0.25
+	record.metrics.UptimeConsistency = 0.0  // weight 0.20
+	record.metrics.MailboxReliability = 1.0 // weight 0.25
+	record.metrics.DHTResponsiveness = 0.0  // weight 0.15
+	record.metrics.ContentServing = 0.0     // weight 0.15
+	record.updateCompositeScore(tracker.config)
+	record.mu.Unlock()
+
+	// Expected: 1.0*0.25 + 0.0*0.20 + 1.0*0.25 + 0.0*0.15 + 0.0*0.15 = 0.50
+	assert.InDelta(t, 0.50, record.compositeScore, 0.001)
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	selfPeerID := peer.ID("test-peer")
+	tracker := NewTracker(selfPeerID, "identity-pub", nil)
+
+	peerID := peer.ID("peer-1")
+	tracker.GetOrCreateRecord(peerID)
+
+	done := make(chan struct{})
+	for i := 0; i < 10; i++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for j := 0; j < 100; j++ {
+				tracker.RecordRelayEvent(peerID, true)
+				tracker.RecordUptimeObservation(peerID, true)
+				tracker.RecordDHTQuery(peerID, 50)
+				_ = tracker.GetCompositeScore(peerID)
+				_ = tracker.GetTier(peerID)
+			}
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// If we get here without a race detector panic, concurrent access is safe.
+	record := tracker.GetRecord(peerID)
+	assert.NotNil(t, record)
+	assert.Greater(t, record.metrics.RelayTotalCount, uint64(0))
+}
+
+func TestTrustAdjustmentAffectsScore(t *testing.T) {
+	selfPeerID := peer.ID("test-peer")
+	tracker := NewTracker(selfPeerID, "identity-pub", nil)
+
+	peerID := peer.ID("peer-1")
+	record := tracker.GetOrCreateRecord(peerID)
+
+	// Set all metrics to 0.5 → composite = 0.5
+	record.mu.Lock()
+	record.metrics.RelayReliability = 0.5
+	record.metrics.UptimeConsistency = 0.5
+	record.metrics.MailboxReliability = 0.5
+	record.metrics.DHTResponsiveness = 0.5
+	record.metrics.ContentServing = 0.5
+	record.updateCompositeScore(tracker.config)
+	record.mu.Unlock()
+
+	baseScore := tracker.GetCompositeScore(peerID)
+	assert.InDelta(t, 0.5, baseScore, 0.001)
+
+	// Positive adjustment should increase the score
+	tracker.SetTrustAdjustment(peerID, 0.3)
+	record.mu.Lock()
+	record.updateCompositeScore(tracker.config)
+	record.mu.Unlock()
+	adjusted := tracker.GetCompositeScore(peerID)
+	assert.Greater(t, adjusted, baseScore)
 }
 
 func TestToProto(t *testing.T) {

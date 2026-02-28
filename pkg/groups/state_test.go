@@ -150,10 +150,10 @@ func TestGroupStateValidateStateUpdate(t *testing.T) {
 
 	currentHash, _ := currentState.ComputeHash()
 	update := &GroupStateUpdate{
-		NewState:            newState,
-		PreviousStateHash:   currentHash,
-		UpdaterPubkey:       adminPubKey,
-		UpdaterSignature:    nil,
+		NewState:          newState,
+		PreviousStateHash: currentHash,
+		UpdaterPubkey:     adminPubKey,
+		UpdaterSignature:  nil,
 	}
 
 	err = newState.Sign(adminPrivKey)

@@ -12,25 +12,26 @@ import (
 	"babylontower/pkg/crypto"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
 
-var syncLogger = log.Logger("babylontower/multidevice")
+var logger = log.Logger("babylontower/multidevice")
 
 // SyncType aliases for convenience
 type SyncType = pb.SyncType
 
 const (
-	SyncTypeContactAdded   = pb.SyncType_CONTACT_ADDED
-	SyncTypeContactRemoved = pb.SyncType_CONTACT_REMOVED
-	SyncTypeContactUpdated = pb.SyncType_CONTACT_UPDATED
-	SyncTypeMessageRead    = pb.SyncType_MESSAGE_READ
-	SyncTypeGroupJoined    = pb.SyncType_GROUP_JOINED
-	SyncTypeGroupLeft      = pb.SyncType_GROUP_LEFT
+	SyncTypeContactAdded    = pb.SyncType_CONTACT_ADDED
+	SyncTypeContactRemoved  = pb.SyncType_CONTACT_REMOVED
+	SyncTypeContactUpdated  = pb.SyncType_CONTACT_UPDATED
+	SyncTypeMessageRead     = pb.SyncType_MESSAGE_READ
+	SyncTypeGroupJoined     = pb.SyncType_GROUP_JOINED
+	SyncTypeGroupLeft       = pb.SyncType_GROUP_LEFT
 	SyncTypeSettingsChanged = pb.SyncType_SETTINGS_CHANGED
-	SyncTypeHistoryRequest = pb.SyncType_HISTORY_REQUEST
-	SyncTypeHistoryBatch   = pb.SyncType_HISTORY_BATCH
+	SyncTypeHistoryRequest  = pb.SyncType_HISTORY_REQUEST
+	SyncTypeHistoryBatch    = pb.SyncType_HISTORY_BATCH
 )
 
 // SyncEvent represents a synchronization event
@@ -48,9 +49,9 @@ type SyncManager struct {
 	storage       storage.Storage
 	ipfsNode      interface{} // IPFS node interface (avoid circular import)
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 
 	// Sync topic subscription
 	subscription interface{}
@@ -69,13 +70,13 @@ type SyncManager struct {
 
 // HistoryRequestState tracks a pending history request
 type HistoryRequestState struct {
-	RequestID   string
+	RequestID     string
 	ContactPubKey []byte
-	StartTime   uint64
-	EndTime     uint64
-	MaxMessages uint32
-	Received    []*pb.HistoryMessage
-	Complete    bool
+	StartTime     uint64
+	EndTime       uint64
+	MaxMessages   uint32
+	Received      []*pb.HistoryMessage
+	Complete      bool
 }
 
 // SyncManagerConfig holds configuration for the sync manager
@@ -117,7 +118,7 @@ func (sm *SyncManager) Start(identityPub []byte) error {
 	// Subscribe to sync topic
 	// Note: Actual subscription requires type assertion to IPFS node
 	// This is handled by the caller in main.go
-	syncLogger.Infow("sync manager started", "topic", topic)
+	logger.Infow("sync manager started", "topic", topic)
 
 	return nil
 }
@@ -132,7 +133,7 @@ func (sm *SyncManager) Stop() error {
 		_ = sm.subscription // prevent staticcheck empty branch warning
 	}
 
-	syncLogger.Info("sync manager stopped")
+	logger.Info("sync manager stopped")
 	return nil
 }
 
@@ -150,7 +151,7 @@ func (sm *SyncManager) BroadcastSync(syncType SyncType, payload proto.Message) e
 		return fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	ciphertext, err := crypto.Encrypt(payloadBytes, sm.deviceManager.deviceGroupKey, nonce)
+	ciphertext, err := crypto.Encrypt(sm.deviceManager.deviceGroupKey, nonce, payloadBytes)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt payload: %w", err)
 	}
@@ -238,18 +239,18 @@ func (sm *SyncManager) HandleSyncMessage(data []byte) error {
 
 	// Create sync event
 	event := &SyncEvent{
-		Type:        syncMsg.Type,
+		Type:           syncMsg.Type,
 		SourceDeviceID: syncMsg.SourceDeviceId,
-		Timestamp:   syncMsg.Timestamp,
-		Payload:     payload,
-		VectorClock: syncMsg.VectorClock,
+		Timestamp:      syncMsg.Timestamp,
+		Payload:        payload,
+		VectorClock:    syncMsg.VectorClock,
 	}
 
 	// Emit event
 	select {
 	case sm.eventChan <- event:
 	default:
-		syncLogger.Warn("sync event channel full, dropping event")
+		logger.Warn("sync event channel full, dropping event")
 	}
 
 	return nil

@@ -1,11 +1,13 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -76,10 +78,10 @@ func (s *MemoryStorage) GetContactX25519Key(pubKey []byte) ([]byte, error) {
 		return nil, err
 	}
 	if contact == nil {
-		return nil, fmt.Errorf("contact not found")
+		return nil, errors.New("contact not found")
 	}
 	if len(contact.X25519PublicKey) == 0 {
-		return nil, fmt.Errorf("contact X25519 public key not stored")
+		return nil, errors.New("contact X25519 public key not stored")
 	}
 	return contact.X25519PublicKey, nil
 }
@@ -426,7 +428,7 @@ func (s *MemoryStorage) SaveSenderKey(sk *pb.SenderKeyDistribution) error {
 	defer s.mu.Unlock()
 	groupKey := string(sk.GroupId)
 	senderKey := string(sk.SenderPub)
-	
+
 	if _, ok := s.senderKeys[groupKey]; !ok {
 		s.senderKeys[groupKey] = make(map[string]*pb.SenderKeyDistribution)
 	}

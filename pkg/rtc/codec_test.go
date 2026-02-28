@@ -106,9 +106,9 @@ func TestCodecNegotiator_ParseRTPMap(t *testing.T) {
 	negotiator := NewCodecNegotiator()
 
 	tests := []struct {
-		line     string
-		wantName string
-		wantRate int
+		line      string
+		wantName  string
+		wantRate  int
 		wantChans int
 	}{
 		{"a=rtpmap:111 opus/48000/2", "opus", 48000, 2},

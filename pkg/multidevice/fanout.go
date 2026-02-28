@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -14,11 +15,11 @@ import (
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
-	"github.com/ipfs/go-log/v2"
+
 	"google.golang.org/protobuf/proto"
 )
 
-var fanoutLogger = log.Logger("babylontower/multidevice/fanout")
+// logger is declared in sync.go for this package
 
 // DeviceSession represents a Double Ratchet session with a specific device
 type DeviceSession struct {
@@ -34,8 +35,8 @@ type DeviceSession struct {
 	DHRatchet  []byte // Current DH ratchet key
 
 	// Metadata
-	CreatedAt   time.Time
-	LastUsedAt  time.Time
+	CreatedAt      time.Time
+	LastUsedAt     time.Time
 	MessageCounter uint32
 }
 
@@ -71,13 +72,13 @@ func NewFanoutManager(config *FanoutConfig) *FanoutManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &FanoutManager{
-		deviceManager:   config.DeviceManager,
-		storage:         config.Storage,
-		ipfsNode:        config.IPFSNode,
-		ctx:             ctx,
-		cancel:          cancel,
-		sessions:        make(map[string]map[string]*DeviceSession),
-		symmetricKeys:   make(map[string][]byte),
+		deviceManager: config.DeviceManager,
+		storage:       config.Storage,
+		ipfsNode:      config.IPFSNode,
+		ctx:           ctx,
+		cancel:        cancel,
+		sessions:      make(map[string]map[string]*DeviceSession),
+		symmetricKeys: make(map[string][]byte),
 	}
 }
 
@@ -89,7 +90,7 @@ func (fm *FanoutManager) SendMessageToIdentity(
 	recipientDevices []*pb.DeviceCertificate,
 ) (*SendResult, error) {
 	if len(recipientDevices) == 0 {
-		return nil, fmt.Errorf("no recipient devices")
+		return nil, errors.New("no recipient devices")
 	}
 
 	// Optimization: for 5+ devices, use symmetric key encryption
@@ -114,7 +115,7 @@ func (fm *FanoutManager) sendWithFanout(
 	for _, device := range recipientDevices {
 		result, err := fm.sendToDevice(text, recipientIdentityPub, device)
 		if err != nil {
-			fanoutLogger.Warnw("failed to send to device", "device", hex.EncodeToString(device.DeviceId), "error", err)
+			logger.Warnw("failed to send to device", "device", hex.EncodeToString(device.DeviceId), "error", err)
 			if firstError == nil {
 				firstError = err
 			}
@@ -129,9 +130,9 @@ func (fm *FanoutManager) sendWithFanout(
 	}
 
 	return &SendResult{
-		SuccessCount: successCount,
-		TotalDevices: len(recipientDevices),
-		DeviceResults: results,
+		SuccessCount:     successCount,
+		TotalDevices:     len(recipientDevices),
+		DeviceResults:    results,
 		OptimizationUsed: "fanout",
 	}, nil
 }
@@ -169,7 +170,7 @@ func (fm *FanoutManager) sendWithSymmetricKey(
 	for _, device := range recipientDevices {
 		encryptedKey, err := fm.encryptKeyForDevice(symKey, device)
 		if err != nil {
-			fanoutLogger.Warnw("failed to encrypt key for device", "device", hex.EncodeToString(device.DeviceId), "error", err)
+			logger.Warnw("failed to encrypt key for device", "device", hex.EncodeToString(device.DeviceId), "error", err)
 			continue
 		}
 		keyResults = append(keyResults, encryptedKey)
@@ -177,17 +178,17 @@ func (fm *FanoutManager) sendWithSymmetricKey(
 
 	// Build multi-device envelope
 	envelope := &pb.MultiDeviceEnvelope{
-		ProtocolVersion: 1,
-		MessageType:     pb.MessageType_DM_TEXT,
-		SenderIdentity:  fm.deviceManager.identitySignPub,
+		ProtocolVersion:   1,
+		MessageType:       pb.MessageType_DM_TEXT,
+		SenderIdentity:    fm.deviceManager.identitySignPub,
 		RecipientIdentity: recipientIdentityPub,
-		Timestamp:       uint64(time.Now().Unix()),
-		MessageId:       generateMessageID(),
-		Payload:         ciphertext,
-		SenderDeviceId:  fm.deviceManager.deviceID,
-		Nonce:           nonce,
-		CipherSuiteId:   0x0001,
-		EncryptedKeys:   make([]*pb.EncryptedDeviceKey, 0, len(keyResults)),
+		Timestamp:         uint64(time.Now().Unix()),
+		MessageId:         generateMessageID(),
+		Payload:           ciphertext,
+		SenderDeviceId:    fm.deviceManager.deviceID,
+		Nonce:             nonce,
+		CipherSuiteId:     0x0001,
+		EncryptedKeys:     make([]*pb.EncryptedDeviceKey, 0, len(keyResults)),
 	}
 
 	for _, ek := range keyResults {
@@ -250,9 +251,9 @@ func (fm *FanoutManager) sendToDevice(
 
 	// Build DMPayload
 	ratchetHeader := &pb.RatchetHeader{
-		DhRatchetPub:         session.DHRatchet,
-		PreviousChainLength:  0, // Would track in full implementation
-		MessageNumber:        session.MessageCounter,
+		DhRatchetPub:        session.DHRatchet,
+		PreviousChainLength: 0, // Would track in full implementation
+		MessageNumber:       session.MessageCounter,
 	}
 
 	payload := &pb.DMPayload{
@@ -441,19 +442,19 @@ func (fm *FanoutManager) encryptKeyForDevice(symKey []byte, device *pb.DeviceCer
 func (fm *FanoutManager) signBabylonEnvelope(envelope *pb.BabylonEnvelope) ([]byte, error) {
 	// Canonical serialization for signing (fields 1-10, 12)
 	data := make([]byte, 0, 4+4+32+32+8+16+len(envelope.Payload)+16+24+4)
-	
+
 	// Append fields in order
 	data = append(data, byte(envelope.ProtocolVersion))
 	data = append(data, byte(envelope.MessageType))
 	data = append(data, envelope.SenderIdentity...)
 	data = append(data, envelope.RecipientIdentity...)
-	
+
 	tsBytes := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		tsBytes[i] = byte(envelope.Timestamp >> (56 - i*8))
 	}
 	data = append(data, tsBytes...)
-	
+
 	data = append(data, envelope.MessageId...)
 	data = append(data, envelope.Payload...)
 	data = append(data, envelope.SenderDeviceId...)
@@ -492,10 +493,22 @@ func (fm *FanoutManager) signEnvelope(envelope *pb.MultiDeviceEnvelope) ([]byte,
 	return signature, nil
 }
 
-// persistSession persists a session to storage
+// persistSession persists a session to storage using config key-value pairs
 func (fm *FanoutManager) persistSession(identityHex, deviceID string, session *DeviceSession) {
-	// Would persist to storage in full implementation
-	// Key format: session:<identity_hex>:<device_id>
+	if fm.storage == nil {
+		return
+	}
+	key := fmt.Sprintf("session:%s:%s", identityHex, deviceID)
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		logger.Warnw("failed to marshal session for persistence", "error", err)
+		return
+	}
+
+	if err := fm.storage.SetConfig(key, string(data)); err != nil {
+		logger.Warnw("failed to persist session", "identity", identityHex, "device", deviceID, "error", err)
+	}
 }
 
 // generateMessageID generates a random 16-byte message ID
@@ -540,7 +553,7 @@ func (fm *FanoutManager) Stop() error {
 
 // Common errors
 var (
-	ErrNoDevices      = errors.New("no recipient devices")
+	ErrNoDevices       = errors.New("no recipient devices")
 	ErrSessionNotFound = errors.New("session not found")
 	ErrKeyDistribution = errors.New("failed to distribute symmetric key")
 )

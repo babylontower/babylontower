@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/curve25519"
 )

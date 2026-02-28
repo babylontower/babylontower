@@ -2,6 +2,7 @@ package mailbox
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -14,10 +15,10 @@ import (
 
 const (
 	// Key prefixes for BadgerDB
-	mailboxPrefix = "mbx:"      // Mailbox storage: mbx:<target_pubkey_hex>:<message_id_hex>
-	metaPrefix    = "mbxmeta:"  // Metadata: mbxmeta:<target_pubkey_hex>
-	ratePrefix    = "mbxrate:"  // Rate limiting: mbxrate:<sender_pubkey_hex>:<target_pubkey_hex>:<hour_bucket>
-	configPrefix  = "mbxcfg:"   // Configuration
+	mailboxPrefix = "mbx:"     // Mailbox storage: mbx:<target_pubkey_hex>:<message_id_hex>
+	metaPrefix    = "mbxmeta:" // Metadata: mbxmeta:<target_pubkey_hex>
+	ratePrefix    = "mbxrate:" // Rate limiting: mbxrate:<sender_pubkey_hex>:<target_pubkey_hex>:<hour_bucket>
+	configPrefix  = "mbxcfg:"  // Configuration
 )
 
 // StoredMessage represents a message stored in the mailbox
@@ -54,12 +55,12 @@ func NewStorage(db *badger.DB, config *pb.MailboxConfig) (*Storage, error) {
 // defaultConfig returns the default mailbox configuration
 func defaultConfig() *pb.MailboxConfig {
 	return &pb.MailboxConfig{
-		MaxMessagesPerTarget:    500,
-		MaxMessageSize:          262144, // 256 KB
-		MaxTotalBytesPerTarget:  67108864, // 64 MB
-		DefaultTtlSeconds:       604800,   // 7 days
-		DepositRateLimit:        100,      // 100 messages per sender per target per hour
-		EnableContentRouting:    false,
+		MaxMessagesPerTarget:   500,
+		MaxMessageSize:         262144,   // 256 KB
+		MaxTotalBytesPerTarget: 67108864, // 64 MB
+		DefaultTtlSeconds:      604800,   // 7 days
+		DepositRateLimit:       100,      // 100 messages per sender per target per hour
+		EnableContentRouting:   false,
 	}
 }
 
@@ -120,7 +121,7 @@ func (s *Storage) GetMessage(targetPubkey, messageID []byte) (*StoredMessage, er
 		item, err := txn.Get([]byte(key))
 		if err != nil {
 			if err == badger.ErrKeyNotFound {
-				return fmt.Errorf("message not found")
+				return errors.New("message not found")
 			}
 			return err
 		}
@@ -238,14 +239,14 @@ func (s *Storage) checkQuota(targetPubkey []byte) error {
 
 	// Check message count limit
 	if metadata != nil && metadata.MessageCount >= s.config.MaxMessagesPerTarget {
-		return fmt.Errorf("message count limit reached for target")
+		return errors.New("message count limit reached for target")
 	}
 
 	// Check total size limit
 	if metadata != nil && metadata.TotalBytes+s.config.MaxMessageSize > s.config.MaxTotalBytesPerTarget {
 		// Try to evict oldest messages to make room
 		if err := s.evictOldest(targetPubkey, 1); err != nil {
-			return fmt.Errorf("storage quota exceeded for target")
+			return errors.New("storage quota exceeded for target")
 		}
 	}
 
@@ -298,7 +299,7 @@ type MailboxMetadata struct {
 // getMetadata retrieves metadata for a target
 func (s *Storage) getMetadata(targetPubkey []byte) (*MailboxMetadata, error) {
 	key := fmt.Sprintf("%s%x", metaPrefix, targetPubkey)
-	
+
 	var metadata *MailboxMetadata
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -328,7 +329,7 @@ func (s *Storage) getMetadata(targetPubkey []byte) (*MailboxMetadata, error) {
 // updateMetadata updates the metadata after storing a message
 func (s *Storage) updateMetadata(txn *badger.Txn, targetPubkey []byte, size uint64) error {
 	key := fmt.Sprintf("%s%x", metaPrefix, targetPubkey)
-	
+
 	// Get existing metadata
 	var metadata MailboxMetadata
 	item, err := txn.Get([]byte(key))

@@ -77,7 +77,7 @@ func (s *Service) ReceiveMessage(envelopeBytes []byte) (*ReceiveResult, error) {
 		// Don't fail the receive if storage fails
 	}
 
-	logger.Infow("message received", "from", fmt.Sprintf("%x", senderPubKey), "text", msg.Text)
+	logger.Debugw("message received", "from", fmt.Sprintf("%x", senderPubKey))
 
 	return &ReceiveResult{
 		Message:      msg,
@@ -131,7 +131,7 @@ func (s *Service) ReceiveMessageDirect(signedEnvelope *pb.SignedEnvelope) (*Rece
 		logger.Warnw("failed to store received message", "error", err)
 	}
 
-	logger.Infow("message received (direct)", "from", fmt.Sprintf("%x", senderPubKey), "text", msg.Text)
+	logger.Debugw("message received (direct)", "from", fmt.Sprintf("%x", senderPubKey))
 
 	return &ReceiveResult{
 		Message:      msg,

@@ -3,28 +3,29 @@ package messaging
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/reputation"
 	"babylontower/pkg/storage"
+
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
 
 var logger = log.Logger("babylontower/messaging")
 
+// Re-export sentinel errors from the centralized errors package for backward compatibility.
 var (
-	// ErrServiceNotStarted is returned when operations are attempted on a stopped service
-	ErrServiceNotStarted = errors.New("messaging service not started")
-	// ErrUnknownContact is returned when trying to message an unknown contact
-	ErrUnknownContact = errors.New("unknown contact")
-	// ErrSelfMessage is returned when trying to send a message to oneself
-	ErrSelfMessage = errors.New("cannot send message to self")
+	ErrServiceNotStarted = bterrors.ErrServiceNotStarted
+	ErrUnknownContact    = bterrors.ErrUnknownContact
+	ErrSelfMessage       = bterrors.ErrSelfMessage
 )
 
 // Config holds configuration for the messaging service
@@ -51,15 +52,15 @@ type MessageEvent struct {
 
 // Service is the main messaging service that handles all protocol operations
 type Service struct {
-	config      *Config
-	storage     storage.Storage
-	ipfsNode    *ipfsnode.Node
+	config       *Config
+	storage      storage.Storage
+	ipfsNode     *ipfsnode.Node
 	subscription *ipfsnode.Subscription
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	isStarted  bool
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	isStarted bool
 
 	// Channel for incoming message events
 	messageChan chan *MessageEvent
@@ -76,11 +77,11 @@ type Service struct {
 
 // ContactPeerInfo contains cached information about a contact's peer presence
 type ContactPeerInfo struct {
-	PeerID        string
-	Multiaddrs    []string
-	LastSeen      time.Time
-	IsOnline      bool
-	Connected     bool
+	PeerID     string
+	Multiaddrs []string
+	LastSeen   time.Time
+	IsOnline   bool
+	Connected  bool
 }
 
 // NewService creates a new messaging service
@@ -110,11 +111,11 @@ func (s *Service) Start() error {
 	}
 
 	if s.ipfsNode == nil || !s.ipfsNode.IsStarted() {
-		return fmt.Errorf("IPFS node not started")
+		return errors.New("IPFS node not started")
 	}
 
 	if s.storage == nil {
-		return fmt.Errorf("storage not initialized")
+		return errors.New("storage not initialized")
 	}
 
 	// Subscribe to own topic
@@ -243,7 +244,7 @@ func (s *Service) processEnvelope(envelopeBytes []byte) error {
 	// Check if sender is a known contact (optional for PoC)
 	contact, err := s.storage.GetContact(senderPubKey)
 	if err != nil {
-		logger.Warnw("message from unknown contact", "sender", fmt.Sprintf("%x", senderPubKey))
+		logger.Debugw("message from unknown contact", "sender", hex.EncodeToString(senderPubKey))
 		// For PoC, we still process the message
 	}
 	_ = contact
@@ -262,7 +263,7 @@ func (s *Service) processEnvelope(envelopeBytes []byte) error {
 
 	select {
 	case s.messageChan <- event:
-		logger.Infow("message event emitted", "from", fmt.Sprintf("%x", senderPubKey), "text", msg.Text)
+		logger.Debugw("message event emitted", "from", hex.EncodeToString(senderPubKey))
 	default:
 		logger.Warnw("message channel full, dropping event")
 	}
@@ -295,7 +296,7 @@ func GetContactX25519PubKey(contactEd25519PubKey []byte) ([]byte, error) {
 	// 1. Look up the contact in storage
 	// 2. Retrieve their X25519 public key (stored when contact was added)
 	// For PoC, we return an error indicating this needs to be handled by the caller
-	return nil, fmt.Errorf("contact X25519 key lookup not implemented - caller must provide key")
+	return nil, errors.New("contact X25519 key lookup not implemented - caller must provide key")
 }
 
 // SerializeEnvelope serializes a SignedEnvelope to bytes
@@ -334,7 +335,7 @@ func (s *Service) FindAndConnectToContact(contactPubKey []byte) (*FindAndConnect
 	s.contactMu.RUnlock()
 
 	if cached && cachedInfo != nil && cachedInfo.Connected {
-		logger.Debugw("already connected to contact", "contact", fmt.Sprintf("%x", contactPubKey))
+		logger.Debugw("already connected to contact", "contact", hex.EncodeToString(contactPubKey))
 		return &FindAndConnectResult{
 			PeerID:    cachedInfo.PeerID,
 			Addresses: cachedInfo.Multiaddrs,
@@ -414,13 +415,13 @@ func (s *Service) FindAndConnectToContact(contactPubKey []byte) (*FindAndConnect
 		}
 	}
 
-	return nil, fmt.Errorf("failed to find and connect to contact - they may be offline")
+	return nil, errors.New("failed to find and connect to contact - they may be offline")
 }
 
 // connectToPeerID attempts to connect to a peer by PeerID
 func (s *Service) connectToPeerID(peerID string) error {
 	if peerID == "" {
-		return fmt.Errorf("empty peer ID")
+		return errors.New("empty peer ID")
 	}
 
 	// Check if already connected
@@ -437,7 +438,7 @@ func (s *Service) connectToPeerID(peerID string) error {
 	}
 
 	if len(peerInfo.Addrs) == 0 {
-		return fmt.Errorf("no addresses found for peer")
+		return errors.New("no addresses found for peer")
 	}
 
 	// Connect to first address
@@ -492,7 +493,7 @@ func (s *Service) persistContactPeer(contactPubKey []byte, peerID string, multia
 		if err := s.storage.AddContact(contact); err != nil {
 			logger.Debugw("failed to persist contact peer info", "error", err)
 		} else {
-			logger.Debugw("persisted contact peer info", "contact", fmt.Sprintf("%x", contactPubKey), "peer", peerID)
+			logger.Debugw("persisted contact peer info", "contact", hex.EncodeToString(contactPubKey), "peer", peerID)
 		}
 	}
 }
@@ -538,7 +539,7 @@ func (s *Service) IsContactOnline(contactPubKey []byte) (bool, error) {
 	}
 
 	if contact.PeerId == "" {
-		return false, fmt.Errorf("contact has no peer ID")
+		return false, errors.New("contact has no peer ID")
 	}
 
 	// Query DHT
@@ -614,7 +615,7 @@ func (s *Service) FindAndConnect(contactPubKey []byte, addrBook interface{}, mul
 		if err := s.ipfsNode.ConnectToPeer(multiaddr); err != nil {
 			return nil, fmt.Errorf("failed to connect to peer: %w", err)
 		}
-		logger.Infow("Connected to peer via manual multiaddr", "multiaddr", multiaddr)
+		logger.Debugw("connected to peer via manual multiaddr", "multiaddr", multiaddr)
 		return &FindAndConnectResult{
 			Source:    "manual",
 			Addresses: []string{multiaddr},
@@ -623,7 +624,7 @@ func (s *Service) FindAndConnect(contactPubKey []byte, addrBook interface{}, mul
 
 	// DHT discovery would go here if we had PeerID
 	// For now, return error indicating manual connection is needed
-	return nil, fmt.Errorf("peer not found - provide multiaddr or add contact to address book")
+	return nil, errors.New("peer not found - provide multiaddr or add contact to address book")
 }
 
 // Message Retry Logic
@@ -648,28 +649,28 @@ type SendResultWithRetry = SendResult
 // It ensures we have good connectivity to peers subscribed to contact topics
 func (s *Service) OptimizePubSubMesh(contactPubKey []byte) error {
 	topic := ipfsnode.TopicFromPublicKey(contactPubKey)
-	
+
 	// Get topic info
 	topicInfo := s.ipfsNode.GetTopicInfo(topic)
 	if topicInfo == nil {
-		return fmt.Errorf("topic not joined")
+		return errors.New("topic not joined")
 	}
 
 	// Check if we have enough peers in the mesh
 	if topicInfo.MeshSize < 3 {
 		logger.Debugw("mesh size small, attempting to improve", "topic", topic, "size", topicInfo.MeshSize)
-		
+
 		// Try to find more peers via DHT
 		// This is a best-effort operation
-		go func() {
+		bterrors.SafeGo("messaging-dht-refresh", func() {
 			ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 			defer cancel()
-			
+
 			// Query DHT for peers
 			if err := s.ipfsNode.RefreshDHT(ctx); err != nil {
 				logger.Debugw("DHT refresh failed", "error", err)
 			}
-		}()
+		})
 	}
 
 	logger.Debugw("pubsub mesh optimized", "topic", topic, "mesh_size", topicInfo.MeshSize)
@@ -741,7 +742,7 @@ func (s *Service) GetAllContactStatuses() ([]*ContactStatus, error) {
 	for _, contact := range contacts {
 		status, err := s.GetContactStatus(contact.PublicKey)
 		if err != nil {
-			logger.Debugw("failed to get contact status", "contact", fmt.Sprintf("%x", contact.PublicKey), "error", err)
+			logger.Debugw("failed to get contact status", "contact", hex.EncodeToString(contact.PublicKey), "error", err)
 			continue
 		}
 		statuses = append(statuses, status)

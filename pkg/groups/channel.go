@@ -11,6 +11,7 @@ import (
 
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"golang.org/x/crypto/ed25519"
 	"google.golang.org/protobuf/proto"
 )
@@ -567,5 +568,5 @@ func ComputeChannelID(name string) []byte {
 // GetChannelTopic derives the PubSub topic for a channel
 func GetChannelTopic(channelID []byte) string {
 	hash := sha256.Sum256(channelID)
-	return fmt.Sprintf("babylon-ch-%s", hex.EncodeToString(hash[:8]))
+	return "babylon-ch-" + hex.EncodeToString(hash[:8])
 }

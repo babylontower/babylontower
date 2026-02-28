@@ -13,6 +13,7 @@ import (
 	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"github.com/google/uuid"
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
@@ -38,11 +39,11 @@ const (
 
 // Hangup reasons
 const (
-	HangupNormal    = "normal"
-	HangupBusy      = "busy"
-	HangupDeclined  = "declined"
-	HangupTimeout   = "timeout"
-	HangupError     = "error"
+	HangupNormal   = "normal"
+	HangupBusy     = "busy"
+	HangupDeclined = "declined"
+	HangupTimeout  = "timeout"
+	HangupError    = "error"
 )
 
 // Call timeouts
@@ -83,13 +84,13 @@ type CallSession struct {
 	RemoteICECandidates []string
 
 	// Media session
-	MediaKey    []byte // Derived media encryption key
-	SSRCLocal   uint32 // Our SSRC
-	SSRCRemote  uint32 // Remote SSRC
+	MediaKey   []byte // Derived media encryption key
+	SSRCLocal  uint32 // Our SSRC
+	SSRCRemote uint32 // Remote SSRC
 
 	// Timing
-	ConnectedAt *time.Time // When the call became active
-	EndedAt     *time.Time // When the call ended
+	ConnectedAt  *time.Time // When the call became active
+	EndedAt      *time.Time // When the call ended
 	HangupReason string
 }
 
@@ -98,15 +99,15 @@ type SessionManager struct {
 	mu       sync.RWMutex
 	sessions map[string]*CallSession // key: call_id
 
-	storage storage.Storage
+	storage  storage.Storage
 	identity *identity.Identity
 
 	// Callbacks
-	onOfferReceived   func(session *CallSession)
-	onAnswerReceived  func(session *CallSession)
-	onICECandidate    func(session *CallSession, candidate string)
-	onCallEnded       func(session *CallSession)
-	onStateChanged    func(session *CallSession, oldState, newState string)
+	onOfferReceived  func(session *CallSession)
+	onAnswerReceived func(session *CallSession)
+	onICECandidate   func(session *CallSession, candidate string)
+	onCallEnded      func(session *CallSession)
+	onStateChanged   func(session *CallSession, oldState, newState string)
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -144,7 +145,7 @@ func (sm *SessionManager) cleanupExpiredOffers() {
 			now := time.Now()
 			for callID, session := range sm.sessions {
 				if session.State == CallStateOffered && now.After(session.ExpiresAt) {
-					logger.Debugf("Cleaning up expired call offer: %s", callID)
+					logger.Debugw("cleaning up expired call offer", "call", callID)
 					session.State = CallStateEnded
 					session.HangupReason = HangupTimeout
 					session.EndedAt = &now
@@ -191,7 +192,7 @@ func (sm *SessionManager) CreateOutgoingCall(remoteIdentity []byte, callType str
 
 	sm.sessions[callID] = session
 
-	logger.Debugf("Created outgoing call session: %s (type: %s)", callID, callType)
+	logger.Debugw("created outgoing call session", "call", callID, "type", callType)
 
 	return session, nil
 }
@@ -224,8 +225,7 @@ func (sm *SessionManager) CreateIncomingCall(callID string, remoteIdentity []byt
 
 	sm.sessions[callID] = session
 
-	logger.Debugf("Created incoming call session: %s (type: %s, from: %s)",
-		callID, callType, hex.EncodeToString(remoteIdentity)[:16])
+	logger.Debugw("created incoming call session", "call", callID, "type", callType, "from", hex.EncodeToString(remoteIdentity)[:16])
 
 	return session, nil
 }
@@ -323,7 +323,7 @@ func (sm *SessionManager) UpdateState(callID string, newState string) error {
 
 	session.UpdatedAt = time.Now()
 
-	logger.Debugf("Call %s state changed: %s -> %s", callID, oldState, newState)
+	logger.Debugw("call state changed", "call", callID, "old_state", oldState, "new_state", newState)
 
 	if sm.onStateChanged != nil {
 		sm.onStateChanged(session, oldState, newState)
@@ -424,7 +424,7 @@ func (sm *SessionManager) DeriveMediaKey(callID string, sessionRootKey []byte) (
 
 	session.MediaKey = mediaKey
 
-	logger.Debugf("Derived media key for call %s", callID)
+	logger.Debugw("derived media key", "call", callID)
 
 	return mediaKey, nil
 }
@@ -449,7 +449,7 @@ func (sm *SessionManager) EndCall(callID string, reason string) error {
 	session.State = CallStateEnded
 	session.UpdatedAt = now
 
-	logger.Debugf("Call %s ended: %s", callID, reason)
+	logger.Debugw("call ended", "call", callID, "reason", reason)
 
 	if sm.onCallEnded != nil {
 		sm.onCallEnded(session)
@@ -468,7 +468,7 @@ func (sm *SessionManager) DeleteSession(callID string) error {
 	}
 
 	delete(sm.sessions, callID)
-	logger.Debugf("Deleted call session: %s", callID)
+	logger.Debugw("deleted call session", "call", callID)
 
 	return nil
 }
@@ -558,10 +558,10 @@ func (s *CallSession) ToRTCAnswer() *pb.RTCAnswer {
 // ToRTCIceCandidate creates an RTCIceCandidate protobuf message
 func (s *CallSession) ToRTCIceCandidate(candidate string, sdpMid string, mlineIdx uint32) *pb.RTCIceCandidate {
 	return &pb.RTCIceCandidate{
-		Candidate:     candidate,
-		SdpMid:        sdpMid,
-		SdpMlineIdx:   mlineIdx,
-		CallId:        s.CallID,
+		Candidate:   candidate,
+		SdpMid:      sdpMid,
+		SdpMlineIdx: mlineIdx,
+		CallId:      s.CallID,
 	}
 }
 

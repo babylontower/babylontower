@@ -620,50 +620,42 @@ No plugin or extension mechanism:
 
 ### TD1: Inconsistent Error Handling
 
-**Status:** ⚠️ Known Issue  
-**Severity:** Medium  
-**Component:** All packages  
+**Status:** ✅ Resolved (Phase 18)
+**Severity:** Medium
+**Component:** All packages
 **Impact:** Hard to debug, inconsistent UX
 
 **Description:**
-Error handling varies across codebase:
-- Some functions return errors, some panic
-- Inconsistent error wrapping
-- Some errors logged, some silent
+Error handling varied across codebase with inconsistent wrapping, some panics, and scattered sentinel errors.
 
-**Planned Resolution:**
-1. **Error Handling Policy:** Define standards
-2. **Error Wrapping:** Use `fmt.Errorf("%w")` consistently
-3. **Error Types:** Define sentinel errors
-4. **Logging Policy:** Consistent log levels
+**Resolution:**
+1. Created `pkg/errors/` with `BabylonError` domain type (`Error()`, `Unwrap()`, `errors.Is`/`errors.As` support)
+2. Consolidated sentinel errors in `pkg/errors/sentinels.go` (`ErrServiceNotStarted`, `ErrUnknownContact`, `ErrPeerNotFound`, `ErrInvalidConfig`, etc.)
+3. `SafeGo()` goroutine panic recovery with structured logging — applied across 7+ goroutine launch sites (`messaging`, `peerstore`, `mailbox`, `storage`, `ipfsnode`, `rtc`)
+4. Migrated existing sentinels from `pkg/messaging` and `pkg/peerstore` with backward-compatible re-exports
 
-**Dependencies:** None  
-**Estimated Effort:** 2-3 days  
-**Risk:** Low
+**Status:** ✅ Complete (Phase 18)
 
 ---
 
 ### TD2: Insufficient Test Coverage in Service Layers
 
-**Status:** ⚠️ Known Gap  
-**Severity:** Medium  
-**Component:** `pkg/messaging`, `pkg/ipfsnode`  
+**Status:** ✅ Resolved (Phase 18)
+**Severity:** Medium
+**Component:** `pkg/messaging`, `pkg/peerstore`, `pkg/protocol`, `pkg/reputation`
 **Impact:** Potential bugs in integration points
 
 **Description:**
-Test coverage varies:
-- Core crypto: >90% ✅
-- Service layers: ~30-70% ⚠️
-- Integration tests: Partial
+Test coverage varied — core crypto was >90% but service layers were ~30-70%.
 
-**Planned Resolution:**
-1. **Phase 18 Focus:** Improve service layer coverage
-2. **Integration Tests:** Add more end-to-end tests
-3. **Test Automation:** CI/CD integration
+**Resolution:**
+1. **`pkg/peerstore/addrbook_test.go`** (new, 11 tests): `NewAddrBook`, `AddContact`, `GetContact`, `GetContactByPeerID`, `UpdateAddresses`, `SetConnected`, `GetAllContacts`, `DeleteContact`, LRU eviction, persistence, copy safety. Also fixed a deadlock bug in `save()`.
+2. **`pkg/peerstore/contact_tracker_test.go`** (new, 13 tests): `LoadContacts`, `UpdateContact`, `GetContactInfo`, `GetContactPeerID`, `SetContactOnline/Offline`, `SetConnected`, `GetOnlineContacts`, `GetContactByPeerID`, `GetStats`, copy safety.
+3. **`pkg/messaging/protocol_test.go`** (new, 10 tests): `multiaddrsEqual` table-driven, `NewService`, `IsStarted`, `GetContactPeerInfo`, `GetAllContactStats`, error paths for `FindAndConnect*`/`IsContactOnline` (not started), `ReputationTracker`, `Messages` channel.
+4. **`pkg/protocol/envelope_test.go`** (extended, +10 tests): empty pubkey topic derivation, invalid sender length, all message types table-driven, channel message, empty payload, invalid payload parsing, group payload round-trip.
+5. **`pkg/reputation/tracker_test.go`** (extended, +4 tests): tier threshold boundaries (11 sub-tests), weighted average verification, concurrent access safety (10 goroutines), trust adjustment effect on score.
 
-**Dependencies:** None  
-**Estimated Effort:** 5-7 days  
-**Risk:** Low
+**Status:** ✅ Complete (Phase 18)
 
 ---
 
@@ -739,12 +731,14 @@ Some code duplication exists:
 Easy  |  L1, L5   M6, TD3    H4, M1    C1     |
       |                                        |
       |  L4       M2, M3     H1, H2    C2     |
-Med   |            TD2                        |
+Med   |                                        |
       |                                        |
-      |  L2       M5         TD1              |
+      |  L2       M5                           |
 Hard  |                                        |
       |  L3       TD4                          |
       +----------------------------------------+
+
+Resolved: H3, TD1, TD2
 ```
 
 ### Phase Allocation
@@ -752,8 +746,8 @@ Hard  |                                        |
 **Main Roadmap (Protocol Features):**
 | Phase | Limitations Addressed |
 |-------|----------------------|
-| **Phase 18** | TD2 (test coverage), H3 (forward secrecy - complete) |
-| **Phase 19** | C1 (storage encryption), H4 (contact verification), M6 (search), L2 (backup), TD1 (error handling) |
+| **Phase 18** | ✅ TD1 (error handling), ✅ TD2 (test coverage), ✅ H3 (forward secrecy), unified YAML config |
+| **Phase 19** | C1 (storage encryption), H4 (contact verification), M6 (search), L2 (backup) |
 | **Phase 20** | M2 (reactions/edits), M3 (media types), M4 (read receipts) |
 | **Phase 21** | M5 (large groups) |
 | **Phase 22+** | L1 (GUI), L4 (analytics), L5 (plugin system) |
@@ -787,5 +781,5 @@ If you encounter a limitation not listed here, please:
 
 ---
 
-*Last updated: February 26, 2026*
-*Version: 1.0*
+*Last updated: February 28, 2026*
+*Version: 1.1*

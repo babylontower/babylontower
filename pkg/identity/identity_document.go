@@ -4,10 +4,12 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -54,20 +56,20 @@ func (m *IdentityDocumentManager) CreateIdentityDocument(
 	}
 
 	doc := &pb.IdentityDocument{
-		IdentitySignPub:     m.identity.IKSignPub,
-		IdentityDhPub:       m.identity.IKDHPub[:],
-		Sequence:            sequence,
-		PreviousHash:        prevHash,
-		CreatedAt:           uint64(now.Unix()),
-		UpdatedAt:           uint64(now.Unix()),
-		Devices:             devices,
-		SignedPrekeys:       signedPrekeys,
-		OneTimePrekeys:      oneTimePrekeys,
-		SupportedVersions:   []uint32{1},
+		IdentitySignPub:       m.identity.IKSignPub,
+		IdentityDhPub:         m.identity.IKDHPub[:],
+		Sequence:              sequence,
+		PreviousHash:          prevHash,
+		CreatedAt:             uint64(now.Unix()),
+		UpdatedAt:             uint64(now.Unix()),
+		Devices:               devices,
+		SignedPrekeys:         signedPrekeys,
+		OneTimePrekeys:        oneTimePrekeys,
+		SupportedVersions:     []uint32{1},
 		SupportedCipherSuites: []string{"BT-X25519-XChaCha20Poly1305-SHA256"},
-		PreferredVersion:    1,
-		DisplayName:         displayName,
-		Features:            features,
+		PreferredVersion:      1,
+		DisplayName:           displayName,
+		Features:              features,
 	}
 
 	// Set created_at to previous timestamp if updating
@@ -229,7 +231,7 @@ func (m *IdentityDocumentManager) serializeDocumentForSigning(doc *pb.IdentityDo
 // VerifyIdentityDocument verifies an IdentityDocument signature and structure
 func VerifyIdentityDocument(doc *pb.IdentityDocument) error {
 	if len(doc.IdentitySignPub) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid identity public key length")
+		return errors.New("invalid identity public key length")
 	}
 
 	// Verify document signature
@@ -239,7 +241,7 @@ func VerifyIdentityDocument(doc *pb.IdentityDocument) error {
 	}
 
 	if !ed25519.Verify(doc.IdentitySignPub, data, doc.Signature) {
-		return fmt.Errorf("invalid identity document signature")
+		return errors.New("invalid identity document signature")
 	}
 
 	// Verify all device certificates
@@ -258,14 +260,14 @@ func VerifyIdentityDocument(doc *pb.IdentityDocument) error {
 
 	// Verify sequence is positive
 	if doc.Sequence == 0 {
-		return fmt.Errorf("invalid sequence number")
+		return errors.New("invalid sequence number")
 	}
 
 	// Verify timestamp is reasonable (within ±24 hours)
 	now := time.Now()
 	docTime := time.Unix(int64(doc.UpdatedAt), 0)
 	if docTime.Before(now.Add(-24*time.Hour)) || docTime.After(now.Add(24*time.Hour)) {
-		return fmt.Errorf("document timestamp out of reasonable range")
+		return errors.New("document timestamp out of reasonable range")
 	}
 
 	return nil

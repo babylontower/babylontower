@@ -12,10 +12,11 @@ import (
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
+	"babylontower/pkg/ipfsnode"
+
 	"github.com/ipfs/go-log/v2"
 	"github.com/multiformats/go-multiaddr"
-
-	"babylontower/pkg/ipfsnode"
 )
 
 var logger = log.Logger("babylontower/peerstore")
@@ -29,11 +30,11 @@ const (
 
 // PeerRecord contains information about a known peer
 type PeerRecord struct {
-	PublicKey  string   `json:"public_key"`  // Identity public key (hex encoded)
-	PeerID     string   `json:"peer_id"`     // libp2p PeerID
-	Addresses  []string `json:"addresses"`   // Multiaddresses
-	LastSeen   int64    `json:"last_seen"`   // Unix timestamp
-	Connected  bool     `json:"connected"`   // Currently connected
+	PublicKey string   `json:"public_key"` // Identity public key (hex encoded)
+	PeerID    string   `json:"peer_id"`    // libp2p PeerID
+	Addresses []string `json:"addresses"`  // Multiaddresses
+	LastSeen  int64    `json:"last_seen"`  // Unix timestamp
+	Connected bool     `json:"connected"`  // Currently connected
 }
 
 // AddrBook manages a persistent store of peer addresses
@@ -83,11 +84,9 @@ func (ab *AddrBook) load() error {
 	return nil
 }
 
-// save writes the address book to disk
-func (ab *AddrBook) save() error {
-	ab.mu.RLock()
-	defer ab.mu.RUnlock()
-
+// saveLocked writes the address book to disk.
+// Must be called with ab.mu held (either RLock or Lock).
+func (ab *AddrBook) saveLocked() error {
 	// Ensure directory exists
 	if err := os.MkdirAll(ab.repoDir, 0700); err != nil {
 		return fmt.Errorf("failed to create repo directory: %w", err)
@@ -147,7 +146,7 @@ func (ab *AddrBook) AddContact(pubKey []byte, peerID string, addrs []multiaddr.M
 	}
 
 	// Save to disk
-	if err := ab.save(); err != nil {
+	if err := ab.saveLocked(); err != nil {
 		return fmt.Errorf("failed to save address book: %w", err)
 	}
 
@@ -208,7 +207,7 @@ func (ab *AddrBook) UpdateAddresses(pubKey []byte, addrs []multiaddr.Multiaddr) 
 	record.LastSeen = time.Now().Unix()
 
 	// Save to disk
-	if err := ab.save(); err != nil {
+	if err := ab.saveLocked(); err != nil {
 		return fmt.Errorf("failed to save address book: %w", err)
 	}
 
@@ -274,7 +273,7 @@ func (ab *AddrBook) ConnectToAll(ctx context.Context, node *ipfsnode.Node) error
 
 	if connected > 0 {
 		// Save connection status
-		if err := ab.save(); err != nil {
+		if err := ab.saveLocked(); err != nil {
 			return fmt.Errorf("failed to save address book: %w", err)
 		}
 	}
@@ -313,7 +312,7 @@ func (ab *AddrBook) DeleteContact(pubKey []byte) error {
 
 	delete(ab.peers, pubKeyHex)
 
-	if err := ab.save(); err != nil {
+	if err := ab.saveLocked(); err != nil {
 		return fmt.Errorf("failed to save address book: %w", err)
 	}
 
@@ -327,7 +326,7 @@ func (ab *AddrBook) Count() int {
 	return len(ab.peers)
 }
 
-// Errors
+// Re-export sentinel errors from the centralized errors package for backward compatibility.
 var (
-	ErrPeerNotFound = fmt.Errorf("peer not found in address book")
+	ErrPeerNotFound = bterrors.ErrPeerNotFound
 )

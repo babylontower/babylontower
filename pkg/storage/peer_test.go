@@ -358,10 +358,10 @@ func TestPeerRecordIsStale(t *testing.T) {
 	oldTime := now.Add(-48 * time.Hour)
 
 	tests := []struct {
-		name    string
+		name     string
 		lastSeen time.Time
-		maxAge  time.Duration
-		want    bool
+		maxAge   time.Duration
+		want     bool
 	}{
 		{"recent peer", now, 24 * time.Hour, false},
 		{"old peer", oldTime, 24 * time.Hour, true},

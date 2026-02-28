@@ -5,21 +5,24 @@ package peerstore
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
+
 	"github.com/multiformats/go-multiaddr"
 )
 
 // ContactTracker manages contact peer information and online status
 type ContactTracker struct {
-	storage storage.Storage
+	storage  storage.Storage
 	ipfsNode *ipfsnode.Node
-	mu      sync.RWMutex
+	mu       sync.RWMutex
 	// Cache of contact peer IDs for quick lookup (key: hex-encoded Ed25519 pubkey)
 	contactPeers map[string]*ContactPeerInfo
 	// Cache refresh interval
@@ -218,7 +221,7 @@ func (ct *ContactTracker) SetConnected(pubKey []byte, connected bool) {
 // RefreshOnlineStatus checks the online status of all contacts with known PeerIDs
 func (ct *ContactTracker) RefreshOnlineStatus() error {
 	if ct.ipfsNode == nil || !ct.ipfsNode.IsStarted() {
-		return fmt.Errorf("IPFS node not started")
+		return errors.New("IPFS node not started")
 	}
 
 	ct.mu.Lock()
@@ -324,7 +327,7 @@ func (ct *ContactTracker) GetContactByPeerID(peerID string) (*ContactPeerInfo, b
 // StartPeriodicRefresh starts a goroutine that periodically refreshes contact status
 func (ct *ContactTracker) StartPeriodicRefresh(ctx context.Context) {
 	ticker := time.NewTicker(ct.refreshInterval)
-	go func() {
+	bterrors.SafeGo("contact-tracker-refresh", func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -336,7 +339,7 @@ func (ct *ContactTracker) StartPeriodicRefresh(ctx context.Context) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // GetStats returns statistics about tracked contacts
@@ -345,11 +348,11 @@ func (ct *ContactTracker) GetStats() ContactTrackerStats {
 	defer ct.mu.RUnlock()
 
 	stats := ContactTrackerStats{
-		TotalContacts:   len(ct.contactPeers),
-		OnlineContacts:  0,
-		ConnectedPeers:  0,
-		WithPeerID:      0,
-		LastRefresh:     ct.lastRefresh,
+		TotalContacts:  len(ct.contactPeers),
+		OnlineContacts: 0,
+		ConnectedPeers: 0,
+		WithPeerID:     0,
+		LastRefresh:    ct.lastRefresh,
 	}
 
 	for _, info := range ct.contactPeers {
@@ -369,9 +372,9 @@ func (ct *ContactTracker) GetStats() ContactTrackerStats {
 
 // ContactTrackerStats contains statistics about contact tracking
 type ContactTrackerStats struct {
-	TotalContacts   int
-	OnlineContacts  int
-	ConnectedPeers  int
-	WithPeerID      int
-	LastRefresh     time.Time
+	TotalContacts  int
+	OnlineContacts int
+	ConnectedPeers int
+	WithPeerID     int
+	LastRefresh    time.Time
 }

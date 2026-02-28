@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/ipfs/go-log/v2"
 	"google.golang.org/protobuf/proto"
 )
@@ -54,7 +55,7 @@ func (m *DHTIdentityManager) PublishIdentityDocument(ctx context.Context, doc *p
 		return fmt.Errorf("failed to publish identity document to DHT: %w", err)
 	}
 
-	logger.Infof("Published identity document to DHT: %s", dhtKey)
+	logger.Infow("published identity document to DHT", "dht_key", dhtKey)
 	return nil
 }
 
@@ -113,7 +114,7 @@ func (m *DHTIdentityManager) PublishPrekeyBundle(
 		return fmt.Errorf("failed to publish prekey bundle to DHT: %w", err)
 	}
 
-	logger.Infof("Published prekey bundle to DHT: %s", dhtKey)
+	logger.Infow("published prekey bundle to DHT", "dht_key", dhtKey)
 	return nil
 }
 

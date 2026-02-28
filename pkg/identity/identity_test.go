@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -333,8 +334,8 @@ func TestSaveIdentity_InvalidDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateIdentity() failed: %v", err)
 	}
-	// Try to save to an invalid path
-	err = SaveIdentity(identity, "/nonexistent/directory/identity.json")
+	// Try to save to an invalid path (NUL is invalid on all platforms)
+	err = SaveIdentity(identity, string([]byte{0})+"/identity.json")
 	if err == nil {
 		t.Error("Expected error for invalid directory")
 	}
@@ -384,7 +385,7 @@ func splitWords(mnemonic string) []string {
 
 func hexDecode(s string) ([]byte, error) {
 	if len(s)%2 != 0 {
-		return nil, fmt.Errorf("odd length hex string")
+		return nil, errors.New("odd length hex string")
 	}
 	result := make([]byte, len(s)/2)
 	for i := 0; i < len(s); i += 2 {

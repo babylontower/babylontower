@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	pb "babylontower/pkg/proto"
+
 	"github.com/dgraph-io/badger/v3"
 	"google.golang.org/protobuf/proto"
 )
@@ -51,7 +52,7 @@ func (s *BadgerStorage) SaveGroup(group *pb.GroupState) error {
 		return fmt.Errorf("failed to store group: %w", err)
 	}
 
-	logger.Debugf("Stored group %s with epoch %d", hex.EncodeToString(group.GroupId), group.Epoch)
+	logger.Debugw("stored group", "group", hex.EncodeToString(group.GroupId[:8]), "epoch", group.Epoch)
 	return nil
 }
 
@@ -144,7 +145,7 @@ func (s *BadgerStorage) DeleteGroup(groupID []byte) error {
 		return fmt.Errorf("failed to delete group: %w", err)
 	}
 
-	logger.Debugf("Deleted group %s", hex.EncodeToString(groupID))
+	logger.Debugw("deleted group", "group", hex.EncodeToString(groupID[:8]))
 	return nil
 }
 
@@ -168,8 +169,7 @@ func (s *BadgerStorage) SaveSenderKey(sk *pb.SenderKeyDistribution) error {
 		return fmt.Errorf("failed to store sender key: %w", err)
 	}
 
-	logger.Debugf("Stored sender key for group %s, sender %s", 
-		hex.EncodeToString(sk.GroupId), hex.EncodeToString(sk.SenderPub))
+	logger.Debugw("stored sender key", "group", hex.EncodeToString(sk.GroupId[:8]), "sender", hex.EncodeToString(sk.SenderPub[:8]))
 	return nil
 }
 

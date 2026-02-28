@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
-	pb "babylontower/pkg/proto"
 	"babylontower/pkg/crypto"
+	pb "babylontower/pkg/proto"
+
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multihash"
@@ -17,9 +19,9 @@ import (
 
 // AttestationExchange handles publishing and retrieving reputation attestations via DHT
 type AttestationExchange struct {
-	tracker    *Tracker
-	ipfsNode   IPFSNode
-	privKey    ed25519.PrivateKey
+	tracker     *Tracker
+	ipfsNode    IPFSNode
+	privKey     ed25519.PrivateKey
 	identityPub string // hex-encoded IK_sign.pub
 }
 
@@ -213,8 +215,8 @@ func (e *AttestationExchange) GetAttestation(ctx context.Context, c cid.Cid) (*A
 func (e *AttestationExchange) RequestAttestations(ctx context.Context, target peer.ID) ([]*Attestation, error) {
 	// Create query
 	query := &pb.ReputationQuery{
-		TargetPeerId: []byte(target),
-		Timestamp:    uint64(time.Now().Unix()),
+		TargetPeerId:  []byte(target),
+		Timestamp:     uint64(time.Now().Unix()),
 		QuerierPubkey: []byte(e.tracker.selfPeerID),
 	}
 
@@ -224,7 +226,7 @@ func (e *AttestationExchange) RequestAttestations(ctx context.Context, target pe
 	}
 
 	// Publish query to reputation topic
-	topic := fmt.Sprintf("babylon-rep-%s", hex.EncodeToString([]byte(target)[:8]))
+	topic := "babylon-rep-" + hex.EncodeToString([]byte(target)[:8])
 	if err := e.ipfsNode.Publish(ctx, topic, data); err != nil {
 		return nil, fmt.Errorf("failed to publish query: %w", err)
 	}
@@ -301,10 +303,10 @@ func (e *AttestationExchange) RespondToAttestationRequest(ctx context.Context, q
 
 	// Create response
 	response := &pb.ReputationResponse{
-		TargetPeerId:   []byte(target),
-		Record:         record.ToProto(),
-		Attestations:   attestations,
-		Timestamp:      uint64(time.Now().Unix()),
+		TargetPeerId:    []byte(target),
+		Record:          record.ToProto(),
+		Attestations:    attestations,
+		Timestamp:       uint64(time.Now().Unix()),
 		ResponderPubkey: []byte(e.tracker.selfPeerID),
 	}
 
@@ -314,7 +316,7 @@ func (e *AttestationExchange) RespondToAttestationRequest(ctx context.Context, q
 	}
 
 	// Publish response to query topic
-	topic := fmt.Sprintf("babylon-rep-%s", hex.EncodeToString(query.TargetPeerId[:8]))
+	topic := "babylon-rep-" + hex.EncodeToString(query.TargetPeerId[:8])
 	return e.ipfsNode.Publish(ctx, topic, data)
 }
 
@@ -326,14 +328,14 @@ func ComputeDHTKey(peerID peer.ID) string {
 		return ""
 	}
 	// Extract the digest from the multihash
-	return fmt.Sprintf("/bt/rep/%s", hex.EncodeToString(hash[2:]))
+	return "/bt/rep/" + hex.EncodeToString(hash[2:])
 }
 
 // PublishReputationRecord publishes a peer's reputation record to the DHT
 func (e *AttestationExchange) PublishReputationRecord(ctx context.Context, pid peer.ID) (cid.Cid, error) {
 	record := e.tracker.GetRecord(pid)
 	if record == nil {
-		return cid.Cid{}, fmt.Errorf("no record found for peer")
+		return cid.Cid{}, errors.New("no record found for peer")
 	}
 
 	data, err := proto.Marshal(record.ToProto())
@@ -364,23 +366,23 @@ func (e *AttestationExchange) GetReputationRecord(ctx context.Context, pid peer.
 	// Convert protobuf record to local Record
 	// Note: This is a simplified conversion - in production you'd want to validate all fields
 	metrics := &Metrics{
-		RelayReliability:        float64(protoRecord.Metrics.RelayReliability),
-		RelaySuccessCount:       protoRecord.Metrics.RelaySuccessCount,
-		RelayTotalCount:         protoRecord.Metrics.RelayTotalCount,
-		UptimeConsistency:       float64(protoRecord.Metrics.UptimeConsistency),
-		HoursOnline7d:           protoRecord.Metrics.HoursOnline_7D,
-		LastSeen:                time.Unix(int64(protoRecord.Metrics.LastSeen), 0),
-		MailboxReliability:      float64(protoRecord.Metrics.MailboxReliability),
-		MailboxRetrievedCount:   protoRecord.Metrics.MailboxRetrievedCount,
-		MailboxDepositedCount:   protoRecord.Metrics.MailboxDepositedCount,
-		DHTResponsiveness:       float64(protoRecord.Metrics.DhtResponsiveness),
-		AvgResponseMS:           float64(protoRecord.Metrics.AvgResponseMs),
-		DHTQueryCount:           protoRecord.Metrics.DhtQueryCount,
-		ContentServing:          float64(protoRecord.Metrics.ContentServing),
-		BlocksServedCount:       protoRecord.Metrics.BlocksServedCount,
-		BlocksRequestedCount:    protoRecord.Metrics.BlocksRequestedCount,
-		FirstObserved:           time.Unix(int64(protoRecord.Metrics.FirstObserved), 0),
-		ObservationCount:        protoRecord.Metrics.ObservationCount,
+		RelayReliability:      float64(protoRecord.Metrics.RelayReliability),
+		RelaySuccessCount:     protoRecord.Metrics.RelaySuccessCount,
+		RelayTotalCount:       protoRecord.Metrics.RelayTotalCount,
+		UptimeConsistency:     float64(protoRecord.Metrics.UptimeConsistency),
+		HoursOnline7d:         protoRecord.Metrics.HoursOnline_7D,
+		LastSeen:              time.Unix(int64(protoRecord.Metrics.LastSeen), 0),
+		MailboxReliability:    float64(protoRecord.Metrics.MailboxReliability),
+		MailboxRetrievedCount: protoRecord.Metrics.MailboxRetrievedCount,
+		MailboxDepositedCount: protoRecord.Metrics.MailboxDepositedCount,
+		DHTResponsiveness:     float64(protoRecord.Metrics.DhtResponsiveness),
+		AvgResponseMS:         float64(protoRecord.Metrics.AvgResponseMs),
+		DHTQueryCount:         protoRecord.Metrics.DhtQueryCount,
+		ContentServing:        float64(protoRecord.Metrics.ContentServing),
+		BlocksServedCount:     protoRecord.Metrics.BlocksServedCount,
+		BlocksRequestedCount:  protoRecord.Metrics.BlocksRequestedCount,
+		FirstObserved:         time.Unix(int64(protoRecord.Metrics.FirstObserved), 0),
+		ObservationCount:      protoRecord.Metrics.ObservationCount,
 	}
 
 	attestations := make([]*Attestation, len(protoRecord.Attestations))

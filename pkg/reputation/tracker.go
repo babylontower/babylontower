@@ -6,30 +6,31 @@ import (
 	"time"
 
 	"babylontower/pkg/proto"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // Default configuration values
 const (
-	DefaultRelayReliabilityWeight     = 0.25
-	DefaultUptimeConsistencyWeight    = 0.20
-	DefaultMailboxReliabilityWeight   = 0.25
-	DefaultDHTResponsivenessWeight    = 0.15
-	DefaultContentServingWeight       = 0.15
+	DefaultRelayReliabilityWeight   = 0.25
+	DefaultUptimeConsistencyWeight  = 0.20
+	DefaultMailboxReliabilityWeight = 0.25
+	DefaultDHTResponsivenessWeight  = 0.15
+	DefaultContentServingWeight     = 0.15
 
-	DefaultMinConnectionHours        = 24
-	DefaultMaxAttestationInfluence   = 0.1
-	DefaultAttestationExpiryHours    = 168 // 7 days
-	DefaultMaxAttestationsPerPeer    = 50
+	DefaultMinConnectionHours      = 24
+	DefaultMaxAttestationInfluence = 0.1
+	DefaultAttestationExpiryHours  = 168 // 7 days
+	DefaultMaxAttestationsPerPeer  = 50
 
 	DefaultTierContributorThreshold = 0.3
 	DefaultTierReliableThreshold    = 0.6
 	DefaultTierTrustedThreshold     = 0.8
 
-	DefaultMetricUpdateIntervalSeconds  = 300 // 5 minutes
-	DefaultAttestationPublishInterval   = 24  // hours
+	DefaultMetricUpdateIntervalSeconds = 300 // 5 minutes
+	DefaultAttestationPublishInterval  = 24  // hours
 
-	HoursPerWeek = 168
+	HoursPerWeek    = 168
 	MaxDHTLatencyMS = 5000
 )
 
@@ -57,9 +58,9 @@ type Record struct {
 // Metrics holds the 5 dimensions of reputation
 type Metrics struct {
 	// Relay reliability
-	RelayReliability   float64
-	RelaySuccessCount  uint64
-	RelayTotalCount    uint64
+	RelayReliability  float64
+	RelaySuccessCount uint64
+	RelayTotalCount   uint64
 
 	// Uptime consistency
 	UptimeConsistency float64
@@ -67,7 +68,7 @@ type Metrics struct {
 	LastSeen          time.Time
 
 	// Mailbox reliability
-	MailboxReliability   float64
+	MailboxReliability    float64
 	MailboxRetrievedCount uint64
 	MailboxDepositedCount uint64
 
@@ -77,34 +78,34 @@ type Metrics struct {
 	DHTQueryCount     uint64
 
 	// Content serving
-	ContentServing      float64
-	BlocksServedCount   uint64
+	ContentServing       float64
+	BlocksServedCount    uint64
 	BlocksRequestedCount uint64
 
 	// Metadata
-	FirstObserved   time.Time
+	FirstObserved    time.Time
 	ObservationCount uint64
 }
 
 // Attestation holds a signed attestation from another peer
 type Attestation struct {
-	AttesterPeerID        peer.ID
-	AttesterIdentityPub   string // hex-encoded
-	SubjectPeerID         peer.ID
-	Score                 float64
+	AttesterPeerID         peer.ID
+	AttesterIdentityPub    string // hex-encoded
+	SubjectPeerID          peer.ID
+	Score                  float64
 	ObservationPeriodHours uint64
-	Timestamp             time.Time
-	Signature             []byte
+	Timestamp              time.Time
+	Signature              []byte
 }
 
 // Tier represents reputation tier classification
 type Tier int
 
 const (
-	TierBasic Tier = iota // 0.0 - 0.3
-	TierContributor       // 0.3 - 0.6
-	TierReliable          // 0.6 - 0.8
-	TierTrusted           // 0.8 - 1.0
+	TierBasic       Tier = iota // 0.0 - 0.3
+	TierContributor             // 0.3 - 0.6
+	TierReliable                // 0.6 - 0.8
+	TierTrusted                 // 0.8 - 1.0
 )
 
 // Config holds reputation system configuration
@@ -115,10 +116,10 @@ type Config struct {
 	DHTResponsivenessWeight  float64
 	ContentServingWeight     float64
 
-	MinConnectionHours       uint64
-	MaxAttestationInfluence  float64
-	AttestationExpiryHours   uint64
-	MaxAttestationsPerPeer   uint32
+	MinConnectionHours      uint64
+	MaxAttestationInfluence float64
+	AttestationExpiryHours  uint64
+	MaxAttestationsPerPeer  uint32
 
 	TierContributorThreshold float64
 	TierReliableThreshold    float64
@@ -131,16 +132,16 @@ type Config struct {
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
 	return &Config{
-		RelayReliabilityWeight:     DefaultRelayReliabilityWeight,
-		UptimeConsistencyWeight:    DefaultUptimeConsistencyWeight,
-		MailboxReliabilityWeight:   DefaultMailboxReliabilityWeight,
-		DHTResponsivenessWeight:    DefaultDHTResponsivenessWeight,
-		ContentServingWeight:       DefaultContentServingWeight,
+		RelayReliabilityWeight:   DefaultRelayReliabilityWeight,
+		UptimeConsistencyWeight:  DefaultUptimeConsistencyWeight,
+		MailboxReliabilityWeight: DefaultMailboxReliabilityWeight,
+		DHTResponsivenessWeight:  DefaultDHTResponsivenessWeight,
+		ContentServingWeight:     DefaultContentServingWeight,
 
-		MinConnectionHours:       DefaultMinConnectionHours,
-		MaxAttestationInfluence:  DefaultMaxAttestationInfluence,
-		AttestationExpiryHours:   DefaultAttestationExpiryHours,
-		MaxAttestationsPerPeer:   DefaultMaxAttestationsPerPeer,
+		MinConnectionHours:      DefaultMinConnectionHours,
+		MaxAttestationInfluence: DefaultMaxAttestationInfluence,
+		AttestationExpiryHours:  DefaultAttestationExpiryHours,
+		MaxAttestationsPerPeer:  DefaultMaxAttestationsPerPeer,
 
 		TierContributorThreshold: DefaultTierContributorThreshold,
 		TierReliableThreshold:    DefaultTierReliableThreshold,
@@ -530,24 +531,24 @@ func (r *Record) ToProto() *proto.PeerReputationRecord {
 	return &proto.PeerReputationRecord{
 		PeerId: []byte(r.peerID),
 		Metrics: &proto.PeerReputationMetrics{
-			RelayReliability:       float32(r.metrics.RelayReliability),
-			RelaySuccessCount:      r.metrics.RelaySuccessCount,
-			RelayTotalCount:        r.metrics.RelayTotalCount,
-			UptimeConsistency:      float32(r.metrics.UptimeConsistency),
-			HoursOnline_7D:         r.metrics.HoursOnline7d,
-			LastSeen:               uint64(r.metrics.LastSeen.Unix()),
-			MailboxReliability:     float32(r.metrics.MailboxReliability),
-			MailboxRetrievedCount:  r.metrics.MailboxRetrievedCount,
-			MailboxDepositedCount:  r.metrics.MailboxDepositedCount,
-			DhtResponsiveness:      float32(r.metrics.DHTResponsiveness),
-			AvgResponseMs:          float32(r.metrics.AvgResponseMS),
-			DhtQueryCount:          r.metrics.DHTQueryCount,
-			ContentServing:         float32(r.metrics.ContentServing),
-			BlocksServedCount:      r.metrics.BlocksServedCount,
-			BlocksRequestedCount:   r.metrics.BlocksRequestedCount,
-			FirstObserved:          uint64(r.metrics.FirstObserved.Unix()),
-			LastUpdated:            uint64(r.lastUpdated.Unix()),
-			ObservationCount:       r.metrics.ObservationCount,
+			RelayReliability:      float32(r.metrics.RelayReliability),
+			RelaySuccessCount:     r.metrics.RelaySuccessCount,
+			RelayTotalCount:       r.metrics.RelayTotalCount,
+			UptimeConsistency:     float32(r.metrics.UptimeConsistency),
+			HoursOnline_7D:        r.metrics.HoursOnline7d,
+			LastSeen:              uint64(r.metrics.LastSeen.Unix()),
+			MailboxReliability:    float32(r.metrics.MailboxReliability),
+			MailboxRetrievedCount: r.metrics.MailboxRetrievedCount,
+			MailboxDepositedCount: r.metrics.MailboxDepositedCount,
+			DhtResponsiveness:     float32(r.metrics.DHTResponsiveness),
+			AvgResponseMs:         float32(r.metrics.AvgResponseMS),
+			DhtQueryCount:         r.metrics.DHTQueryCount,
+			ContentServing:        float32(r.metrics.ContentServing),
+			BlocksServedCount:     r.metrics.BlocksServedCount,
+			BlocksRequestedCount:  r.metrics.BlocksRequestedCount,
+			FirstObserved:         uint64(r.metrics.FirstObserved.Unix()),
+			LastUpdated:           uint64(r.lastUpdated.Unix()),
+			ObservationCount:      r.metrics.ObservationCount,
 		},
 		CompositeScore:  float32(r.compositeScore),
 		Tier:            proto.ReputationTier(r.tier),
@@ -624,9 +625,9 @@ func (e Error) Error() string {
 }
 
 const (
-	ErrAttestationExpired  Error = "attestation has expired"
-	ErrAttesterNotTrusted  Error = "attester has not been observed long enough"
-	ErrInvalidSignature    Error = "invalid attestation signature"
+	ErrAttestationExpired Error = "attestation has expired"
+	ErrAttesterNotTrusted Error = "attester has not been observed long enough"
+	ErrInvalidSignature   Error = "invalid attestation signature"
 )
 
 // Helper function to convert peer.ID to hex string

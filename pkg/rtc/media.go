@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"sync"
-
-	"github.com/ipfs/go-log/v2"
 )
 
-var mediaLogger = log.Logger("babylontower/rtc/media")
+// logger is declared in session.go for this package
 
 var (
 	// ErrMediaNotStarted is returned when media operations are attempted on a stopped service
@@ -60,15 +58,15 @@ func NewMediaService() *MediaService {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &MediaService{
-		ctx:   ctx,
+		ctx:    ctx,
 		cancel: cancel,
-		stats: &MediaStats{},
+		stats:  &MediaStats{},
 	}
 }
 
 // Start begins the media service
 func (m *MediaService) Start() error {
-	mediaLogger.Info("Media service started (stub)")
+	logger.Info("Media service started (stub)")
 	return nil
 }
 
@@ -76,7 +74,7 @@ func (m *MediaService) Start() error {
 func (m *MediaService) Stop() {
 	m.cancel()
 	m.wg.Wait()
-	mediaLogger.Info("Media service stopped")
+	logger.Info("Media service stopped")
 }
 
 // StartOutgoing initiates an outgoing media stream to a peer
@@ -91,7 +89,7 @@ func (m *MediaService) StartOutgoing(session *CallSession) error {
 
 	m.session = session
 
-	mediaLogger.Info("Media stream established (stub)")
+	logger.Info("Media stream established (stub)")
 
 	if m.onMediaStarted != nil {
 		m.onMediaStarted()
@@ -142,7 +140,7 @@ func (m *MediaService) SendRTCP(packet []byte) error {
 		return ErrMediaNotStarted
 	}
 
-	mediaLogger.Debugf("Sending RTCP packet (%d bytes)", len(packet))
+	logger.Debugw("sending RTCP packet", "size", len(packet))
 	return nil
 }
 
