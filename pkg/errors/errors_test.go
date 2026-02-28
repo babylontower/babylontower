@@ -17,13 +17,13 @@ func TestBabylonError_Error(t *testing.T) {
 }
 
 func TestBabylonError_ErrorWithCause(t *testing.T) {
-	cause := fmt.Errorf("connection refused")
+	cause := errors.New("connection refused")
 	err := Wrap(DomainNetwork, "CONN_FAIL", "connection failed", cause)
 	assert.Contains(t, err.Error(), "[network/CONN_FAIL] connection failed: connection refused")
 }
 
 func TestBabylonError_Unwrap(t *testing.T) {
-	cause := fmt.Errorf("root cause")
+	cause := errors.New("root cause")
 	err := Wrap(DomainStorage, "DB_ERR", "database error", cause)
 
 	unwrapped := err.Unwrap()
@@ -110,7 +110,7 @@ func TestSafeGo_RecoversPanicWithError(t *testing.T) {
 
 	SafeGo("test-panic-error", func() {
 		defer wg.Done()
-		panic(fmt.Errorf("something broke"))
+		panic(errors.New("something broke"))
 	})
 
 	wg.Wait()
@@ -125,7 +125,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestWrap(t *testing.T) {
-	cause := fmt.Errorf("io timeout")
+	cause := errors.New("io timeout")
 	err := Wrap(DomainMailbox, "DEPOSIT", "deposit failed", cause)
 	assert.Equal(t, DomainMailbox, err.Domain)
 	assert.Equal(t, "DEPOSIT", err.Code)

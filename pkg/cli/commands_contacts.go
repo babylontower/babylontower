@@ -66,7 +66,7 @@ func (h *CommandHandler) handleAdd(args []string) {
 	if len(x25519PubKey) > 0 {
 		h.output(FormatSuccess(fmt.Sprintf("Contact added: %s (with encryption)", name)))
 	} else {
-		h.output(FormatSuccess(fmt.Sprintf("Contact added: %s", name)))
+		h.output(FormatSuccess("Contact added: " + name))
 		h.output(FormatInfo("Note: No X25519 key provided. Message encryption will not work."))
 		h.output(FormatInfo("Ask contact to share their X25519 public key."))
 	}

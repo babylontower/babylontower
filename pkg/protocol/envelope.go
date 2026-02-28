@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -211,7 +212,7 @@ func (b *EnvelopeBuilder) serializeForSigning(env *pb.BabylonEnvelope) ([]byte, 
 // VerifyEnvelope verifies an envelope signature
 func VerifyEnvelope(env *pb.BabylonEnvelope) error {
 	if len(env.SenderIdentity) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid sender identity length")
+		return errors.New("invalid sender identity length")
 	}
 
 	// Create temporary builder for verification
@@ -256,7 +257,7 @@ func VerifyEnvelope(env *pb.BabylonEnvelope) error {
 	data = append(data, env.SenderDeviceId...)
 
 	if !ed25519.Verify(env.SenderIdentity, data, env.Signature) {
-		return fmt.Errorf("invalid envelope signature")
+		return errors.New("invalid envelope signature")
 	}
 
 	return nil

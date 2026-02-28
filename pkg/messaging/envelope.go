@@ -3,6 +3,7 @@ package messaging
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -41,7 +42,7 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 	}
 
 	logger.Debugw("building envelope",
-		"recipient_pub", fmt.Sprintf("%x", recipientX25519PubKey[:8]),
+		"recipient_pub", hex.EncodeToString(recipientX25519PubKey[:8]),
 		"plaintext_len", len(plaintext))
 
 	ephemeralPub, ephemeralPriv, err := generateEphemeralKeyPair()
@@ -68,7 +69,7 @@ func BuildEnvelope(plaintext []byte, recipientX25519PubKey []byte) (*pb.Envelope
 	}
 
 	logger.Debugw("envelope built",
-		"ephemeral_pub", fmt.Sprintf("%x", ephemeralPub[:8]),
+		"ephemeral_pub", hex.EncodeToString(ephemeralPub[:8]),
 		"nonce_len", len(nonce),
 		"ciphertext_len", len(ciphertext))
 
@@ -117,11 +118,11 @@ func ParseSignedEnvelope(data []byte) (*pb.SignedEnvelope, error) {
 // VerifyEnvelope verifies the signature on a SignedEnvelope
 func VerifyEnvelope(signedEnvelope *pb.SignedEnvelope) (bool, error) {
 	if signedEnvelope == nil {
-		return false, fmt.Errorf("nil envelope")
+		return false, errors.New("nil envelope")
 	}
 
 	if len(signedEnvelope.SenderPubkey) != ed25519.PublicKeySize {
-		return false, fmt.Errorf("invalid sender public key length")
+		return false, errors.New("invalid sender public key length")
 	}
 	senderPubKey := ed25519.PublicKey(signedEnvelope.SenderPubkey)
 
@@ -167,7 +168,7 @@ func DecryptEnvelope(envelope *pb.Envelope, recipientX25519PrivKey []byte) ([]by
 	}
 
 	logger.Debugw("decrypting envelope",
-		"ephemeral_pub", fmt.Sprintf("%x", envelope.EphemeralPubkey[:8]),
+		"ephemeral_pub", hex.EncodeToString(envelope.EphemeralPubkey[:8]),
 		"nonce_len", len(envelope.Nonce),
 		"ciphertext_len", len(envelope.Ciphertext))
 
@@ -311,7 +312,7 @@ func decryptEphemeralKey(
 	recipientX25519PubKey []byte,
 ) ([]byte, error) {
 	if len(encryptedData) < crypto.NonceSize {
-		return nil, fmt.Errorf("encrypted data too short")
+		return nil, errors.New("encrypted data too short")
 	}
 
 	nonce := encryptedData[:crypto.NonceSize]

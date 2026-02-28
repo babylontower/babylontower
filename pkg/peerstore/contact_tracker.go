@@ -5,6 +5,7 @@ package peerstore
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -220,7 +221,7 @@ func (ct *ContactTracker) SetConnected(pubKey []byte, connected bool) {
 // RefreshOnlineStatus checks the online status of all contacts with known PeerIDs
 func (ct *ContactTracker) RefreshOnlineStatus() error {
 	if ct.ipfsNode == nil || !ct.ipfsNode.IsStarted() {
-		return fmt.Errorf("IPFS node not started")
+		return errors.New("IPFS node not started")
 	}
 
 	ct.mu.Lock()

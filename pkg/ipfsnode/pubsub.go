@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -93,7 +94,7 @@ func (n *Node) Subscribe(topic string) (*Subscription, error) {
 	}
 
 	if n.pubsub == nil {
-		return nil, fmt.Errorf("PubSub not initialized")
+		return nil, errors.New("PubSub not initialized")
 	}
 
 	// Join the topic (or get existing handle)
@@ -134,7 +135,7 @@ func (n *Node) Publish(topic string, data []byte) error {
 	}
 
 	if n.pubsub == nil {
-		return fmt.Errorf("PubSub not initialized")
+		return errors.New("PubSub not initialized")
 	}
 
 	// Join the topic (or get existing handle)
@@ -169,7 +170,7 @@ func (n *Node) PublishWithPeerWait(topic string, data []byte, timeout time.Durat
 	}
 
 	if n.pubsub == nil {
-		return fmt.Errorf("PubSub not initialized")
+		return errors.New("PubSub not initialized")
 	}
 
 	// Wait for peers if timeout is specified
@@ -386,7 +387,7 @@ func (n *Node) GetTopicInfo(topic string) *TopicInfo {
 // This helps maintain good DHT connectivity and discover new peers
 func (n *Node) RefreshDHT(ctx context.Context) error {
 	if n.dht == nil {
-		return fmt.Errorf("DHT not initialized")
+		return errors.New("DHT not initialized")
 	}
 
 	// Query random peer IDs to refresh routing table

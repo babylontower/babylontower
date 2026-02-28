@@ -725,7 +725,7 @@ func (n *Node) FindPeer(peerID string) (*peer.AddrInfo, error) {
 	}
 
 	if len(closestPeers) == 0 {
-		return nil, fmt.Errorf("peer not found in DHT routing table")
+		return nil, errors.New("peer not found in DHT routing table")
 	}
 
 	// Return the closest peers - the first one is typically the best match
@@ -738,7 +738,7 @@ func (n *Node) FindPeer(peerID string) (*peer.AddrInfo, error) {
 		return &closestInfo, nil
 	}
 
-	return nil, fmt.Errorf("closest peer found but no addresses available")
+	return nil, errors.New("closest peer found but no addresses available")
 }
 
 // WaitForDHT blocks until the DHT routing table is populated with at least one peer.
@@ -1664,7 +1664,7 @@ type MDnsStats struct {
 // Respects HOME environment variable for container/test isolation
 func expandPath(path string) (string, error) {
 	if len(path) == 0 {
-		return "", fmt.Errorf("empty path")
+		return "", errors.New("empty path")
 	}
 
 	if path[0] == '~' {

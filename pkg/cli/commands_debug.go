@@ -17,7 +17,7 @@ func (h *CommandHandler) handleNetDebug() {
 
 	h.output("\n=== Network Debug Information ===\n")
 	h.output("")
-	h.output(fmt.Sprintf("Peer ID: %s", info.PeerID))
+	h.output("Peer ID: " + info.PeerID)
 	h.output("")
 	h.output("Listen Addresses:")
 	for i, addr := range info.ListenAddrs {
@@ -33,14 +33,14 @@ func (h *CommandHandler) handleNetDebug() {
 			h.output(fmt.Sprintf("  %d. %s", i+1, peer.ID))
 			for j, addr := range peer.Addresses {
 				if j == 0 {
-					h.output(fmt.Sprintf("     via: %s", addr))
+					h.output("     via: " + addr)
 				}
 			}
 			for j, proto := range peer.Protocols {
 				if j == 0 {
-					h.output(fmt.Sprintf("     protocols: %s", proto))
+					h.output("     protocols: " + proto)
 				} else {
-					h.output(fmt.Sprintf("                %s", proto))
+					h.output("                " + proto)
 				}
 			}
 		}
@@ -117,7 +117,7 @@ func (h *CommandHandler) displayIPFSStatus() {
 				h.output(fmt.Sprintf("  ... and %d more peers", info.ConnectedPeerCount-3))
 				break
 			}
-			h.output(fmt.Sprintf("  → %s", truncatePeerID(peer.ID)))
+			h.output("  → " + truncatePeerID(peer.ID))
 		}
 	}
 }
@@ -243,7 +243,7 @@ func (h *CommandHandler) handleContactStatus() {
 			name, statusStr, onlineStr, connectedStr, activeStr, status.MeshSize))
 
 		if status.PeerID != "" {
-			h.output(fmt.Sprintf("  └─ Peer: %s", truncatePeerID(status.PeerID)))
+			h.output("  └─ Peer: " + truncatePeerID(status.PeerID))
 		}
 	}
 

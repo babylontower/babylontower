@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -55,7 +56,7 @@ func SignAndEncode(privKey ed25519.PrivateKey, message []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%x", signature), nil
+	return hex.EncodeToString(signature), nil
 }
 
 // VerifyAndDecode verifies a signature from hex string
@@ -90,7 +91,7 @@ func ValidatePublicKey(pubKey ed25519.PublicKey) bool {
 // hexDecode decodes a hex string to bytes
 func hexDecode(s string) ([]byte, error) {
 	if len(s)%2 != 0 {
-		return nil, fmt.Errorf("odd length hex string")
+		return nil, errors.New("odd length hex string")
 	}
 	result := make([]byte, len(s)/2)
 	for i := 0; i < len(s); i += 2 {
@@ -107,7 +108,7 @@ func hexDecode(s string) ([]byte, error) {
 // RandomBytes generates random bytes of specified length
 func RandomBytes(length int) ([]byte, error) {
 	if length <= 0 {
-		return nil, fmt.Errorf("length must be positive")
+		return nil, errors.New("length must be positive")
 	}
 	bytes := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, bytes); err != nil {

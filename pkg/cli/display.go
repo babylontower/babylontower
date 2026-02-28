@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ const (
 
 // FormatPublicKey formats a public key for display (truncated hex)
 func FormatPublicKey(pubKey []byte) string {
-	hex := fmt.Sprintf("%x", pubKey)
+	hex := hex.EncodeToString(pubKey)
 	if len(hex) > keyDisplayLen {
 		return hex[:keyDisplayLen] + "..."
 	}
@@ -104,7 +105,7 @@ func FormatError(err error) string {
 	if err == nil {
 		return ""
 	}
-	return fmt.Sprintf("❌ Error: %s", err.Error())
+	return "❌ Error: " + err.Error()
 }
 
 // FormatErrorString formats an error message string for display
@@ -112,17 +113,17 @@ func FormatErrorString(message string) string {
 	if message == "" {
 		return ""
 	}
-	return fmt.Sprintf("❌ Error: %s", message)
+	return "❌ Error: " + message
 }
 
 // FormatSuccess formats a success message
 func FormatSuccess(message string) string {
-	return fmt.Sprintf("✅ %s", message)
+	return "✅ " + message
 }
 
 // FormatInfo formats an info message
 func FormatInfo(message string) string {
-	return fmt.Sprintf("ℹ️  %s", message)
+	return "ℹ️  " + message
 }
 
 // FormatHelp formats the help message
@@ -216,10 +217,10 @@ func FormatChatExit() string {
 
 // FormatSystemMessage formats a system message (non-user message)
 func FormatSystemMessage(message string) string {
-	return fmt.Sprintf("📌 %s", message)
+	return "📌 " + message
 }
 
 // FormatIncomingNotification formats a notification for incoming message
 func FormatIncomingNotification(contactName string) string {
-	return fmt.Sprintf("\n📬 New message from %s", contactName)
+	return "\n📬 New message from " + contactName
 }

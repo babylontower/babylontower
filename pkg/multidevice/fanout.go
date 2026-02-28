@@ -90,7 +90,7 @@ func (fm *FanoutManager) SendMessageToIdentity(
 	recipientDevices []*pb.DeviceCertificate,
 ) (*SendResult, error) {
 	if len(recipientDevices) == 0 {
-		return nil, fmt.Errorf("no recipient devices")
+		return nil, errors.New("no recipient devices")
 	}
 
 	// Optimization: for 5+ devices, use symmetric key encryption

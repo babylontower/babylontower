@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -94,7 +95,7 @@ func VerifyRevocation(cert *pb.RevocationCertificate, identityPub ed25519.Public
 
 	valid := ed25519.Verify(identityPub, data, cert.Signature)
 	if !valid {
-		return fmt.Errorf("invalid revocation signature")
+		return errors.New("invalid revocation signature")
 	}
 
 	return nil

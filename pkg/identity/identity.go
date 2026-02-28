@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,7 +52,7 @@ func GenerateMnemonic() (string, error) {
 func DeriveSeed(mnemonic string) ([]byte, error) {
 	// Validate mnemonic first
 	if !bip39.IsMnemonicValid(mnemonic) {
-		return nil, fmt.Errorf("invalid mnemonic")
+		return nil, errors.New("invalid mnemonic")
 	}
 	seed := bip39.NewSeed(mnemonic, "")
 	if len(seed) != SeedLength {

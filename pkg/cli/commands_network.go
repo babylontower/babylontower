@@ -47,7 +47,7 @@ func (h *CommandHandler) handleFind(args []string) {
 	}
 
 	h.output(FormatInfo("Searching DHT for peer..."))
-	h.output(fmt.Sprintf("Target Peer ID: %s", args[0]))
+	h.output("Target Peer ID: " + args[0])
 	h.output(fmt.Sprintf("Our routing table has %d peers", dhtInfo.RoutingTableSize))
 
 	peerInfo, err := h.ipfsNode.FindPeer(args[0])
@@ -106,7 +106,7 @@ func (h *CommandHandler) handleAdvertise() {
 	h.output("  /find <your_peer_id>")
 	h.output("")
 	h.output(FormatInfo("Your Peer ID:"))
-	h.output(fmt.Sprintf("  %s", h.ipfsNode.PeerID()))
+	h.output("  " + h.ipfsNode.PeerID())
 }
 
 // handleBootstrap displays bootstrap peer connection status
@@ -120,7 +120,7 @@ func (h *CommandHandler) handleBootstrap() {
 
 	h.output("\n=== Bootstrap Peer Status ===\n")
 	h.output("")
-	h.output(fmt.Sprintf("Your Peer ID: %s", h.ipfsNode.PeerID()))
+	h.output("Your Peer ID: " + h.ipfsNode.PeerID())
 	h.output("")
 	h.output(fmt.Sprintf("Connected peers: %d", info.ConnectedPeerCount))
 	h.output("")
@@ -140,7 +140,7 @@ func (h *CommandHandler) handleBootstrap() {
 		for i, peer := range info.ConnectedPeers {
 			h.output(fmt.Sprintf("  %d. %s", i+1, peer.ID))
 			if len(peer.Addresses) > 0 {
-				h.output(fmt.Sprintf("     via: %s", peer.Addresses[0]))
+				h.output("     via: " + peer.Addresses[0])
 			}
 		}
 	}
@@ -162,7 +162,7 @@ func (h *CommandHandler) handleReconnect() {
 	h.output("")
 
 	bootstrapAddr := "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ"
-	h.output(fmt.Sprintf("Connecting to: %s", bootstrapAddr))
+	h.output("Connecting to: " + bootstrapAddr)
 
 	if err := h.ipfsNode.ConnectToPeer(bootstrapAddr); err != nil {
 		h.output(FormatErrorString(fmt.Sprintf("Connection failed: %v", err)))
@@ -205,13 +205,13 @@ func (h *CommandHandler) handlePeers() {
 			if len(peer.Addresses) > 0 {
 				h.output("  Addresses:")
 				for _, addr := range peer.Addresses {
-					h.output(fmt.Sprintf("    %s", addr))
+					h.output("    " + addr)
 				}
 			}
 			if len(peer.Protocols) > 0 {
 				h.output("  Protocols:")
 				for _, proto := range peer.Protocols {
-					h.output(fmt.Sprintf("    %s", proto))
+					h.output("    " + proto)
 				}
 			}
 		}
@@ -235,7 +235,7 @@ func (h *CommandHandler) handleMyAddr() {
 
 	for _, addr := range addrs {
 		fullAddr := fmt.Sprintf("%s/p2p/%s", addr, peerID)
-		h.output(fmt.Sprintf("  %s", fullAddr))
+		h.output("  " + fullAddr)
 	}
 	h.output("")
 	h.output(FormatInfo("Use /connect <multiaddr> on another instance to connect."))
@@ -252,8 +252,8 @@ func (h *CommandHandler) handleDHT() {
 	dhtInfo := h.ipfsNode.GetDHTInfo()
 
 	h.output("\n=== DHT Status ===\n")
-	h.output(fmt.Sprintf("Peer ID: %s", h.ipfsNode.PeerID()))
-	h.output(fmt.Sprintf("DHT Mode: %s", dhtInfo.Mode))
+	h.output("Peer ID: " + h.ipfsNode.PeerID())
+	h.output("DHT Mode: " + dhtInfo.Mode)
 	h.output(fmt.Sprintf("Routing Table Size: %d peers", dhtInfo.RoutingTableSize))
 	h.output(fmt.Sprintf("Connected Peers: %d", dhtInfo.ConnectedPeerCount))
 	h.output("")
@@ -293,7 +293,7 @@ func (h *CommandHandler) handleDHTInfo() {
 	dhtInfo := h.ipfsNode.GetDHTInfo()
 
 	h.output("\n=== DHT Routing Table Status ===\n")
-	h.output(fmt.Sprintf("DHT Mode: %s", dhtInfo.Mode))
+	h.output("DHT Mode: " + dhtInfo.Mode)
 	h.output(fmt.Sprintf("Routing Table Size: %d peers", dhtInfo.RoutingTableSize))
 	h.output(fmt.Sprintf("Connected Peers: %d", dhtInfo.ConnectedPeerCount))
 	h.output(fmt.Sprintf("Has Bootstrap Connection: %v", dhtInfo.HasBootstrapConnection))
@@ -412,9 +412,9 @@ func (h *CommandHandler) handleNetworkStatus() {
 	h.output("")
 
 	h.output("┌─ Node Information ───────────────────────────────────┐")
-	h.output(fmt.Sprintf("│ Peer ID:      %s", truncatePeerID(metrics.PeerID)))
-	h.output(fmt.Sprintf("│ Uptime:       %s", formatDuration(metrics.UptimeSeconds)))
-	h.output(fmt.Sprintf("│ Started:      %s", metrics.StartTime.Format("2006-01-02 15:04:05")))
+	h.output("│ Peer ID:      " + truncatePeerID(metrics.PeerID))
+	h.output("│ Uptime:       " + formatDuration(metrics.UptimeSeconds))
+	h.output("│ Started:      " + metrics.StartTime.Format("2006-01-02 15:04:05"))
 	h.output("└────────────────────────────────────────────────────────┘")
 	h.output("")
 
@@ -440,7 +440,7 @@ func (h *CommandHandler) handleNetworkStatus() {
 
 	h.output("┌─ DHT Status ─────────────────────────────────────────┐")
 	h.output(fmt.Sprintf("│ Routing Table Size:     %d peers", dhtInfo.RoutingTableSize))
-	h.output(fmt.Sprintf("│ DHT Mode:               %s", dhtInfo.Mode))
+	h.output("│ DHT Mode:               " + dhtInfo.Mode)
 	h.output(fmt.Sprintf("│ Has Bootstrap:          %v", dhtInfo.HasBootstrapConnection))
 	if dhtInfo.RoutingTableSize > 0 && dhtInfo.RoutingTableSize <= 10 {
 		h.output("│ Routing Table Peers:")
@@ -486,7 +486,7 @@ func (h *CommandHandler) handleNetworkStatus() {
 		healthStatus = "HEALTHY"
 	}
 
-	h.output(fmt.Sprintf("│ Status:  %s", healthStatus))
+	h.output("│ Status:  " + healthStatus)
 	h.output(fmt.Sprintf("│ Score:   %.0f%%", calculateHealthScore(metrics, dhtInfo)))
 	h.output("└────────────────────────────────────────────────────────┘")
 	h.output("")

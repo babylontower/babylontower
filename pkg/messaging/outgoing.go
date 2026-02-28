@@ -2,6 +2,8 @@ package messaging
 
 import (
 	"crypto/ed25519"
+	"encoding/hex"
+	"errors"
 	"fmt"
 
 	pb "babylontower/pkg/proto"
@@ -44,10 +46,10 @@ func (s *Service) SendMessage(
 
 	// Validate inputs
 	if len(recipientEd25519PubKey) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("invalid recipient Ed25519 public key length")
+		return nil, errors.New("invalid recipient Ed25519 public key length")
 	}
 	if len(recipientX25519PubKey) != 32 {
-		return nil, fmt.Errorf("invalid recipient X25519 public key length")
+		return nil, errors.New("invalid recipient X25519 public key length")
 	}
 
 	// Check not sending to self
@@ -130,7 +132,7 @@ func (s *Service) SendMessage(
 		// Don't fail the send if storage fails
 	}
 
-	logger.Debugw("message sent", "to", fmt.Sprintf("%x", recipientEd25519PubKey))
+	logger.Debugw("message sent", "to", hex.EncodeToString(recipientEd25519PubKey))
 
 	// Generate a pseudo-CID for reference (hash of envelope)
 	cidStr := fmt.Sprintf("poc-%x", envelopeBytes[:8])

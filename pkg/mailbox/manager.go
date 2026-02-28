@@ -2,6 +2,7 @@ package mailbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -157,7 +158,7 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 	}
 
 	if len(mailboxes) == 0 {
-		return fmt.Errorf("no mailbox nodes available for recipient")
+		return errors.New("no mailbox nodes available for recipient")
 	}
 
 	// Try to deposit to at least one mailbox
@@ -177,7 +178,7 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 	if lastErr != nil {
 		return lastErr
 	}
-	return fmt.Errorf("failed to deposit to any mailbox")
+	return errors.New("failed to deposit to any mailbox")
 }
 
 // RetrieveMessages retrieves messages from mailbox nodes
@@ -324,7 +325,7 @@ func (m *Manager) acknowledgeOnRemoteMailboxes(ctx context.Context, messageIDs [
 // AnnounceAsMailbox announces this node as a mailbox for a target
 func (m *Manager) AnnounceAsMailbox(targetPubkey []byte) error {
 	if !m.isMailbox || m.announcement == nil {
-		return fmt.Errorf("mailbox not enabled")
+		return errors.New("mailbox not enabled")
 	}
 
 	_, err := m.announcement.AnnounceMailbox(targetPubkey, m.config)

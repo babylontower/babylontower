@@ -3,6 +3,7 @@ package rtc
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -259,7 +260,7 @@ func (cm *CallManager) EndCall(reason string) error {
 	cm.mu.Unlock()
 
 	if callID == "" {
-		return fmt.Errorf("no active call")
+		return errors.New("no active call")
 	}
 
 	return cm.EndCallByID(callID, reason)
@@ -295,7 +296,7 @@ func (cm *CallManager) SendICECandidate(candidate string, sdpMid string, mlineId
 	cm.mu.RUnlock()
 
 	if callID == "" {
-		return fmt.Errorf("no active call")
+		return errors.New("no active call")
 	}
 
 	return cm.signaling.SendICECandidate(callID, candidate, sdpMid, mlineIdx)
@@ -308,7 +309,7 @@ func (cm *CallManager) GetActiveCall() (*CallSession, error) {
 	cm.mu.RUnlock()
 
 	if callID == "" {
-		return nil, fmt.Errorf("no active call")
+		return nil, errors.New("no active call")
 	}
 
 	return cm.sessionMgr.GetSession(callID)

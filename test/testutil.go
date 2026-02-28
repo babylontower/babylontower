@@ -4,6 +4,7 @@ package testutil
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -95,7 +96,7 @@ func (inst *Instance) Start() error {
 	homeDir := inst.DataDir
 
 	inst.Cmd = exec.CommandContext(inst.ctx, inst.getBinaryPath())
-	inst.Cmd.Env = append(os.Environ(), fmt.Sprintf("HOME=%s", homeDir))
+	inst.Cmd.Env = append(os.Environ(), "HOME="+homeDir)
 
 	// Get stdin pipe for sending commands
 	stdin, err := inst.Cmd.StdinPipe()
@@ -185,13 +186,13 @@ func (inst *Instance) waitForReady(timeout time.Duration) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	return fmt.Errorf("timeout waiting for instance to be ready")
+	return errors.New("timeout waiting for instance to be ready")
 }
 
 // SendCommand sends a command to the instance
 func (inst *Instance) SendCommand(cmd string) error {
 	if inst.Cmd == nil || inst.stdin == nil {
-		return fmt.Errorf("instance not running")
+		return errors.New("instance not running")
 	}
 
 	_, err := fmt.Fprintln(inst.stdin, cmd)

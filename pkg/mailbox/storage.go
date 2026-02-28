@@ -2,6 +2,7 @@ package mailbox
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -120,7 +121,7 @@ func (s *Storage) GetMessage(targetPubkey, messageID []byte) (*StoredMessage, er
 		item, err := txn.Get([]byte(key))
 		if err != nil {
 			if err == badger.ErrKeyNotFound {
-				return fmt.Errorf("message not found")
+				return errors.New("message not found")
 			}
 			return err
 		}
@@ -238,14 +239,14 @@ func (s *Storage) checkQuota(targetPubkey []byte) error {
 
 	// Check message count limit
 	if metadata != nil && metadata.MessageCount >= s.config.MaxMessagesPerTarget {
-		return fmt.Errorf("message count limit reached for target")
+		return errors.New("message count limit reached for target")
 	}
 
 	// Check total size limit
 	if metadata != nil && metadata.TotalBytes+s.config.MaxMessageSize > s.config.MaxTotalBytesPerTarget {
 		// Try to evict oldest messages to make room
 		if err := s.evictOldest(targetPubkey, 1); err != nil {
-			return fmt.Errorf("storage quota exceeded for target")
+			return errors.New("storage quota exceeded for target")
 		}
 	}
 

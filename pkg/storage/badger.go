@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -156,10 +157,10 @@ func (s *BadgerStorage) GetContactX25519Key(pubKey []byte) ([]byte, error) {
 		return nil, err
 	}
 	if contact == nil {
-		return nil, fmt.Errorf("contact not found")
+		return nil, errors.New("contact not found")
 	}
 	if len(contact.X25519PublicKey) == 0 {
-		return nil, fmt.Errorf("contact X25519 public key not stored")
+		return nil, errors.New("contact X25519 public key not stored")
 	}
 	return contact.X25519PublicKey, nil
 }

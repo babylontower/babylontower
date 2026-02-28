@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -166,7 +167,7 @@ func VerifyDeviceCertificate(cert *pb.DeviceCertificate) error {
 
 	valid := ed25519.Verify(cert.IdentityPub, data, cert.Signature)
 	if !valid {
-		return fmt.Errorf("invalid device certificate signature")
+		return errors.New("invalid device certificate signature")
 	}
 
 	return nil

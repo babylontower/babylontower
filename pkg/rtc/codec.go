@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -351,7 +352,7 @@ func (n *CodecNegotiator) generateAudioAnswer(codec *Codec) string {
 				MediaType: "audio",
 				Port:      9,
 				Protocol:  "UDP/TLS/RTP/SAVPF",
-				Formats:   []string{fmt.Sprintf("%d", codec.PayloadType)},
+				Formats:   []string{strconv.FormatUint(uint64(codec.PayloadType), 10)},
 				Attributes: []string{
 					fmt.Sprintf("rtpmap:%d %s/%d/%d", codec.PayloadType, codec.Name, codec.ClockRate, codec.Channels),
 				},
@@ -376,7 +377,7 @@ func (n *CodecNegotiator) generateVideoAnswer(codec *Codec) string {
 				MediaType: "video",
 				Port:      9,
 				Protocol:  "UDP/TLS/RTP/SAVPF",
-				Formats:   []string{fmt.Sprintf("%d", codec.PayloadType)},
+				Formats:   []string{strconv.FormatUint(uint64(codec.PayloadType), 10)},
 				Attributes: []string{
 					fmt.Sprintf("rtpmap:%d %s/%d", codec.PayloadType, codec.Name, codec.ClockRate),
 				},

@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -384,7 +385,7 @@ func splitWords(mnemonic string) []string {
 
 func hexDecode(s string) ([]byte, error) {
 	if len(s)%2 != 0 {
-		return nil, fmt.Errorf("odd length hex string")
+		return nil, errors.New("odd length hex string")
 	}
 	result := make([]byte, len(s)/2)
 	for i := 0; i < len(s); i += 2 {

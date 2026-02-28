@@ -115,7 +115,7 @@ func Decrypt(key, nonce, ciphertext []byte) ([]byte, error) {
 // length: desired key length in bytes
 func DeriveKey(ikm, salt, info []byte, length int) ([]byte, error) {
 	if length <= 0 {
-		return nil, fmt.Errorf("key length must be positive")
+		return nil, errors.New("key length must be positive")
 	}
 	hkdfReader := hkdf.New(sha256.New, ikm, salt, info)
 	key := make([]byte, length)

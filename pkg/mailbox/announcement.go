@@ -125,7 +125,7 @@ func (am *AnnouncementManager) FindMailboxes(targetPubkey []byte) ([]*pb.Mailbox
 
 	// Verify signature
 	if !am.verifyAnnouncementSignature(announcement) {
-		return nil, fmt.Errorf("invalid announcement signature")
+		return nil, errors.New("invalid announcement signature")
 	}
 
 	return []*pb.MailboxAnnouncement{announcement}, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -225,7 +226,7 @@ func (e *AttestationExchange) RequestAttestations(ctx context.Context, target pe
 	}
 
 	// Publish query to reputation topic
-	topic := fmt.Sprintf("babylon-rep-%s", hex.EncodeToString([]byte(target)[:8]))
+	topic := "babylon-rep-" + hex.EncodeToString([]byte(target)[:8])
 	if err := e.ipfsNode.Publish(ctx, topic, data); err != nil {
 		return nil, fmt.Errorf("failed to publish query: %w", err)
 	}
@@ -315,7 +316,7 @@ func (e *AttestationExchange) RespondToAttestationRequest(ctx context.Context, q
 	}
 
 	// Publish response to query topic
-	topic := fmt.Sprintf("babylon-rep-%s", hex.EncodeToString(query.TargetPeerId[:8]))
+	topic := "babylon-rep-" + hex.EncodeToString(query.TargetPeerId[:8])
 	return e.ipfsNode.Publish(ctx, topic, data)
 }
 
@@ -327,14 +328,14 @@ func ComputeDHTKey(peerID peer.ID) string {
 		return ""
 	}
 	// Extract the digest from the multihash
-	return fmt.Sprintf("/bt/rep/%s", hex.EncodeToString(hash[2:]))
+	return "/bt/rep/" + hex.EncodeToString(hash[2:])
 }
 
 // PublishReputationRecord publishes a peer's reputation record to the DHT
 func (e *AttestationExchange) PublishReputationRecord(ctx context.Context, pid peer.ID) (cid.Cid, error) {
 	record := e.tracker.GetRecord(pid)
 	if record == nil {
-		return cid.Cid{}, fmt.Errorf("no record found for peer")
+		return cid.Cid{}, errors.New("no record found for peer")
 	}
 
 	data, err := proto.Marshal(record.ToProto())

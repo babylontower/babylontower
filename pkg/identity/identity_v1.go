@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -309,7 +310,7 @@ func SignDeviceCertificate(ikSignPriv ed25519.PrivateKey, cert *pb.DeviceCertifi
 // VerifyDeviceCertificate verifies a DeviceCertificate signature
 func VerifyDeviceCertificate(cert *pb.DeviceCertificate) error {
 	if len(cert.IdentityPub) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid identity public key length")
+		return errors.New("invalid identity public key length")
 	}
 
 	// Reconstruct the signed data
@@ -327,7 +328,7 @@ func VerifyDeviceCertificate(cert *pb.DeviceCertificate) error {
 	data = append(data, cert.IdentityPub...)
 
 	if !ed25519.Verify(cert.IdentityPub, data, cert.Signature) {
-		return fmt.Errorf("invalid device certificate signature")
+		return errors.New("invalid device certificate signature")
 	}
 
 	return nil
@@ -391,7 +392,7 @@ func SignSignedPrekey(ikSignPriv ed25519.PrivateKey, spk *pb.SignedPrekey) ([]by
 // VerifySignedPrekey verifies a SignedPrekey signature
 func VerifySignedPrekey(spk *pb.SignedPrekey, identityPub ed25519.PublicKey) error {
 	if len(identityPub) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid identity public key length")
+		return errors.New("invalid identity public key length")
 	}
 
 	// Reconstruct the signed data
@@ -409,7 +410,7 @@ func VerifySignedPrekey(spk *pb.SignedPrekey, identityPub ed25519.PublicKey) err
 	data = append(data, expBytes...)
 
 	if !ed25519.Verify(identityPub, data, spk.Signature) {
-		return fmt.Errorf("invalid signed prekey signature")
+		return errors.New("invalid signed prekey signature")
 	}
 
 	return nil

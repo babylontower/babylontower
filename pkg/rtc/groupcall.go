@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -414,7 +415,7 @@ func (gcm *GroupCallManager) EndGroupCall(callID string, reason string) error {
 
 	// Only owner can end the call
 	if !session.Participants[0].IsOwner || !bytes.Equal(session.Participants[0].IdentityPubkey, gcm.identity.Ed25519PubKey) {
-		return fmt.Errorf("only the call owner can end the call")
+		return errors.New("only the call owner can end the call")
 	}
 
 	gcm.endCallInternal(session, reason)
@@ -607,7 +608,7 @@ func (gcm *GroupCallManager) publishToGroupCallTopic(groupID []byte, message pro
 // deriveGroupCallTopic derives a PubSub topic from a group ID
 func deriveGroupCallTopic(groupID []byte) string {
 	hash := sha256.Sum256(groupID)
-	return fmt.Sprintf("babylon-grpcall-%s", hex.EncodeToString(hash[:8]))
+	return "babylon-grpcall-" + hex.EncodeToString(hash[:8])
 }
 
 // computeDeviceID computes a device ID from an identity pubkey
@@ -703,7 +704,7 @@ func (session *GroupCallSession) GetParticipant(identityPubkey []byte) (*pb.Part
 		}
 	}
 
-	return nil, fmt.Errorf("participant not found")
+	return nil, errors.New("participant not found")
 }
 
 // Duration returns the duration of the group call

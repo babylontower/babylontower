@@ -7,6 +7,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -167,18 +169,18 @@ func (dh *DepositHandler) handleDepositRequest(ctx context.Context, reader *bufi
 func (dh *DepositHandler) validateDepositRequest(req *pb.DepositRequest) error {
 	// Check envelope size
 	if uint64(len(req.Envelope)) > dh.config.MaxMessageSize {
-		return fmt.Errorf("envelope too large")
+		return errors.New("envelope too large")
 	}
 
 	// Verify sender signature
 	if len(req.SenderSignature) == 0 {
-		return fmt.Errorf("missing sender signature")
+		return errors.New("missing sender signature")
 	}
 
 	// Parse envelope to extract sender's public key
 	envelope := &pb.BabylonEnvelope{}
 	if err := proto.Unmarshal(req.Envelope, envelope); err != nil {
-		return fmt.Errorf("failed to parse envelope")
+		return errors.New("failed to parse envelope")
 	}
 
 	// Create canonical form for verification (without signature field)
@@ -190,14 +192,14 @@ func (dh *DepositHandler) validateDepositRequest(req *pb.DepositRequest) error {
 	}
 	dataForSigning, err := proto.Marshal(canonical)
 	if err != nil {
-		return fmt.Errorf("failed to marshal for verification")
+		return errors.New("failed to marshal for verification")
 	}
 
 	// Verify signature using the sender's identity pubkey from the envelope
 	senderPub := envelope.SenderIdentity
 	if len(senderPub) == ed25519.PublicKeySize {
 		if !crypto.Verify(senderPub, dataForSigning, req.SenderSignature) {
-			return fmt.Errorf("invalid sender signature")
+			return errors.New("invalid sender signature")
 		}
 	}
 
@@ -206,8 +208,8 @@ func (dh *DepositHandler) validateDepositRequest(req *pb.DepositRequest) error {
 
 // isRateLimited checks if a sender has exceeded their rate limit
 func (dh *DepositHandler) isRateLimited(senderPubkey, targetPubkey []byte) bool {
-	senderKey := fmt.Sprintf("%x", senderPubkey)
-	targetKey := fmt.Sprintf("%x", targetPubkey)
+	senderKey := hex.EncodeToString(senderPubkey)
+	targetKey := hex.EncodeToString(targetPubkey)
 
 	now := time.Now()
 	hourBucket := now.Unix() / 3600
@@ -228,8 +230,8 @@ func (dh *DepositHandler) isRateLimited(senderPubkey, targetPubkey []byte) bool 
 
 // incrementRateLimit increments the rate limit counter
 func (dh *DepositHandler) incrementRateLimit(senderPubkey, targetPubkey []byte) {
-	senderKey := fmt.Sprintf("%x", senderPubkey)
-	targetKey := fmt.Sprintf("%x", targetPubkey)
+	senderKey := hex.EncodeToString(senderPubkey)
+	targetKey := hex.EncodeToString(targetPubkey)
 
 	now := time.Now()
 	hourBucket := now.Unix() / 3600
@@ -402,7 +404,7 @@ func DepositToMailbox(ctx context.Context, h host.Host, mailboxPeerID string, ta
 	}
 
 	if msgType != 0x01 {
-		return nil, fmt.Errorf("unexpected response type")
+		return nil, errors.New("unexpected response type")
 	}
 
 	resp := &pb.DepositResponse{}

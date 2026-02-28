@@ -3,6 +3,7 @@ package ratchet
 import (
 	"crypto/ed25519"
 	"crypto/hmac"
+	"errors"
 	"fmt"
 	"time"
 
@@ -148,7 +149,7 @@ func (s *DoubleRatchetState) Decrypt(header *RatchetHeader, ciphertext, associat
 // dhRatchetSend performs a DH ratchet step for sending
 func (s *DoubleRatchetState) dhRatchetSend() error {
 	if s.DHReceivingKeyPub == nil {
-		return fmt.Errorf("no receiving key set")
+		return errors.New("no receiving key set")
 	}
 
 	// Generate new ratchet key pair
@@ -229,7 +230,7 @@ func (s *DoubleRatchetState) advanceReceivingChain(targetNum uint32) error {
 // skipMessages handles out-of-order messages by caching skipped keys
 func (s *DoubleRatchetState) skipMessages(header *RatchetHeader) error {
 	if s.ReceivingChainKey == nil {
-		return fmt.Errorf("receiving chain not initialized")
+		return errors.New("receiving chain not initialized")
 	}
 
 	currentCount := s.ReceivingChainCount

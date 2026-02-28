@@ -3,6 +3,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -134,24 +135,24 @@ func (c *IPFSConfig) Validate() error {
 
 	// Validate connection limits
 	if c.LowWater < 0 {
-		return fmt.Errorf("low_water must be non-negative")
+		return errors.New("low_water must be non-negative")
 	}
 	if c.HighWater < c.LowWater {
-		return fmt.Errorf("high_water must be >= low_water")
+		return errors.New("high_water must be >= low_water")
 	}
 	if c.MaxConnections < c.HighWater {
-		return fmt.Errorf("max_connections must be >= high_water")
+		return errors.New("max_connections must be >= high_water")
 	}
 
 	// Validate timeouts
 	if c.BootstrapTimeout <= 0 {
-		return fmt.Errorf("bootstrap_timeout must be positive")
+		return errors.New("bootstrap_timeout must be positive")
 	}
 	if c.ConnectionTimeout <= 0 {
-		return fmt.Errorf("connection_timeout must be positive")
+		return errors.New("connection_timeout must be positive")
 	}
 	if c.DialTimeout <= 0 {
-		return fmt.Errorf("dial_timeout must be positive")
+		return errors.New("dial_timeout must be positive")
 	}
 
 	// Validate DHT mode
@@ -164,10 +165,10 @@ func (c *IPFSConfig) Validate() error {
 
 	// Validate peer storage
 	if c.MaxStoredPeers < 10 {
-		return fmt.Errorf("max_stored_peers must be >= 10")
+		return errors.New("max_stored_peers must be >= 10")
 	}
 	if c.MinPeerConnections < 1 {
-		return fmt.Errorf("min_peer_connections must be >= 1")
+		return errors.New("min_peer_connections must be >= 1")
 	}
 
 	return nil
