@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -252,4 +253,100 @@ func (h *CommandHandler) handleContactStatus() {
 	h.output(FormatInfo("Use /chat <contact> to start chatting with a contact."))
 	h.output("")
 	h.output("======================\n")
+}
+
+// handleMailboxStatus displays the status of the mailbox manager
+func (h *CommandHandler) handleMailboxStatus() {
+	if h.messaging == nil {
+		h.output(FormatErrorString("Messaging service not available"))
+		return
+	}
+
+	h.output("\n=== Mailbox Status ===\n")
+	h.output("")
+
+	mbManager := h.messaging.GetMailboxManager()
+	if mbManager == nil {
+		h.output(FormatErrorString("Mailbox manager not configured"))
+		h.output("Offline message delivery is disabled.")
+		h.output("")
+		h.output("======================\n")
+		return
+	}
+
+	h.output(fmt.Sprintf("Mailbox Enabled: %v", mbManager.IsMailbox()))
+	h.output("")
+
+	// Get mailbox stats
+	stats, err := mbManager.GetStats()
+	if err != nil {
+		h.output(FormatErrorString(fmt.Sprintf("Failed to get stats: %v", err)))
+	} else {
+		h.output(fmt.Sprintf("Stored Messages: %d", stats.StoredCount))
+		h.output(fmt.Sprintf("Used Storage: %d bytes", stats.UsedBytes))
+		h.output(fmt.Sprintf("Capacity: %d bytes", stats.CapacityBytes))
+		if stats.StoredCount > 0 {
+			h.output(fmt.Sprintf("Oldest Message: %d", stats.OldestTimestamp))
+			h.output(fmt.Sprintf("Newest Message: %d", stats.NewestTimestamp))
+		}
+	}
+
+	h.output("")
+
+	// Check for mailbox announcement
+	if announcement, exists := mbManager.GetAnnouncement(h.ed25519PubKey); exists {
+		h.output("Mailbox Announcement:")
+		h.output("  Peer ID: " + string(announcement.MailboxPeerId))
+		h.output(fmt.Sprintf("  Max Messages: %d", announcement.MaxMessages))
+		h.output(fmt.Sprintf("  Max Message Size: %d bytes", announcement.MaxMessageSize))
+		h.output(fmt.Sprintf("  TTL: %d seconds", announcement.TtlSeconds))
+		h.output("  Reputation: " + strconv.FormatInt(announcement.ReputationScore, 10))
+	} else {
+		h.output("No mailbox announcement found in DHT")
+	}
+
+	h.output("")
+	h.output(FormatInfo("Mailbox enables offline message delivery."))
+	h.output(FormatInfo("Messages are stored when recipients are offline."))
+	h.output("")
+	h.output(FormatInfo("To manually retrieve messages from mailbox, run: /mbx-retrieve"))
+	h.output("======================\n")
+}
+
+// handleMailboxRetrieve manually retrieves messages from mailbox
+func (h *CommandHandler) handleMailboxRetrieve() {
+	if h.messaging == nil {
+		h.output(FormatErrorString("Messaging service not initialized"))
+		return
+	}
+
+	h.output("\n=== Retrieving Messages from Mailbox ===\n")
+	h.output("")
+
+	mbManager := h.messaging.GetMailboxManager()
+	if mbManager == nil {
+		h.output(FormatErrorString("Mailbox manager not configured"))
+		return
+	}
+
+	// Get connected peers via network info
+	netInfo := h.ipfsNode.GetNetworkInfo()
+	h.output(fmt.Sprintf("Connected Peers: %d", netInfo.ConnectedPeerCount))
+	if len(netInfo.ConnectedPeers) > 0 {
+		for i, p := range netInfo.ConnectedPeers {
+			h.output(fmt.Sprintf("  %d. %s", i+1, p.ID))
+		}
+	}
+	h.output("")
+
+	// Retrieve and process messages through the messaging layer
+	// This decrypts, stores, and emits events for each message
+	err := h.messaging.RetrieveOfflineMessages()
+	if err != nil {
+		h.output(FormatErrorString(fmt.Sprintf("Retrieval failed: %v", err)))
+		return
+	}
+
+	h.output(FormatSuccess("Mailbox retrieval complete. Check conversations with /chat <contact_num>"))
+	h.output("")
 }

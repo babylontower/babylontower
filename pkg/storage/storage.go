@@ -23,6 +23,7 @@ const (
 	SourceDHT          PeerSource = "dht"
 	SourceMDNS         PeerSource = "mdns"
 	SourcePeerExchange PeerSource = "peer_exchange"
+	SourceBabylon      PeerSource = "babylon" // Babylon protocol nodes (from PubSub bootstrap)
 )
 
 // PeerRecord represents a discovered peer for persistence

@@ -80,6 +80,18 @@ func FormatMessage(msg *pb.Message, senderName string, isOutgoing bool) string {
 	return fmt.Sprintf("[%s] %s: %s", timestamp, sender, msg.Text)
 }
 
+// FormatBootstrapStatus formats the network bootstrap status for display
+func FormatBootstrapStatus(connected int, routingTableSize int) string {
+	if connected == 0 && routingTableSize == 0 {
+		return "⏳ Connecting to network..."
+	} else if connected > 0 && routingTableSize == 0 {
+		return fmt.Sprintf("📡 Connected to %d peer(s), waiting for DHT...", connected)
+	} else if routingTableSize > 0 && routingTableSize < 5 {
+		return fmt.Sprintf("🌐 DHT bootstrap in progress (%d peers)", routingTableSize)
+	}
+	return fmt.Sprintf("✅ Network ready (%d peers)", routingTableSize)
+}
+
 // FormatMessageFromEnvelope formats a message from a signed envelope
 func FormatMessageFromEnvelope(envelope *pb.SignedEnvelope, contactName string, isOutgoing bool) string {
 	// For PoC, we can't decrypt incoming messages without the full flow
@@ -147,21 +159,26 @@ func FormatHelp() string {
 	sb.WriteString("  /connect <multiaddr>  Connect to a peer node\n")
 	sb.WriteString("  /find <peer_id>       Find and connect to peer via DHT\n")
 	sb.WriteString("  /advertise            Advertise yourself to DHT\n")
-	sb.WriteString("  /bootstrap            Show bootstrap peer status\n")
+	sb.WriteString("  /bootstrap            Show bootstrap status (IPFS + Babylon)\n")
+	sb.WriteString("  /bootstrap --force    Trigger manual Babylon bootstrap\n")
 	sb.WriteString("  /reconnect            Retry bootstrap peer connection\n")
 	sb.WriteString("  /debug                Show detailed network debug info\n")
 	sb.WriteString("  /myaddr               Show your multiaddrs for sharing\n")
 	sb.WriteString("  /peers                Show detailed peer connection info\n")
-	sb.WriteString("  /dht                  Show DHT status\n")
-	sb.WriteString("  /dhtinfo              Show detailed DHT routing table\n")
+	sb.WriteString("  /dht                  Show IPFS and Babylon DHT status\n")
+	sb.WriteString("  /dhtinfo              Show detailed routing tables for both DHTs\n")
+	sb.WriteString("  /babylonstatus        Show comprehensive Babylon network status\n")
 	sb.WriteString("  /waitdht [timeout]    Wait for DHT bootstrap (default: 30s)\n")
+	sb.WriteString("                        Use --babylon flag to wait for Babylon DHT\n")
 	sb.WriteString("  /mdns                 Show mDNS discovery statistics\n")
 	sb.WriteString("  /network              Show comprehensive network health metrics\n")
 	sb.WriteString("                        (alias: /netmetrics)\n")
 	sb.WriteString("  /ipfslogs             Show IPFS network status (interactive)\n")
 	sb.WriteString("                        (aliases: /ipfs, /netstatus)\n")
 	sb.WriteString("  /netlog               Show network discovery log (interactive)\n")
-	sb.WriteString("                        (alias: /netinfo)\n\n")
+	sb.WriteString("                        (alias: /netinfo)\n")
+	sb.WriteString("  /mailbox              Show mailbox status for offline messages\n")
+	sb.WriteString("                        (alias: /mailboxstatus)\n\n")
 	sb.WriteString("Reputation:\n")
 	sb.WriteString("  /reputation           Show reputation summary\n")
 	sb.WriteString("                        (alias: /rep)\n")
@@ -194,7 +211,11 @@ func FormatBanner(version string, publicKey string) string {
 	sb.WriteString("╚══════════════════════════════════════════╝\n")
 	sb.WriteString("\n")
 	fmt.Fprintf(&sb, "Your public key: %s\n", publicKey)
-	sb.WriteString("\nType /help for available commands.\n\n")
+	sb.WriteString("\n")
+	sb.WriteString(FormatBootstrapStatus(0, 0))
+	sb.WriteString("\n\n")
+	sb.WriteString("Type /help for available commands.\n")
+	sb.WriteString("Type /network to check connection status.\n\n")
 	return sb.String()
 }
 

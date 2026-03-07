@@ -1,10 +1,12 @@
 package messaging
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	pb "babylontower/pkg/proto"
 
@@ -104,24 +106,92 @@ func (s *Service) SendMessage(
 		return nil, fmt.Errorf("failed to marshal signed envelope: %w", err)
 	}
 
-	// Contact-aware routing: Try to connect to recipient before sending
-	go func() {
-		// Attempt connection (non-blocking, best effort)
-		if err := s.connectToPeerID(string(recipientEd25519PubKey)); err != nil {
-			logger.Debugw("pre-send connection attempt failed", "error", err)
-		}
+	// Contact-aware routing: Try to connect to recipient BEFORE sending
+	// This uses DHT to discover the peer's address if not already connected
+	logger.Infow("attempting DHT peer discovery for contact",
+		"to", hex.EncodeToString(recipientEd25519PubKey)[:16])
 
-		// Optimize pubsub mesh for better delivery
-		if err := s.OptimizePubSubMesh(recipientEd25519PubKey); err != nil {
-			logger.Debugw("pubsub mesh optimization failed", "error", err)
-		}
-	}()
+	// Try to connect via DHT (blocking, with internal timeout)
+	connectErr := s.connectToPeerID(string(recipientEd25519PubKey))
+	if connectErr == nil {
+		logger.Infow("DHT peer discovery succeeded",
+			"to", hex.EncodeToString(recipientEd25519PubKey)[:16])
+	} else {
+		logger.Debugw("DHT peer discovery failed (peer may be offline)",
+			"to", hex.EncodeToString(recipientEd25519PubKey)[:16],
+			"error", connectErr)
+	}
 
-	// Publish envelope directly via PubSub to recipient's topic
-	// This avoids the IPFS Get limitation in PoC
-	// Note: envelopeBytes is from signedEnvelope WITHOUT encrypted ephemeral key
-	if err := s.ipfsNode.PublishTo(recipientEd25519PubKey, envelopeBytes); err != nil {
-		return nil, fmt.Errorf("failed to publish envelope: %w", err)
+	// Optimize pubsub mesh for better delivery
+	if err := s.OptimizePubSubMesh(recipientEd25519PubKey); err != nil {
+		logger.Debugw("pubsub mesh optimization failed", "error", err)
+	}
+
+	// Always try PubSub first - this is the primary delivery mechanism
+	// PubSub works for online peers who are subscribed to their own topic
+	// The recipient subscribes to their own topic on startup, so they receive messages there
+	pubSubErr := s.ipfsNode.PublishTo(recipientEd25519PubKey, envelopeBytes)
+
+	// Log PubSub result
+	if pubSubErr == nil {
+		logger.Infow("PubSub send succeeded", "to", hex.EncodeToString(recipientEd25519PubKey)[:16])
+	} else {
+		logger.Warnw("PubSub send failed",
+			"to", hex.EncodeToString(recipientEd25519PubKey)[:16],
+			"error", pubSubErr.Error())
+	}
+
+	// ALWAYS deposit to mailbox - this is the reliable delivery mechanism for offline recipients
+	// Mailbox will try: connected peers → DHT mailboxes
+	// This ensures delivery even when PubSub fails or DHT discovery fails
+	// Note: If no mailbox is available, this is OK - the message was already sent via PubSub
+	if s.mailboxManager != nil {
+		logger.Infow("starting mailbox deposit",
+			"to", hex.EncodeToString(recipientEd25519PubKey)[:16],
+			"pubsub_status", map[bool]string{true: "success", false: "failed"}[pubSubErr == nil],
+			"dht_status", map[bool]string{true: "success", false: "failed"}[connectErr == nil])
+
+		// Make defensive copies of public keys to avoid race conditions in goroutine
+		recipientKeyCopy := make([]byte, len(recipientEd25519PubKey))
+		copy(recipientKeyCopy, recipientEd25519PubKey)
+		
+		senderKeyCopy := make([]byte, len(s.config.OwnEd25519PubKey))
+		copy(senderKeyCopy, s.config.OwnEd25519PubKey)
+		
+		senderDeviceIDCopy := make([]byte, len(s.config.OwnEd25519PubKey[:16]))
+		copy(senderDeviceIDCopy, s.config.OwnEd25519PubKey[:16])
+
+		// Copy envelopeBytes for the goroutine (already serialized SignedEnvelope)
+		envelopeBytesCopy := make([]byte, len(envelopeBytes))
+		copy(envelopeBytesCopy, envelopeBytes)
+
+		go func() {
+			// Store the full serialized SignedEnvelope as payload — same format as PubSub
+			babylonEnvelope := &pb.BabylonEnvelope{
+				ProtocolVersion:   1,
+				MessageType:       pb.MessageType_DM_TEXT,
+				SenderIdentity:    senderKeyCopy,
+				RecipientIdentity: recipientKeyCopy,
+				Timestamp:         uint64(time.Now().Unix()),
+				Payload:           envelopeBytesCopy,
+				SenderDeviceId:    senderDeviceIDCopy,
+			}
+
+			// Deposit to mailbox with timeout
+			ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+			defer cancel()
+
+			if err := s.mailboxManager.DepositMessage(ctx, recipientKeyCopy, babylonEnvelope); err != nil {
+				logger.Debugw("mailbox deposit failed (recipient may need to come online)",
+					"to", hex.EncodeToString(recipientKeyCopy)[:16],
+					"error", err)
+			}
+			// Success is logged inside DepositMessage
+			// Note: DepositMessage returning nil is OK - message was sent via PubSub
+		}()
+	} else {
+		logger.Debugw("mailbox manager not available, relying on PubSub only",
+			"to", hex.EncodeToString(recipientEd25519PubKey)[:16])
 	}
 
 	// Store message locally (sent messages)

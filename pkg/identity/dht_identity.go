@@ -23,11 +23,17 @@ type DHTIdentityManager struct {
 // DHTClient is an interface for DHT operations (implemented by ipfsnode.Node)
 type DHTClient interface {
 	// PutToDHT stores a value in the DHT with the given key
+	// For Babylon protocol keys (/bt/id/, /bt/prekeys/), uses Babylon DHT
 	PutToDHT(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	// GetFromDHT retrieves a value from the DHT by key
+	// For Babylon protocol keys, uses Babylon DHT
 	GetFromDHT(ctx context.Context, key string) ([]byte, error)
 	// GetClosestPeers finds peers closest to a given key
 	GetClosestPeers(ctx context.Context, key string) ([]string, error)
+	// IsBabylonDHTReady returns true if Babylon DHT is ready for protocol operations
+	IsBabylonDHTReady() bool
+	// WaitForBabylonDHT waits for Babylon DHT to be ready
+	WaitForBabylonDHT(timeout time.Duration) error
 }
 
 // NewDHTIdentityManager creates a new DHT identity manager
@@ -39,7 +45,15 @@ func NewDHTIdentityManager(dhtClient DHTClient) *DHTIdentityManager {
 
 // PublishIdentityDocument publishes an IdentityDocument to the DHT
 // The document is stored at /bt/id/<hex(SHA256(IK_sign.pub)[:16])>
+// Uses Babylon DHT for protocol-layer storage
 func (m *DHTIdentityManager) PublishIdentityDocument(ctx context.Context, doc *pb.IdentityDocument) error {
+	// Check if Babylon DHT is ready
+	if waiter, ok := m.dhtClient.(interface{ IsBabylonDHTReady() bool }); ok {
+		if !waiter.IsBabylonDHTReady() {
+			logger.Warnw("Babylon DHT not ready, identity publication may fail")
+		}
+	}
+
 	// Serialize the document
 	data, err := proto.Marshal(doc)
 	if err != nil {
@@ -49,13 +63,13 @@ func (m *DHTIdentityManager) PublishIdentityDocument(ctx context.Context, doc *p
 	// Derive DHT key
 	dhtKey := DeriveIdentityDHTKey(doc.IdentitySignPub)
 
-	// Store in DHT with 24-hour TTL (republish every 4 hours)
+	// Store in Babylon DHT with 24-hour TTL (republish every 4 hours)
 	ttl := 24 * time.Hour
 	if err := m.dhtClient.PutToDHT(ctx, dhtKey, data, ttl); err != nil {
 		return fmt.Errorf("failed to publish identity document to DHT: %w", err)
 	}
 
-	logger.Infow("published identity document to DHT", "dht_key", dhtKey)
+	logger.Infow("published identity document to Babylon DHT", "dht_key", dhtKey)
 	return nil
 }
 
@@ -156,7 +170,8 @@ func ValidatePrekeyBundle(bundle *pb.PrekeyBundle, identityPub []byte) error {
 }
 
 // DeriveIdentityDHTKey derives the DHT key for an identity document
-// Format: /bt/id/ + hex(SHA256(IK_sign.pub)[:16])
+// Format: /bt/id/<hex(SHA256(IK_sign.pub)[:16])>
+// Per protocol spec section 1.4
 func DeriveIdentityDHTKey(identityPub []byte) string {
 	hash := sha256.Sum256(identityPub)
 	hexPrefix := hex.EncodeToString(hash[:16])
@@ -164,7 +179,8 @@ func DeriveIdentityDHTKey(identityPub []byte) string {
 }
 
 // DerivePrekeyBundleDHTKey derives the DHT key for a prekey bundle
-// Format: /bt/prekeys/ + hex(SHA256(IK_sign.pub)[:16])
+// Format: /bt/prekeys/<hex(SHA256(IK_sign.pub)[:16])>
+// Per protocol spec section 4.2
 func DerivePrekeyBundleDHTKey(identityPub []byte) string {
 	hash := sha256.Sum256(identityPub)
 	hexPrefix := hex.EncodeToString(hash[:16])

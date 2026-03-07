@@ -13,6 +13,7 @@ type AppConfig struct {
 	RTC         RTCConfig         `mapstructure:"rtc"`
 	Multidevice MultideviceConfig `mapstructure:"multidevice"`
 	Identity    IdentityConfig    `mapstructure:"identity"`
+	Bootstrap   BootstrapConfig   `mapstructure:"bootstrap"`
 }
 
 // NetworkConfig holds network and libp2p settings.
@@ -79,6 +80,30 @@ type MultideviceConfig struct {
 type IdentityConfig struct {
 	DHTPublish      bool          `mapstructure:"dht_publish"`
 	RefreshInterval time.Duration `mapstructure:"refresh_interval"`
+}
+
+// BootstrapConfig holds configuration for the hybrid bootstrap mechanism
+type BootstrapConfig struct {
+	// PubSubTopic is the topic name for bootstrap discovery
+	PubSubTopic string `yaml:"pubsub_topic" mapstructure:"pubsub_topic"`
+	// ResponseProbability is the probability of responding to a bootstrap request (0.0-1.0)
+	ResponseProbability float64 `yaml:"response_probability" mapstructure:"response_probability"`
+	// MaxResponsesPerMinute is the maximum number of responses allowed per minute
+	MaxResponsesPerMinute int `yaml:"max_responses_per_minute" mapstructure:"max_responses_per_minute"`
+	// RequestDedupWindowSecs is the time window for request deduplication in seconds
+	RequestDedupWindowSecs int `yaml:"request_dedup_window_seconds" mapstructure:"request_dedup_window_seconds"`
+	// MinUptimeSecs is the minimum uptime required to qualify as a helper node
+	MinUptimeSecs int `yaml:"min_uptime_secs" mapstructure:"min_uptime_secs"`
+	// MinPeerCount is the minimum number of connected peers required to qualify as a helper
+	MinPeerCount int `yaml:"min_peer_count" mapstructure:"min_peer_count"`
+	// MinRoutingTableSize is the minimum DHT routing table size required to qualify as a helper
+	MinRoutingTableSize int `yaml:"min_routing_table_size" mapstructure:"min_routing_table_size"`
+	// StoredPeerTimeoutSecs is the maximum age of stored peers before they're considered stale
+	StoredPeerTimeoutSecs int `yaml:"stored_peer_timeout_seconds" mapstructure:"stored_peer_timeout_seconds"`
+	// PubSubListenSecs is how long to listen for responses during bootstrap
+	PubSubListenSecs int `yaml:"pubsub_listen_seconds" mapstructure:"pubsub_listen_seconds"`
+	// MinBabylonPeersRequired is the minimum number of Babylon peers needed
+	MinBabylonPeersRequired int `yaml:"min_babylon_peers_required" mapstructure:"min_babylon_peers_required"`
 }
 
 // ToIPFSConfig converts the unified AppConfig into the IPFSConfig consumed by

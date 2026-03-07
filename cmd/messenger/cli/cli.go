@@ -10,9 +10,7 @@ import (
 	"sync"
 	"syscall"
 
-	"babylontower/pkg/groups"
-	"babylontower/pkg/ipfsnode"
-	"babylontower/pkg/messaging"
+	"babylontower/pkg/app"
 	"babylontower/pkg/storage"
 
 	"github.com/chzyer/readline"
@@ -34,9 +32,9 @@ type Config struct {
 type CLI struct {
 	config    *Config
 	storage   storage.Storage
-	ipfsNode  *ipfsnode.Node
-	messaging *messaging.Service
-	groups    *groups.Service
+	ipfsNode  app.NetworkNode
+	messaging app.Messenger
+	groups    app.GroupManager
 	handler   *CommandHandler
 	rl        *readline.Instance
 	outputMu  sync.Mutex
@@ -53,7 +51,7 @@ type CLI struct {
 }
 
 // New creates a new CLI instance
-func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode *ipfsnode.Node, messaging *messaging.Service, groupsSvc *groups.Service) (*CLI, error) {
+func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode app.NetworkNode, messaging app.Messenger, groupsSvc app.GroupManager) (*CLI, error) {
 	// Create readline instance
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          ">>> ",
@@ -92,6 +90,7 @@ func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode *
 		identity.Ed25519PrivKey,
 		identity.X25519PubKey,
 		identity.X25519PrivKey,
+		identity,
 		cli.output,
 	)
 
@@ -150,11 +149,24 @@ func (c *CLI) runLoop() error {
 func (c *CLI) listenForMessages() {
 	defer c.wg.Done()
 
+	// Check if messaging service is available
+	if c.messaging == nil {
+		logger.Warn("messaging service not available, message listener disabled")
+		return
+	}
+
+	// Get message channel
+	msgChan := c.messaging.Messages()
+	if msgChan == nil {
+		logger.Warn("messaging service returned nil channel, message listener disabled")
+		return
+	}
+
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
-		case msgEvent, ok := <-c.messaging.Messages():
+		case msgEvent, ok := <-msgChan:
 			if !ok {
 				return
 			}
@@ -164,7 +176,7 @@ func (c *CLI) listenForMessages() {
 }
 
 // handleIncomingMessage processes an incoming message
-func (c *CLI) handleIncomingMessage(event *messaging.MessageEvent) {
+func (c *CLI) handleIncomingMessage(event *app.MessageEvent) {
 	// Get contact name
 	contact, err := c.storage.GetContact(event.ContactPubKey)
 	contactName := ""
@@ -235,11 +247,11 @@ func (c *CLI) GetStorage() storage.Storage {
 }
 
 // GetIPFSNode returns the IPFS node
-func (c *CLI) GetIPFSNode() *ipfsnode.Node {
+func (c *CLI) GetIPFSNode() app.NetworkNode {
 	return c.ipfsNode
 }
 
 // GetMessaging returns the messaging service
-func (c *CLI) GetMessaging() *messaging.Service {
+func (c *CLI) GetMessaging() app.Messenger {
 	return c.messaging
 }

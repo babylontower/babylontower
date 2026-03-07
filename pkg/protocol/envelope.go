@@ -102,6 +102,71 @@ func (b *EnvelopeBuilder) CipherSuite(suiteID uint32) *EnvelopeBuilder {
 	return b
 }
 
+// NegotiateCipherSuite selects the highest mutually supported cipher suite
+// Per spec section 2.1: max(intersect(own_supported, recipient_supported))
+// Returns the negotiated cipher suite ID or DefaultCipherSuite if no intersection
+func NegotiateCipherSuite(ownSupported, recipientSupported []string) uint32 {
+	// For protocol v1, we only have one mandatory cipher suite
+	// This function is future-proof for when we add more suites
+	
+	// Define cipher suite priority (higher = better)
+	cipherPriority := map[string]uint32{
+		"BT-X25519-XChaCha20Poly1305-SHA256": 0x0001,
+		"BT-X25519-AES256GCM-SHA256":         0x0002,
+	}
+	
+	// Build set of recipient supported suites
+	recipientSet := make(map[string]bool)
+	for _, suite := range recipientSupported {
+		recipientSet[suite] = true
+	}
+	
+	// Find highest priority mutually supported suite
+	var bestSuite uint32 = 0
+	var bestPriority int = -1
+	
+	for _, suite := range ownSupported {
+		if recipientSet[suite] {
+			priority, ok := cipherPriority[suite]
+			if ok && int(priority) > bestPriority {
+				bestPriority = int(priority)
+				bestSuite = priority
+			}
+		}
+	}
+	
+	if bestSuite == 0 {
+		// Fall back to default if no intersection
+		return DefaultCipherSuite
+	}
+	
+	return bestSuite
+}
+
+// ParseCipherSuiteFromID converts a cipher suite ID to its string representation
+func ParseCipherSuiteFromID(suiteID uint32) string {
+	switch suiteID {
+	case 0x0001:
+		return "BT-X25519-XChaCha20Poly1305-SHA256"
+	case 0x0002:
+		return "BT-X25519-AES256GCM-SHA256"
+	default:
+		return ""
+	}
+}
+
+// GetCipherSuiteID converts a cipher suite string to its ID
+func GetCipherSuiteID(suiteName string) uint32 {
+	switch suiteName {
+	case "BT-X25519-XChaCha20Poly1305-SHA256":
+		return 0x0001
+	case "BT-X25519-AES256GCM-SHA256":
+		return 0x0002
+	default:
+		return DefaultCipherSuite
+	}
+}
+
 // Build constructs and signs the BabylonEnvelope
 func (b *EnvelopeBuilder) Build() (*pb.BabylonEnvelope, error) {
 	// Generate message ID

@@ -61,11 +61,12 @@ func DeriveSeed(mnemonic string) ([]byte, error) {
 	return seed, nil
 }
 
-// deriveEd25519Keys derives Ed25519 key pair from seed at index 0
+// deriveEd25519Keys derives Ed25519 key pair from master secret
+// Per spec: HKDF(master, salt="bt-identity", info="identity-signing-key-0")
 // Ed25519 keys are used for signing and verification
-func deriveEd25519Keys(seed []byte) (ed25519.PublicKey, ed25519.PrivateKey, error) {
-	// Use HKDF to derive key material for index 0
-	hkdfReader := hkdf.New(sha256.New, seed, []byte("ed25519-derive"), []byte("index-0"))
+func deriveEd25519Keys(masterSecret []byte) (ed25519.PublicKey, ed25519.PrivateKey, error) {
+	// Use HKDF to derive key material for signing key
+	hkdfReader := hkdf.New(sha256.New, masterSecret, []byte(IdentitySalt), []byte(SigningKeyInfo))
 	derivedKey := make([]byte, ed25519.SeedSize)
 	if _, err := hkdfReader.Read(derivedKey); err != nil {
 		return nil, nil, fmt.Errorf("failed to derive Ed25519 key: %w", err)
@@ -75,11 +76,12 @@ func deriveEd25519Keys(seed []byte) (ed25519.PublicKey, ed25519.PrivateKey, erro
 	return pubKey, privKey, nil
 }
 
-// deriveX25519Keys derives X25519 key pair from seed at index 1
+// deriveX25519Keys derives X25519 key pair from master secret
+// Per spec: HKDF(master, salt="bt-identity", info="identity-dh-key-0")
 // X25519 keys are used for key agreement (ECDH)
-func deriveX25519Keys(seed []byte) (*[32]byte, *[32]byte, error) {
-	// Use HKDF to derive key material for index 1
-	hkdfReader := hkdf.New(sha256.New, seed, []byte("x25519-derive"), []byte("index-1"))
+func deriveX25519Keys(masterSecret []byte) (*[32]byte, *[32]byte, error) {
+	// Use HKDF to derive key material for DH key
+	hkdfReader := hkdf.New(sha256.New, masterSecret, []byte(IdentitySalt), []byte(DHKeyInfo))
 	derivedKey := make([]byte, 32)
 	if _, err := hkdfReader.Read(derivedKey); err != nil {
 		return nil, nil, fmt.Errorf("failed to derive X25519 key: %w", err)
@@ -96,17 +98,28 @@ func deriveX25519Keys(seed []byte) (*[32]byte, *[32]byte, error) {
 }
 
 // NewIdentity creates a new identity from a mnemonic
-// Derives Ed25519 and X25519 key pairs deterministically
+// Derives Ed25519 and X25519 key pairs deterministically per spec:
+//   BIP39 Mnemonic → PBKDF2 → 512-bit Seed
+//   Seed → HKDF-SHA256(salt="bt-master-key", info="babylon-tower-v1") → Master Secret
+//   Master Secret → HKDF(salt="bt-identity", info="identity-signing-key-0") → IK_sign (Ed25519)
+//   Master Secret → HKDF(salt="bt-identity", info="identity-dh-key-0") → IK_dh (X25519)
 func NewIdentity(mnemonic string) (*Identity, error) {
 	seed, err := DeriveSeed(mnemonic)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive seed: %w", err)
 	}
-	edPub, edPriv, err := deriveEd25519Keys(seed)
+	
+	// Derive master secret from seed (v1 spec-compliant derivation)
+	masterSecret, err := DeriveMasterSecret(seed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive master secret: %w", err)
+	}
+	
+	edPub, edPriv, err := deriveEd25519Keys(masterSecret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive Ed25519 keys: %w", err)
 	}
-	xPub, xPriv, err := deriveX25519Keys(seed)
+	xPub, xPriv, err := deriveX25519Keys(masterSecret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive X25519 keys: %w", err)
 	}
@@ -148,6 +161,23 @@ func (i *Identity) X25519PublicKeyHex() string {
 // X25519PublicKeyBase58 returns the X25519 public key as a base58 string
 func (i *Identity) X25519PublicKeyBase58() string {
 	return EncodeBase58(i.X25519PubKey)
+}
+
+// ComputeFingerprint computes the identity fingerprint per spec:
+// Fingerprint = Base58(SHA256(IK_sign.pub ‖ IK_dh.pub)[:20]) → 27-28 characters
+// This is used for out-of-band verification to prevent MITM attacks
+func (i *Identity) ComputeFingerprint() (string, error) {
+	// Concatenate the two public keys
+	combined := make([]byte, 0, 64)
+	combined = append(combined, i.Ed25519PubKey...)
+	combined = append(combined, i.X25519PubKey...)
+	
+	// Compute SHA256 hash
+	hash := sha256.Sum256(combined)
+	
+	// Take first 20 bytes and encode as Base58
+	fingerprint := EncodeBase58(hash[:20])
+	return fingerprint, nil
 }
 
 // SaveIdentity persists the identity to a JSON file

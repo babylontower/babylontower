@@ -7,9 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"babylontower/pkg/app"
 	"babylontower/pkg/groups"
-	"babylontower/pkg/ipfsnode"
-	"babylontower/pkg/messaging"
 	"babylontower/pkg/storage"
 
 	"github.com/ipfs/go-log/v2"
@@ -24,14 +23,17 @@ var timeNow = time.Now
 // CommandHandler handles CLI commands
 type CommandHandler struct {
 	storage   storage.Storage
-	ipfsNode  *ipfsnode.Node
-	messaging *messaging.Service
-	groups    *groups.Service
+	ipfsNode  app.NetworkNode
+	messaging app.Messenger
+	groups    app.GroupManager
 
 	ed25519PubKey  ed25519.PublicKey
 	ed25519PrivKey ed25519.PrivateKey
 	x25519PubKey   []byte
 	x25519PrivKey  []byte
+	
+	// Identity object for fingerprint computation
+	identity *Identity
 
 	inChatMode        bool
 	chatContactPubKey []byte
@@ -48,13 +50,14 @@ type CommandHandler struct {
 // NewCommandHandler creates a new command handler
 func NewCommandHandler(
 	storage storage.Storage,
-	ipfsNode *ipfsnode.Node,
-	messaging *messaging.Service,
-	groupsSvc *groups.Service,
+	ipfsNode app.NetworkNode,
+	messaging app.Messenger,
+	groupsSvc app.GroupManager,
 	ed25519PubKey ed25519.PublicKey,
 	ed25519PrivKey ed25519.PrivateKey,
 	x25519PubKey []byte,
 	x25519PrivKey []byte,
+	identity *Identity,
 	output func(string),
 ) *CommandHandler {
 	return &CommandHandler{
@@ -66,6 +69,7 @@ func NewCommandHandler(
 		ed25519PrivKey: ed25519PrivKey,
 		x25519PubKey:   x25519PubKey,
 		x25519PrivKey:  x25519PrivKey,
+		identity:       identity,
 		output:         output,
 	}
 }
@@ -119,9 +123,11 @@ func (h *CommandHandler) HandleCommand(input string) bool {
 	case "/advertise":
 		h.handleAdvertise()
 	case "/bootstrap", "/bs":
-		h.handleBootstrap()
+		h.handleBootstrap(args)
 	case "/reconnect", "/retry":
 		h.handleReconnect()
+	case "/clearpeers", "/clearcache":
+		h.handleClearPeers()
 	case "/debug", "/netdebug":
 		h.handleNetDebug()
 	case "/ipfslogs", "/ipfs", "/netstatus":
@@ -136,6 +142,8 @@ func (h *CommandHandler) HandleCommand(input string) bool {
 		h.handleDHT()
 	case "/dhtinfo":
 		h.handleDHTInfo()
+	case "/babylonstatus", "/bstatus":
+		h.handleBabylonStatus()
 	case "/waitdht":
 		h.handleWaitDHT(args)
 	case "/mdns":
@@ -144,6 +152,10 @@ func (h *CommandHandler) HandleCommand(input string) bool {
 		h.handleNetworkStatus()
 	case "/contactstatus", "/contacts":
 		h.handleContactStatus()
+	case "/mailbox", "/mailboxstatus":
+		h.handleMailboxStatus()
+	case "/mbx-retrieve", "/mbxget":
+		h.handleMailboxRetrieve()
 	case "/creategroup":
 		h.handleCreateGroup(args)
 	case "/listgroups":

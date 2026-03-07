@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"babylontower/pkg/ipfsnode"
+	"babylontower/pkg/app"
 )
 
 // handleConnect connects to a peer node by multiaddr
@@ -68,16 +68,16 @@ func (h *CommandHandler) handleFind(args []string) {
 
 	h.output(FormatSuccess("Found peer via DHT!"))
 	h.output("")
-	h.output(fmt.Sprintf("Peer ID: %s", peerInfo.ID))
+	h.output("Peer ID: " + string(peerInfo.ID))
 	h.output(fmt.Sprintf("Addresses (%d):", len(peerInfo.Addrs)))
 	for i, addr := range peerInfo.Addrs {
-		h.output(fmt.Sprintf("  %d. %s/p2p/%s", i+1, addr.String(), args[0]))
+		h.output(fmt.Sprintf("  %d. %s/p2p/%s", i+1, addr, args[0]))
 	}
 
 	h.output("")
 	h.output(FormatInfo("Attempting to connect..."))
 
-	if err := h.ipfsNode.ConnectToPeer(peerInfo.Addrs[0].String() + "/p2p/" + string(peerInfo.ID)); err != nil {
+	if err := h.ipfsNode.ConnectToPeer(peerInfo.Addrs[0] + "/p2p/" + peerInfo.ID); err != nil {
 		h.output(FormatErrorString(fmt.Sprintf("Connection failed: %v", err)))
 		return
 	}
@@ -109,44 +109,36 @@ func (h *CommandHandler) handleAdvertise() {
 	h.output("  " + h.ipfsNode.PeerID())
 }
 
-// handleBootstrap displays bootstrap peer connection status
-func (h *CommandHandler) handleBootstrap() {
+// handleBootstrap shows bootstrap status and can trigger re-bootstrap
+func (h *CommandHandler) handleBootstrap(args []string) {
 	if h.ipfsNode == nil || !h.ipfsNode.IsStarted() {
 		h.output(FormatErrorString("IPFS node not started"))
 		return
 	}
 
-	info := h.ipfsNode.GetNetworkInfo()
+	// Show current status
+	bootstrap := h.ipfsNode.GetBootstrapStatus()
+	h.output("\n=== Bootstrap Status ===\n")
+	h.output(fmt.Sprintf("IPFS Bootstrap: %v", boolToString(bootstrap.IPFSBootstrapComplete)))
+	h.output(fmt.Sprintf("Babylon Bootstrap: %v", boolToString(bootstrap.BabylonBootstrapComplete)))
+	h.output(fmt.Sprintf("Babylon Peers Stored: %d", bootstrap.BabylonPeersStored))
+	h.output(fmt.Sprintf("Babylon Peers Connected: %d", bootstrap.BabylonPeersConnected))
+	h.output("")
 
-	h.output("\n=== Bootstrap Peer Status ===\n")
-	h.output("")
-	h.output("Your Peer ID: " + h.ipfsNode.PeerID())
-	h.output("")
-	h.output(fmt.Sprintf("Connected peers: %d", info.ConnectedPeerCount))
-	h.output("")
-
-	if info.ConnectedPeerCount == 0 {
-		h.output(FormatErrorString("Not connected to any peers"))
-		h.output("")
-		h.output(FormatInfo("Bootstrap connection may have failed. Try:"))
-		h.output("  1. Check your internet connection")
-		h.output("  2. Check firewall settings (outbound TCP)")
-		h.output("  3. Wait a few seconds for connection retry")
-		h.output("  4. Use /connect <multiaddr> for direct connection")
-	} else {
-		h.output(FormatSuccess("Connected to bootstrap network"))
-		h.output("")
-		h.output("Connected peers:")
-		for i, peer := range info.ConnectedPeers {
-			h.output(fmt.Sprintf("  %d. %s", i+1, peer.ID))
-			if len(peer.Addresses) > 0 {
-				h.output("     via: " + peer.Addresses[0])
-			}
+	// If --force flag, trigger re-bootstrap
+	if len(args) > 0 && (args[0] == "--force" || args[0] == "-f") {
+		h.output(FormatInfo("Triggering Babylon bootstrap..."))
+		discoveredPeers := h.ipfsNode.TriggerRendezvousDiscovery()
+		h.output(fmt.Sprintf("Discovered %d peers via DHT rendezvous", discoveredPeers))
+		if discoveredPeers > 0 {
+			h.output(FormatSuccess("Bootstrap request sent successfully"))
+		} else {
+			h.output(FormatInfo("No peers responded. Try again in a few seconds."))
 		}
 	}
 
 	h.output("")
-	h.output("=============================\n")
+	h.output("============================\n")
 }
 
 // handleReconnect attempts to reconnect to bootstrap peers
@@ -178,6 +170,33 @@ func (h *CommandHandler) handleReconnect() {
 
 	h.output("")
 	h.output("====================================\n")
+}
+
+// handleClearPeers clears stored peers and dial backoff
+func (h *CommandHandler) handleClearPeers() {
+	if h.ipfsNode == nil || !h.ipfsNode.IsStarted() {
+		h.output(FormatErrorString("IPFS node not started"))
+		return
+	}
+
+	h.output("\n=== Clear Peer Cache ===\n")
+	h.output("")
+	h.output(FormatInfo("Clearing dial backoff and stored peers..."))
+	h.output("")
+
+	// Clear all dial backoff
+	h.ipfsNode.ClearAllBackoffs()
+	h.output(FormatSuccess("Cleared dial backoff for all peers"))
+
+	// Note: Clearing stored peers requires storage access
+	// For now, we just clear the backoff
+	h.output("")
+	h.output(FormatInfo("Tip: To clear stored peers completely, delete:"))
+	h.output("  ~/.babylontower/storage/peers")
+	h.output("")
+	h.output(FormatInfo("Then restart the application."))
+	h.output("")
+	h.output("========================\n")
 }
 
 // handlePeers displays detailed peer connection information
@@ -242,45 +261,68 @@ func (h *CommandHandler) handleMyAddr() {
 	h.output("============================\n")
 }
 
-// handleDHT displays DHT routing table status
+// handleDHT displays DHT status for both IPFS and Babylon
+// Updated for decoupled bootstrap architecture
 func (h *CommandHandler) handleDHT() {
 	if h.ipfsNode == nil || !h.ipfsNode.IsStarted() {
 		h.output(FormatErrorString("IPFS node not started"))
 		return
 	}
 
-	dhtInfo := h.ipfsNode.GetDHTInfo()
+	status := h.ipfsNode.GetBootstrapStatus()
 
-	h.output("\n=== DHT Status ===\n")
-	h.output("Peer ID: " + h.ipfsNode.PeerID())
-	h.output("DHT Mode: " + dhtInfo.Mode)
-	h.output(fmt.Sprintf("Routing Table Size: %d peers", dhtInfo.RoutingTableSize))
-	h.output(fmt.Sprintf("Connected Peers: %d", dhtInfo.ConnectedPeerCount))
+	h.output("\n╔════════════════════════════════════════════════════════╗")
+	h.output("║           DHT Status - Decoupled Bootstrap            ║")
+	h.output("╚════════════════════════════════════════════════════════╝")
 	h.output("")
 
-	if dhtInfo.RoutingTableSize > 0 {
-		h.output(FormatSuccess("DHT routing table is populated"))
-		h.output("")
-		h.output("Routing table peers (first 5):")
-		for i, peer := range dhtInfo.RoutingTablePeers {
-			if i >= 5 {
-				h.output(fmt.Sprintf("  ... and %d more", dhtInfo.RoutingTableSize-5))
-				break
-			}
-			h.output(fmt.Sprintf("  [%d] %s", i+1, truncatePeerID(peer)))
-		}
+	// IPFS DHT (Transport Layer)
+	h.output("┌─ IPFS DHT (Transport Layer) ─────────────────────────┐")
+	h.output("│ Purpose: PubSub connectivity, basic libp2p routing   │")
+	if status.IPFSBootstrapComplete {
+		h.output(fmt.Sprintf("│ Status:  ✓ Complete - %d peers in routing table    │", status.IPFSRoutingTableSize))
 	} else {
-		h.output(FormatErrorString("DHT routing table is EMPTY"))
-		h.output("")
-		h.output("DHT bootstrap may not have completed. Try:")
-		h.output("  /waitdht          - Wait for bootstrap to complete")
-		h.output("  /bootstrap        - Reconnect to bootstrap peers")
-		h.output("  /connect <addr>   - Direct connection to a peer")
-		h.output("  /dhtinfo          - Detailed routing table info")
+		h.output(fmt.Sprintf("│ Status:  ⏳ Bootstrapping... - %d peers             │", status.IPFSRoutingTableSize))
 	}
-
+	h.output("└────────────────────────────────────────────────────────┘")
 	h.output("")
-	h.output("==================\n")
+
+	// Babylon DHT (Protocol Layer)
+	h.output("┌─ Babylon DHT (Protocol Layer) ───────────────────────┐")
+	h.output("│ Purpose: Messaging, groups, identity documents       │")
+	if status.BabylonBootstrapComplete {
+		h.output(fmt.Sprintf("│ Status:  ✓ Complete - %d peers connected           │", status.BabylonPeersConnected))
+	} else if status.BabylonBootstrapDeferred {
+		h.output("│ Status:  ⏸ Deferred - waiting for messages            │")
+		h.output(fmt.Sprintf("│          %d peers stored, will bootstrap on first msg │", status.BabylonPeersStored))
+	} else {
+		h.output(fmt.Sprintf("│ Status:  ⏳ Bootstrapping... - %d peers connected    │", status.BabylonPeersConnected))
+	}
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
+
+	// Rendezvous Discovery
+	h.output("┌─ Rendezvous Discovery ───────────────────────────────┐")
+	h.output("│ Purpose: DHT-based Babylon node discovery             │")
+	if status.RendezvousActive {
+		h.output("│ Status:  ✓ Active - discoverable by other nodes      │")
+	} else {
+		h.output("│ Status:  ⏳ Pending                                  │")
+	}
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
+
+	// Peer Sources
+	h.output("┌─ Peer Sources ───────────────────────────────────────┐")
+	counts := h.ipfsNode.GetPeerCountsBySource()
+	h.output(fmt.Sprintf("│ Babylon:       %d peers                            │", counts.Babylon))
+	h.output(fmt.Sprintf("│ IPFS Bootstrap: %d peers                            │", counts.IPFSBootstrap))
+	h.output(fmt.Sprintf("│ IPFS Discovery: %d peers                            │", counts.IPFSDiscovery))
+	h.output(fmt.Sprintf("│ mDNS:          %d peers                            │", counts.MDNS))
+	h.output(fmt.Sprintf("│ ──────────────────────────────────────────────── │"))
+	h.output(fmt.Sprintf("│ Total Connected: %d peers                          │", counts.ConnectedTotal))
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
 }
 
 // handleDHTInfo displays detailed DHT routing table information
@@ -292,7 +334,7 @@ func (h *CommandHandler) handleDHTInfo() {
 
 	dhtInfo := h.ipfsNode.GetDHTInfo()
 
-	h.output("\n=== DHT Routing Table Status ===\n")
+	h.output("\n=== IPFS DHT Routing Table ===\n")
 	h.output("DHT Mode: " + dhtInfo.Mode)
 	h.output(fmt.Sprintf("Routing Table Size: %d peers", dhtInfo.RoutingTableSize))
 	h.output(fmt.Sprintf("Connected Peers: %d", dhtInfo.ConnectedPeerCount))
@@ -300,7 +342,7 @@ func (h *CommandHandler) handleDHTInfo() {
 	h.output("")
 
 	if dhtInfo.RoutingTableSize == 0 {
-		h.output(FormatErrorString("DHT routing table is EMPTY"))
+		h.output(FormatErrorString("IPFS DHT routing table is EMPTY"))
 		h.output("")
 		h.output("This means DHT bootstrap has not completed or failed.")
 		h.output("Try:")
@@ -309,7 +351,7 @@ func (h *CommandHandler) handleDHTInfo() {
 		h.output("  3. Run /bootstrap to reconnect to bootstrap peers")
 		h.output("  4. Run /connect <multiaddr> for direct connection")
 	} else {
-		h.output(FormatSuccess("DHT routing table is populated"))
+		h.output(FormatSuccess("IPFS DHT routing table is populated"))
 		h.output("")
 		h.output("Routing table peers:")
 		for i, peer := range dhtInfo.RoutingTablePeers {
@@ -321,8 +363,102 @@ func (h *CommandHandler) handleDHTInfo() {
 		}
 	}
 
+	// Babylon DHT routing table
+	babylonDHT := h.ipfsNode.GetBabylonDHTInfo()
+	h.output("\n=== Babylon DHT Routing Table ===\n")
+	h.output(fmt.Sprintf("Stored Babylon Peers: %d", babylonDHT.StoredBabylonPeers))
+	h.output(fmt.Sprintf("Connected: %d", babylonDHT.ConnectedBabylonPeers))
+	h.output("")
+
+	if babylonDHT.StoredBabylonPeers > 0 {
+		h.output("Babylon peers (first 10):")
+		for i, peerID := range babylonDHT.BabylonPeerIDs {
+			if i >= 10 {
+				h.output(fmt.Sprintf("  ... and %d more", babylonDHT.StoredBabylonPeers-10))
+				break
+			}
+			h.output(fmt.Sprintf("  [%d] %s", i+1, truncatePeerID(peerID)))
+		}
+	} else {
+		h.output(FormatErrorString("No Babylon peers stored yet"))
+		h.output("Run /bootstrap to manually request peers")
+	}
+
 	h.output("")
 	h.output("===============================\n")
+}
+
+// handleBabylonStatus displays comprehensive Babylon network status
+func (h *CommandHandler) handleBabylonStatus() {
+	if h.ipfsNode == nil || !h.ipfsNode.IsStarted() {
+		h.output(FormatErrorString("IPFS node not started"))
+		return
+	}
+
+	status := h.ipfsNode.GetBootstrapStatus()
+
+	h.output("\n╔════════════════════════════════════════════════════════╗")
+	h.output("║           Babylon Network Status                      ║")
+	h.output("╚════════════════════════════════════════════════════════╝")
+	h.output("")
+
+	h.output("┌─ Bootstrap Architecture ─────────────────────────────┐")
+	h.output("│ This node uses decoupled bootstrap:                  │")
+	h.output("│   • IPFS DHT = Transport (PubSub)                    │")
+	h.output("│   • Babylon DHT = Protocol (Messaging)               │")
+	h.output("│   • Lazy Bootstrap = Triggered by messages           │")
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
+
+	h.output("┌─ IPFS DHT (Transport) ───────────────────────────────┐")
+	if status.IPFSBootstrapComplete {
+		h.output(fmt.Sprintf("│ ✓ Complete - %d peers in routing table             │", status.IPFSRoutingTableSize))
+	} else {
+		h.output(fmt.Sprintf("│ ⏳ Bootstrapping... - %d peers                      │", status.IPFSRoutingTableSize))
+	}
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
+
+	h.output("┌─ Babylon DHT (Protocol) ─────────────────────────────┐")
+	if status.BabylonBootstrapComplete {
+		h.output(fmt.Sprintf("│ ✓ Complete - %d/%d peers connected              │",
+			status.BabylonPeersConnected, status.BabylonPeersStored))
+	} else if status.BabylonBootstrapDeferred {
+		h.output("│ ⏸ Deferred - will bootstrap on first message       │")
+		h.output(fmt.Sprintf("│   %d peers stored for later connection            │", status.BabylonPeersStored))
+	} else {
+		h.output(fmt.Sprintf("│ ⏳ Bootstrapping... - %d/%d peers connected       │",
+			status.BabylonPeersConnected, status.BabylonPeersStored))
+	}
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
+
+	h.output("┌─ Rendezvous Discovery ───────────────────────────────┐")
+	if status.RendezvousActive {
+		h.output("│ ✓ Active - discoverable by other nodes              │")
+	} else {
+		h.output("│ ⏳ Pending                                          │")
+	}
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
+
+	if !status.BabylonBootstrapComplete && !status.BabylonBootstrapDeferred {
+		h.output(FormatInfo("Babylon bootstrap in progress..."))
+		h.output("Recommendations:")
+		h.output("  1. Wait for PubSub discovery (automatic)")
+		h.output("  2. Run /bootstrap to manually request peers")
+		h.output("  3. Send/receive a message to trigger lazy bootstrap")
+	} else if status.BabylonBootstrapDeferred {
+		h.output(FormatSuccess("Babylon bootstrap deferred - node ready for lazy bootstrap"))
+		h.output("The node will bootstrap when:")
+		h.output("  • A message is received from a Babylon peer")
+		h.output("  • A bootstrap request is received")
+		h.output("  • You run /bootstrap manually")
+	} else {
+		h.output(FormatSuccess("Babylon bootstrap complete - node is fully integrated"))
+	}
+
+	h.output("\n============================\n")
 }
 
 // handleWaitDHT waits for DHT bootstrap to complete
@@ -332,26 +468,56 @@ func (h *CommandHandler) handleWaitDHT(args []string) {
 		return
 	}
 
+	// Check for --babylon flag to wait for Babylon DHT specifically
+	waitForBabylon := false
+	for _, arg := range args {
+		if arg == "--babylon" || arg == "-b" {
+			waitForBabylon = true
+			break
+		}
+	}
+
 	timeout := 30 * time.Second
-	if len(args) > 0 {
+	if len(args) > 0 && args[0] != "--babylon" && args[0] != "-b" {
 		if d, err := time.ParseDuration(args[0]); err == nil {
 			timeout = d
 		}
 	}
 
-	h.output(FormatInfo(fmt.Sprintf("Waiting for DHT bootstrap (timeout: %s)...", timeout)))
+	if waitForBabylon {
+		// Wait for Babylon DHT (protocol layer)
+		h.output(FormatInfo(fmt.Sprintf("Waiting for Babylon DHT bootstrap (timeout: %s)...", timeout)))
+		h.output(FormatInfo("Babylon DHT is used for identity documents and protocol operations"))
 
-	start := time.Now()
-	if err := h.ipfsNode.WaitForDHT(timeout); err != nil {
-		h.output(FormatErrorString(fmt.Sprintf("Bootstrap wait failed: %v", err)))
-		return
+		start := time.Now()
+		if err := h.ipfsNode.WaitForBabylonBootstrap(timeout); err != nil {
+			h.output(FormatErrorString(fmt.Sprintf("Babylon DHT bootstrap wait failed: %v", err)))
+			h.output(FormatInfo("Babylon DHT may be deferred - it will trigger on first message/request"))
+			return
+		}
+
+		elapsed := time.Since(start)
+		h.output(FormatSuccess(fmt.Sprintf("Babylon DHT bootstrap completed in %s", elapsed.Round(100*time.Millisecond))))
+
+		bootstrap := h.ipfsNode.GetBootstrapStatus()
+		h.output(fmt.Sprintf("Babylon peers connected: %d", bootstrap.BabylonPeersConnected))
+		h.output(fmt.Sprintf("Babylon peers stored: %d", bootstrap.BabylonPeersStored))
+	} else {
+		// Wait for IPFS DHT (transport layer)
+		h.output(FormatInfo(fmt.Sprintf("Waiting for IPFS DHT bootstrap (timeout: %s)...", timeout)))
+
+		start := time.Now()
+		if err := h.ipfsNode.WaitForDHT(timeout); err != nil {
+			h.output(FormatErrorString(fmt.Sprintf("Bootstrap wait failed: %v", err)))
+			return
+		}
+
+		elapsed := time.Since(start)
+		h.output(FormatSuccess(fmt.Sprintf("DHT bootstrap completed in %s", elapsed.Round(100*time.Millisecond))))
+
+		dhtInfo := h.ipfsNode.GetDHTInfo()
+		h.output(fmt.Sprintf("Routing table now has %d peers", dhtInfo.RoutingTableSize))
 	}
-
-	elapsed := time.Since(start)
-	h.output(FormatSuccess(fmt.Sprintf("DHT bootstrap completed in %s", elapsed.Round(100*time.Millisecond))))
-
-	dhtInfo := h.ipfsNode.GetDHTInfo()
-	h.output(fmt.Sprintf("Routing table now has %d peers", dhtInfo.RoutingTableSize))
 }
 
 // handleMDNS displays mDNS discovery statistics
@@ -405,6 +571,7 @@ func (h *CommandHandler) handleNetworkStatus() {
 
 	metrics := h.ipfsNode.GetMetricsFull()
 	dhtInfo := h.ipfsNode.GetDHTInfo()
+	bootstrap := h.ipfsNode.GetBootstrapStatus()
 
 	h.output("\n╔════════════════════════════════════════════════════════╗")
 	h.output("║        Babylon Tower - Network Health Metrics         ║")
@@ -415,6 +582,27 @@ func (h *CommandHandler) handleNetworkStatus() {
 	h.output("│ Peer ID:      " + truncatePeerID(metrics.PeerID))
 	h.output("│ Uptime:       " + formatDuration(metrics.UptimeSeconds))
 	h.output("│ Started:      " + metrics.StartTime.Format("2006-01-02 15:04:05"))
+	h.output("└────────────────────────────────────────────────────────┘")
+	h.output("")
+
+	h.output("┌─ Bootstrap Status (Decoupled) ───────────────────────┐")
+	if bootstrap.IPFSBootstrapComplete {
+		h.output(fmt.Sprintf("│ IPFS DHT:     ✓ Complete (%d peers)               │", bootstrap.IPFSRoutingTableSize))
+	} else {
+		h.output(fmt.Sprintf("│ IPFS DHT:     ⏳ Bootstrapping (%d peers)           │", bootstrap.IPFSRoutingTableSize))
+	}
+	if bootstrap.BabylonBootstrapComplete {
+		h.output(fmt.Sprintf("│ Babylon DHT:  ✓ Complete (%d peers)               │", bootstrap.BabylonPeersConnected))
+	} else if bootstrap.BabylonBootstrapDeferred {
+		h.output("│ Babylon DHT:  ⏸ Deferred (lazy bootstrap)             │")
+	} else {
+		h.output(fmt.Sprintf("│ Babylon DHT:  ⏳ Bootstrapping (%d peers)           │", bootstrap.BabylonPeersConnected))
+	}
+	if bootstrap.RendezvousActive {
+		h.output("│ Rendezvous:   ✓ Active (discoverable)                 │")
+	} else {
+		h.output("│ Rendezvous:   ⏳ Pending                               │")
+	}
 	h.output("└────────────────────────────────────────────────────────┘")
 	h.output("")
 
@@ -463,17 +651,6 @@ func (h *CommandHandler) handleNetworkStatus() {
 	h.output("└────────────────────────────────────────────────────────┘")
 	h.output("")
 
-	h.output("┌─ Bootstrap Status ───────────────────────────────────┐")
-	h.output(fmt.Sprintf("│ Bootstrap Attempts:     %d", metrics.BootstrapAttempts))
-	h.output(fmt.Sprintf("│ Bootstrap Successes:    %d", metrics.BootstrapSuccesses))
-	if !metrics.LastBootstrapTime.IsZero() {
-		h.output(fmt.Sprintf("│ Last Bootstrap:       %s ago", time.Since(metrics.LastBootstrapTime).Round(time.Second)))
-	} else {
-		h.output("│ Last Bootstrap:         Never")
-	}
-	h.output("└────────────────────────────────────────────────────────┘")
-	h.output("")
-
 	h.output("┌─ Network Health Summary ─────────────────────────────┐")
 	var healthStatus string
 	if metrics.CurrentConnections == 0 {
@@ -513,7 +690,7 @@ func formatDuration(seconds int64) string {
 }
 
 // calculateHealthScore calculates a network health score (0-100)
-func calculateHealthScore(metrics *ipfsnode.MetricsFull, dhtInfo *ipfsnode.DHTInfo) float64 {
+func calculateHealthScore(metrics *app.MetricsFull, dhtInfo *app.DHTInfo) float64 {
 	score := 0.0
 	if metrics.CurrentConnections > 0 {
 		score += 20
@@ -533,4 +710,12 @@ func calculateHealthScore(metrics *ipfsnode.MetricsFull, dhtInfo *ipfsnode.DHTIn
 	score += metrics.ConnectionSuccessRate * 15
 	score += metrics.MessageSuccessRate * 15
 	return score
+}
+
+// boolToString converts a bool to "Active" or "Inactive"
+func boolToString(b bool) string {
+	if b {
+		return "Active"
+	}
+	return "Inactive"
 }

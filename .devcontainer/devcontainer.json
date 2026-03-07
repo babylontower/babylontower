@@ -1,44 +1,42 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/go .
 {
-  "name": "Go",
-  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  "image": "mcr.microsoft.com/devcontainers/go:2-1.25-trixie",
-  "features": {
-    "ghcr.io/devcontainers/features/git-lfs:1": {},
-    "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/node:1": {},
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "moby": false,
-    },
-    "ghcr.io/devcontainers/features/apt-get-packages:1": {
-      "packages": "protobuf-compiler,avahi-daemon,libnss-mdns",
-    },
+  "name": "Go (Babylon Tower)",
+  "build": {
+    "dockerfile": "Dockerfile"
   },
-
-  // Enable host network for mDNS discovery (required for peer-to-peer testing)
-  // Note: This makes the container use the host's network stack directly
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    }
+  },
   "hostNetwork": true,
-
-  // Allow the container to access host network services
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
     "--cap-add=NET_BIND_SERVICE",
+    "--device=/dev/dri",
+    "--device=/dev/video0",
+    "--device=/dev/snd",
+    "-e", "GDK_BACKEND=x11",
+    "-e", "SDL_VIDEODRIVER=x11"
   ],
-
-  // Install avahi daemon for mDNS support
-  "postCreateCommand": "sudo service avahi-daemon start 2>/dev/null || true",
-
-  // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  // "forwardPorts": [],
-
-  // Use 'postStartCommand' to run commands after the container starts.
+  "postCreateCommand": "sudo service avahi-daemon start 2>/dev/null || true && echo 'export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH' >> ~/.bashrc",
   "postStartCommand": "sudo service avahi-daemon start 2>/dev/null || echo 'Note: avahi-daemon not available, mDNS may not work'",
-
-  // Configure tool-specific properties.
-  // "customizations": {},
-
-  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-  // "remoteUser": "root"
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-vscode.cpptools",
+        "rust-lang.rust-analyzer"
+      ],
+      "settings": {
+        "go.buildTags": "",
+        "go.toolsEnvVars": {
+          "CGO_ENABLED": "1"
+        },
+        "terminal.integrated.env.linux": {
+          "PKG_CONFIG_PATH": "/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
+        }
+      }
+    }
+  }
 }

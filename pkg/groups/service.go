@@ -77,6 +77,20 @@ func WithX25519PublicKey(x25519Pub []byte) ServiceOption {
 	}
 }
 
+// GroupManager is the interface for group management operations.
+// This allows dependency injection and testing without concrete implementations.
+type GroupManager interface {
+	// Group operations
+	CreateGroup(name, description string, groupType GroupType) (*GroupState, error)
+	AddMember(groupID []byte, memberPubkey, memberX25519Pubkey []byte, displayName string, role GroupRole) (*GroupState, error)
+	RemoveMember(groupID []byte, memberPubkey []byte) (*GroupState, error)
+	GetGroup(groupID []byte) (*GroupState, error)
+	ListGroups() []*GroupState
+}
+
+// Ensure Service implements GroupManager interface
+var _ GroupManager = (*Service)(nil)
+
 // CreateGroup creates a new private group
 func (s *Service) CreateGroup(name, description string, groupType GroupType) (*GroupState, error) {
 	s.mu.Lock()

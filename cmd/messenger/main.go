@@ -1,3 +1,4 @@
+// Package main provides the Babylon Tower CLI application entry point.
 package main
 
 import (
@@ -6,20 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"babylontower/pkg/cli"
+	"babylontower/cmd/messenger/cli"
+	"babylontower/cmd/messenger/ui"
+	"babylontower/pkg/app"
 	"babylontower/pkg/config"
-	"babylontower/pkg/groups"
 	"babylontower/pkg/identity"
-	"babylontower/pkg/ipfsnode"
-	"babylontower/pkg/messaging"
-	"babylontower/pkg/peerstore"
-	"babylontower/pkg/storage"
 
 	"github.com/ipfs/go-log/v2"
-	libp2ppeer "github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
 )
 
 var logger = log.Logger("babylontower")
@@ -31,12 +26,8 @@ var (
 )
 
 const (
-	DefaultDataDir       = ".babylontower"
-	IdentityFileName     = "identity.json"
-	StorageDirName       = "storage"
-	IPFSDirName          = "ipfs"
-	peerSuccessThreshold = 0.5
-	peerMaxAge           = 7 * 24 * time.Hour
+	DefaultDataDir   = ".babylontower"
+	IdentityFileName = "identity.json"
 )
 
 func main() {
@@ -66,28 +57,25 @@ func printHelp() {
 	fmt.Println("                                Default: warn (env: BABYLONTOWER_LOG_LEVEL)")
 	fmt.Println("  -log-file <path>              Write logs to file instead of stderr")
 	fmt.Println("                                (env: BABYLONTOWER_LOG_FILE)")
+	fmt.Println("  -ui                           Use graphical UI instead of CLI")
 	fmt.Println("")
 	fmt.Println("Running Multiple Instances:")
 	fmt.Println("  To run two nodes on the same machine, use different data directories:")
 	fmt.Println("    ./messenger -data-dir ~/.babylontower/node1")
 	fmt.Println("    ./messenger -data-dir ~/.babylontower/node2")
 	fmt.Println("")
-	fmt.Println("Each instance will have:")
-	fmt.Println("  - Unique peer identity (PeerID)")
-	fmt.Println("  - Separate storage and contacts")
-	fmt.Println("  - Dynamic port assignment (no port conflicts)")
+	fmt.Println("Modes:")
+	fmt.Println("  CLI (default): Text-based interactive console")
+	fmt.Println("  UI (-ui):      Graphical interface using Gio")
 }
 
 func run() error {
 	dataDirFlag := flag.String("data-dir", "", "Data directory (default: ~/.babylontower)")
 	configFlag := flag.String("config", "", "Config file path (optional)")
-	logLevelFlag := flag.String("log-level", "", "Log level: debug, info, warn, error (default: warn)")
-	logFileFlag := flag.String("log-file", "", "Write logs to file instead of stderr")
+	logLevelFlag := flag.String("log-level", "", "Log level (default: warn)")
+	logFileFlag := flag.String("log-file", "", "Write logs to file")
+	uiFlag := flag.Bool("ui", false, "Use graphical UI instead of CLI")
 	flag.Parse()
-
-	if err := configureLogging(*logLevelFlag, *logFileFlag); err != nil {
-		return fmt.Errorf("failed to setup logging: %w", err)
-	}
 
 	dataDir, err := getDataDir(*dataDirFlag)
 	if err != nil {
@@ -99,33 +87,21 @@ func run() error {
 	}
 
 	identityPath := filepath.Join(dataDir, IdentityFileName)
-	storageDir := filepath.Join(dataDir, StorageDirName)
-	ipfsDir := filepath.Join(dataDir, IPFSDirName)
 
-	logger.Infow("starting Babylon Tower", "version", Version, "data_dir", dataDir)
-
-	// Load unified YAML configuration
-	appConfig, err := config.LoadAppConfig(dataDir, *configFlag)
+	// Load configuration
+	appConfig, err := loadAppConfig(dataDir, *configFlag, *logLevelFlag, *logFileFlag)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Apply CLI flag overrides on top of config
-	if *logLevelFlag != "" {
-		appConfig.Logging.Level = *logLevelFlag
-	}
-	if *logFileFlag != "" {
-		appConfig.Logging.File = *logFileFlag
+	// Configure logging
+	if err := configureLogging(appConfig.LogLevel, appConfig.LogFile); err != nil {
+		return fmt.Errorf("failed to setup logging: %w", err)
 	}
 
-	if err := config.ValidateAppConfig(appConfig); err != nil {
-		logger.Warnw("config validation failed, using defaults", "error", err)
-		appConfig = config.DefaultAppConfig()
-	}
+	logger.Infow("starting Babylon Tower", "version", Version, "data_dir", dataDir)
 
-	// Convert to IPFSConfig for backward compatibility with ipfsnode package
-	ipfsConfig := appConfig.ToIPFSConfig()
-
+	// Load or create identity
 	ident, err := loadOrCreateIdentity(identityPath)
 	if err != nil {
 		return fmt.Errorf("failed to load identity: %w", err)
@@ -133,93 +109,106 @@ func run() error {
 
 	logger.Infow("identity loaded", "public_key", ident.PublicKeyHex())
 
-	store, err := storage.NewBadgerStorage(storage.Config{
-		Path:     storageDir,
-		InMemory: appConfig.Storage.InMemory,
-	})
+	// Create application (core services)
+	application, err := app.NewApplication(appConfig, ident)
 	if err != nil {
-		return fmt.Errorf("failed to initialize storage: %w", err)
+		return fmt.Errorf("failed to create application: %w", err)
 	}
-	defer closeStorage(store)
+	defer func() {
+		if err := application.Stop(); err != nil {
+			logger.Errorw("failed to stop application", "error", err)
+		}
+	}()
 
-	logger.Info("storage initialized")
-
-	logger.Infow("config loaded",
-		"bootstrap_peers", len(ipfsConfig.BootstrapPeers),
-		"max_stored_peers", ipfsConfig.MaxStoredPeers,
-		"min_peer_connections", ipfsConfig.MinPeerConnections)
-
-	storedPeers, err := loadAndConnectStoredPeers(store, ipfsConfig)
-	if err != nil {
-		logger.Warnw("failed to load stored peers", "error", err)
-	} else if len(storedPeers) > 0 {
-		logger.Infow("will connect to stored peers", "count", len(storedPeers))
+	if err := application.Start(); err != nil {
+		return fmt.Errorf("failed to start application: %w", err)
 	}
 
-	ipfsNode, err := ipfsnode.NewNode(&ipfsnode.Config{
-		RepoDir:            ipfsDir,
-		ProtocolID:         ipfsConfig.ProtocolID,
-		BootstrapPeers:     ipfsConfig.BootstrapPeers,
-		StoredPeers:        storedPeers,
-		EnableRelay:        ipfsConfig.EnableRelay,
-		EnableHolePunching: ipfsConfig.EnableHolePunching,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create IPFS node: %w", err)
+	// Show bootstrap status information
+	network := application.Network()
+	bootstrapStatus := network.GetBootstrapStatus()
+	
+	fmt.Println("")
+	fmt.Println("╔════════════════════════════════════════════════════════╗")
+	fmt.Println("║          Babylon Tower - Bootstrap Status              ║")
+	fmt.Println("╠════════════════════════════════════════════════════════╣")
+	
+	if bootstrapStatus.IPFSBootstrapComplete {
+		fmt.Println("║ ✓ IPFS DHT (Transport): Complete                       ║")
+	} else {
+		fmt.Println("║ ⏳ IPFS DHT (Transport): Bootstrapping...                ║")
 	}
-
-	if err := ipfsNode.Start(); err != nil {
-		return fmt.Errorf("failed to start IPFS node: %w", err)
+	
+	if bootstrapStatus.BabylonBootstrapComplete {
+		fmt.Println("║ ✓ Babylon DHT (Protocol): Complete                       ║")
+	} else if bootstrapStatus.BabylonBootstrapDeferred {
+		fmt.Println("║ ⏸ Babylon DHT (Protocol): Deferred (lazy bootstrap)      ║")
+	} else {
+		fmt.Println("║ ⏳ Babylon DHT (Protocol): Bootstrapping...              ║")
 	}
-	defer stopIPFSNode(ipfsNode)
-
-	waitForDHT(ipfsNode, ipfsConfig.DHTBootstrapTimeout)
-
-	if err := storeConnectedPeers(store, ipfsNode); err != nil {
-		logger.Warnw("failed to store connected peers", "error", err)
+	
+	if bootstrapStatus.RendezvousActive {
+		fmt.Println("║ ✓ Rendezvous: Active (discoverable)                      ║")
+	} else {
+		fmt.Println("║ ⏳ Rendezvous: Pending                                   ║")
 	}
+	
+	fmt.Println("╠════════════════════════════════════════════════════════╣")
+	fmt.Println("║ Note: Protocol operations (identity, mailbox) will     ║")
+	fmt.Println("║       wait for Babylon DHT bootstrap to complete.      ║")
+	fmt.Println("╚════════════════════════════════════════════════════════╝")
+	fmt.Println("")
 
-	logger.Infow("IPFS node started",
-		"peer_id", ipfsNode.PeerID(),
-		"addresses", ipfsNode.Multiaddrs())
-
-	if err := initializeAddrBook(dataDir, ipfsNode); err != nil {
-		logger.Warnw("failed to initialize address book", "error", err)
+	// Create and run CLI or UI based on flag
+	if *uiFlag {
+		return runUI(Version, dataDir, identityPath, ident, application)
 	}
-
-	msgService := createMessagingService(ident, store, ipfsNode)
-
-	if err := msgService.Start(); err != nil {
-		return fmt.Errorf("failed to start messaging service: %w", err)
-	}
-	defer stopMessagingService(msgService)
-
-	logger.Info("messaging service started")
-
-	groupsService := createGroupsService(ident, store)
-
-	cliApp, err := createCLIApp(Version, dataDir, identityPath, ident, store, ipfsNode, msgService, groupsService)
-	if err != nil {
-		return fmt.Errorf("failed to create CLI: %w", err)
-	}
-
-	if err := cliApp.Start(); err != nil {
-		return fmt.Errorf("CLI error: %w", err)
-	}
-
-	if err := cliApp.Stop(); err != nil {
-		logger.Warnw("CLI stop error", "error", err)
-	}
-
-	logger.Info("Babylon Tower shutdown complete")
-	return nil
+	return runCLI(Version, dataDir, identityPath, ident, application)
 }
 
-// configureLogging sets up structured logging with the given level and optional file output.
-// Priority: CLI flag > env var > default ("warn").
-func configureLogging(flagLevel, flagFile string) error {
-	// Determine log level: flag > env > default
-	level := flagLevel
+// loadAppConfig loads and merges configuration from file and CLI flags
+func loadAppConfig(dataDir, configFile, logLevel, logFile string) (*app.AppConfig, error) {
+	cfg, err := config.LoadAppConfig(dataDir, configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply CLI flag overrides
+	if logLevel != "" {
+		cfg.Logging.Level = logLevel
+	}
+	if logFile != "" {
+		cfg.Logging.File = logFile
+	}
+
+	// Validate config
+	if err := config.ValidateAppConfig(cfg); err != nil {
+		logger.Warnw("config validation failed, using defaults", "error", err)
+		cfg = config.DefaultAppConfig()
+	}
+
+	// Convert to app.AppConfig
+	return &app.AppConfig{
+		DataDir:      dataDir,
+		IdentityPath: filepath.Join(dataDir, IdentityFileName),
+		StorageDir:   filepath.Join(dataDir, "storage"),
+		IPFSDir:      filepath.Join(dataDir, "ipfs"),
+		LogLevel:     cfg.Logging.Level,
+		LogFile:      resolvePath(cfg.Logging.File, dataDir),
+		IPFSConfig:   cfg.ToIPFSConfig(),
+	}, nil
+}
+
+// resolvePath resolves a relative path against a base directory
+func resolvePath(path, baseDir string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(baseDir, path)
+}
+
+// configureLogging sets up structured logging
+func configureLogging(level, logFile string) error {
 	if level == "" {
 		level = os.Getenv("BABYLONTOWER_LOG_LEVEL")
 	}
@@ -228,55 +217,44 @@ func configureLogging(flagLevel, flagFile string) error {
 	}
 	level = strings.ToLower(level)
 
-	// Determine log file: flag > env > stderr
-	logFile := flagFile
 	if logFile == "" {
 		logFile = os.Getenv("BABYLONTOWER_LOG_FILE")
 	}
 
-	// Configure log output via go-log/v2 SetupLogging
 	logCfg := log.GetConfig()
-	logCfg.Level = log.LevelError // base level, overridden per-subsystem below
+	logCfg.Level = log.LevelError
 	if logFile != "" {
 		logCfg.File = logFile
+	} else {
+		logCfg.File = ""
 	}
 	log.SetupLogging(logCfg)
 
-	// Set all babylontower subsystems to the requested level
+	// Set babylontower subsystems
 	btSubsystems := []string{
-		"babylontower",
-		"babylontower/cli",
-		"babylontower/storage",
-		"babylontower/messaging",
-		"babylontower/ipfsnode",
-		"babylontower/identity",
-		"babylontower/peerstore",
-		"babylontower/rtc",
-		"babylontower/multidevice",
-		"babylontower/groups",
-		"babylontower/mailbox",
-		"babylontower/reputation",
-		"babylontower/protocol",
-		"babylontower/ratchet",
-		"babylontower/recovery",
+		"babylontower", "babylontower/cli", "babylontower/storage",
+		"babylontower/messaging", "babylontower/ipfsnode", "babylontower/identity",
+		"babylontower/peerstore", "babylontower/rtc", "babylontower/multidevice",
+		"babylontower/groups", "babylontower/mailbox", "babylontower/reputation",
+		"babylontower/protocol", "babylontower/ratchet", "babylontower/recovery",
+		"babylontower/app",
 	}
 	for _, sub := range btSubsystems {
-		if err := log.SetLogLevel(sub, level); err != nil {
-			return fmt.Errorf("failed to set log level for %s: %w", sub, err)
-		}
+		_ = log.SetLogLevel(sub, level)
 	}
 
-	// Quiet libp2p subsystems — set to "error" normally, "warn" when app is debug
+	// Quiet libp2p subsystems
 	libp2pLevel := "error"
 	if level == "debug" {
 		libp2pLevel = "warn"
 	}
 	libp2pSubsystems := []string{
-		"dht", "pubsub", "swarm2", "relay", "autonat",
-		"connmgr", "basichost", "net/identify",
+		"dht", "pubsub", "swarm2", "relay", "autonat", "connmgr",
+		"basichost", "net/identify", "p2p-discovery", "p2p-swarm",
+		"p2p-net", "ipns", "bitswap", "blockservice", "flatfs", "pebble", "badger",
 	}
 	for _, sub := range libp2pSubsystems {
-		_ = log.SetLogLevel(sub, libp2pLevel) // best-effort; subsystem may not exist yet
+		_ = log.SetLogLevel(sub, libp2pLevel)
 	}
 
 	return nil
@@ -296,86 +274,6 @@ func getDataDir(flagDir string) (string, error) {
 		}
 	}
 	return filepath.Join(homeDir, DefaultDataDir), nil
-}
-
-func closeStorage(store *storage.BadgerStorage) {
-	if err := store.Close(); err != nil {
-		logger.Warnw("failed to close storage", "error", err)
-	}
-}
-
-func stopIPFSNode(node *ipfsnode.Node) {
-	if err := node.Stop(); err != nil {
-		logger.Warnw("failed to stop IPFS node", "error", err)
-	}
-}
-
-func stopMessagingService(service *messaging.Service) {
-	if err := service.Stop(); err != nil {
-		logger.Warnw("failed to stop messaging service", "error", err)
-	}
-}
-
-func waitForDHT(node *ipfsnode.Node, timeout time.Duration) {
-	logger.Infow("waiting for DHT bootstrap", "timeout", timeout)
-	if err := node.WaitForDHT(timeout); err != nil {
-		logger.Warnw("DHT bootstrap incomplete", "error", err, "action", "continuing with mDNS discovery")
-	} else {
-		logger.Info("DHT bootstrap complete")
-	}
-}
-
-func initializeAddrBook(dataDir string, node *ipfsnode.Node) error {
-	addrBook, err := peerstore.NewAddrBook(dataDir)
-	if err != nil {
-		return err
-	}
-
-	logger.Infow("address book initialized", "peer_count", addrBook.Count())
-
-	if addrBook.Count() == 0 {
-		return nil
-	}
-
-	logger.Info("attempting to connect to known peers...")
-	ctx := node.Context()
-	if err := addrBook.ConnectToAll(ctx, node); err != nil {
-		logger.Warnw("auto-connect failed", "error", err)
-	} else {
-		logger.Info("auto-connect completed")
-	}
-	return nil
-}
-
-func createMessagingService(ident *identity.Identity, store storage.Storage, node *ipfsnode.Node) *messaging.Service {
-	msgConfig := &messaging.Config{
-		OwnEd25519PrivKey: ident.Ed25519PrivKey,
-		OwnEd25519PubKey:  ident.Ed25519PubKey,
-		OwnX25519PrivKey:  ident.X25519PrivKey,
-		OwnX25519PubKey:   ident.X25519PubKey,
-	}
-	return messaging.NewService(msgConfig, store, node)
-}
-
-func createGroupsService(ident *identity.Identity, store *storage.BadgerStorage) *groups.Service {
-	return groups.NewService(store, ident.Ed25519PubKey, ident.Ed25519PrivKey)
-}
-
-func createCLIApp(version, dataDir, identityPath string, ident *identity.Identity, store storage.Storage, node *ipfsnode.Node, msgService *messaging.Service, groupsService *groups.Service) (*cli.CLI, error) {
-	cliConfig := &cli.Config{
-		Version:      version,
-		DataDir:      dataDir,
-		IdentityPath: identityPath,
-	}
-
-	cliIdentity := &cli.Identity{
-		Ed25519PubKey:  ident.Ed25519PubKey,
-		Ed25519PrivKey: ident.Ed25519PrivKey,
-		X25519PubKey:   ident.X25519PubKey,
-		X25519PrivKey:  ident.X25519PrivKey,
-	}
-
-	return cli.New(cliConfig, cliIdentity, store, node, msgService, groupsService)
 }
 
 func loadOrCreateIdentity(identityPath string) (*identity.Identity, error) {
@@ -407,127 +305,60 @@ func printNewIdentityInfo(ident *identity.Identity) {
 	fmt.Printf("Store it in a secure location.\n\n")
 }
 
-func loadAndConnectStoredPeers(store *storage.BadgerStorage, ipfsConfig *config.IPFSConfig) ([]libp2ppeer.AddrInfo, error) {
-	peers, err := store.ListPeers(ipfsConfig.MaxStoredPeers)
+func createCLIApp(version, dataDir, identityPath string, ident *identity.Identity, application app.Application) (*cli.CLI, error) {
+	cliConfig := &cli.Config{
+		Version:      version,
+		DataDir:      dataDir,
+		IdentityPath: identityPath,
+	}
+
+	cliIdentity := &cli.Identity{
+		Ed25519PubKey:  ident.Ed25519PubKey,
+		Ed25519PrivKey: ident.Ed25519PrivKey,
+		X25519PubKey:   ident.X25519PubKey,
+		X25519PrivKey:  ident.X25519PrivKey,
+		Mnemonic:       ident.Mnemonic,
+	}
+
+	return cli.New(cliConfig, cliIdentity, application.Storage(), application.Network(), application.Messenger(), application.Groups())
+}
+
+func createUIApp(version, dataDir string, ident *identity.Identity, application app.Application) (*ui.UI, error) {
+	uiConfig := &ui.Config{
+		DarkMode: false, // Could be made configurable via flags
+		Title:    "Babylon Tower - " + version,
+	}
+
+	return ui.New(uiConfig, application)
+}
+
+// runCLI creates and runs the CLI interface
+func runCLI(version, dataDir, identityPath string, ident *identity.Identity, application app.Application) error {
+	cliApp, err := createCLIApp(version, dataDir, identityPath, ident, application)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create CLI: %w", err)
 	}
 
-	if len(peers) == 0 {
-		logger.Debug("no stored peers found")
-		return nil, nil
+	if err := cliApp.Start(); err != nil {
+		return fmt.Errorf("CLI error: %w", err)
 	}
 
-	logger.Infow("loaded stored peers", "count", len(peers))
-
-	goodPeers := filterGoodPeers(peers)
-	if len(goodPeers) == 0 {
-		logger.Debug("no good stored peers found")
-		return nil, nil
-	}
-
-	logger.Infow("filtered stored peers", "count", len(goodPeers))
-	return goodPeers, nil
-}
-
-func filterGoodPeers(peers []*storage.PeerRecord) []libp2ppeer.AddrInfo {
-	var goodPeers []libp2ppeer.AddrInfo
-
-	for _, peer := range peers {
-		if peer.SuccessRate() < peerSuccessThreshold {
-			logger.Debugw("skipping peer with low success rate", "peer", peer.PeerID, "rate", peer.SuccessRate())
-			continue
-		}
-		if peer.IsStale(peerMaxAge) {
-			logger.Debugw("skipping stale peer", "peer", peer.PeerID, "last_seen", peer.LastSeen)
-			continue
-		}
-
-		addrInfo, err := parsePeerRecord(peer)
-		if err != nil {
-			logger.Debugw("failed to parse peer record", "peer", peer.PeerID, "error", err)
-			continue
-		}
-		goodPeers = append(goodPeers, addrInfo)
-	}
-
-	return goodPeers
-}
-
-func parsePeerRecord(peer *storage.PeerRecord) (libp2ppeer.AddrInfo, error) {
-	addrInfo := libp2ppeer.AddrInfo{
-		ID: libp2ppeer.ID(peer.PeerID),
-	}
-
-	for _, addrStr := range peer.Multiaddrs {
-		ma, err := multiaddr.NewMultiaddr(addrStr)
-		if err != nil {
-			continue
-		}
-		addrInfo.Addrs = append(addrInfo.Addrs, ma)
-	}
-
-	if len(addrInfo.Addrs) == 0 {
-		return addrInfo, fmt.Errorf("no valid addresses for peer %s", peer.PeerID)
-	}
-
-	return addrInfo, nil
-}
-
-func storeConnectedPeers(store *storage.BadgerStorage, node *ipfsnode.Node) error {
-	info := node.GetNetworkInfo()
-	if info.ConnectedPeerCount == 0 {
-		logger.Debug("no connected peers to store")
-		return nil
-	}
-
-	stored := 0
-	for _, peer := range info.ConnectedPeers {
-		peerRecord, err := getOrCreatePeerRecord(store, peer)
-		if err != nil {
-			logger.Warnw("failed to get peer", "peer", peer.ID, "error", err)
-			continue
-		}
-
-		updatePeerRecord(peerRecord, peer)
-
-		if err := store.AddPeer(peerRecord); err != nil {
-			logger.Warnw("failed to store peer", "peer", peer.ID, "error", err)
-			continue
-		}
-		stored++
-	}
-
-	logger.Debugw("stored connected peers", "count", stored, "total_connected", info.ConnectedPeerCount)
+	logger.Info("Babylon Tower shutdown complete")
 	return nil
 }
 
-func getOrCreatePeerRecord(store *storage.BadgerStorage, peer ipfsnode.PeerInfo) (*storage.PeerRecord, error) {
-	existing, err := store.GetPeer(peer.ID)
+// runUI creates and runs the graphical UI interface
+func runUI(version, dataDir, identityPath string, ident *identity.Identity, application app.Application) error {
+	uiApp, err := createUIApp(version, dataDir, ident, application)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create UI: %w", err)
 	}
 
-	if existing != nil {
-		return existing, nil
+	logger.Info("starting graphical UI")
+	if err := uiApp.Start(); err != nil {
+		return fmt.Errorf("UI error: %w", err)
 	}
 
-	now := time.Now()
-	return &storage.PeerRecord{
-		PeerID:        peer.ID,
-		FirstSeen:     now,
-		LastSeen:      now,
-		LastConnected: now,
-		ConnectCount:  1,
-		Source:        storage.SourceBootstrap,
-	}, nil
-}
-
-func updatePeerRecord(record *storage.PeerRecord, peer ipfsnode.PeerInfo) {
-	now := time.Now()
-	record.LastSeen = now
-	record.LastConnected = now
-	record.ConnectCount++
-	record.Multiaddrs = peer.Addresses
-	record.Protocols = peer.Protocols
+	logger.Info("Babylon Tower shutdown complete")
+	return nil
 }

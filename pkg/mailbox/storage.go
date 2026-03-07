@@ -496,6 +496,58 @@ func (s *Storage) GetStats(targetPubkey []byte) (*pb.MailboxStats, error) {
 	}, nil
 }
 
+// GetTotalStats returns aggregate statistics across all mailbox targets
+func (s *Storage) GetTotalStats() (*pb.MailboxStats, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var totalCount uint32
+	var totalBytes uint64
+	var oldest, newest uint64
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(metaPrefix)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			data, err := item.ValueCopy(nil)
+			if err != nil || len(data) < 28 {
+				continue
+			}
+			count := binary.LittleEndian.Uint32(data[0:4])
+			bytes := binary.LittleEndian.Uint64(data[4:12])
+			old := binary.LittleEndian.Uint64(data[12:20])
+			new := binary.LittleEndian.Uint64(data[20:28])
+
+			totalCount += count
+			totalBytes += bytes
+			if oldest == 0 || (old > 0 && old < oldest) {
+				oldest = old
+			}
+			if new > newest {
+				newest = new
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.MailboxStats{
+		StoredCount:     totalCount,
+		UsedBytes:       totalBytes,
+		CapacityBytes:   s.config.MaxTotalBytesPerTarget,
+		OldestTimestamp: oldest,
+		NewestTimestamp: newest,
+	}, nil
+}
+
 // Close closes the storage (called on shutdown)
 func (s *Storage) Close() error {
 	return nil // Don't close the DB, it's managed elsewhere

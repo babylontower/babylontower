@@ -2,6 +2,7 @@ package ratchet
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -28,13 +29,24 @@ func generateX25519TestKey(t *testing.T) (*[32]byte, *[32]byte) {
 	return pub, priv
 }
 
+// generateEd25519TestKey generates an Ed25519 key pair for testing
+func generateEd25519TestKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate Ed25519 key: %v", err)
+	}
+	return pub, priv
+}
+
 // TestX3DH_4DH tests X3DH with one-time prekey (4-DH)
 func TestX3DH_4DH(t *testing.T) {
 	// Generate Alice's identity keys
 	aliceIKDHPub, aliceIKDHPriv := generateX25519TestKey(t)
+	aliceIKSignPub, _ := generateEd25519TestKey(t)
 
 	// Generate Bob's identity and prekeys
 	bobIKDHPub, bobIKDHPriv := generateX25519TestKey(t)
+	bobIKSignPub, _ := generateEd25519TestKey(t)
 	bobSPKPub, bobSPKPriv := generateX25519TestKey(t)
 	bobOPKPub, bobOPKPriv := generateX25519TestKey(t)
 
@@ -42,7 +54,9 @@ func TestX3DH_4DH(t *testing.T) {
 	result1, err := X3DHInitiator(
 		aliceIKDHPriv,
 		aliceIKDHPub,
+		aliceIKSignPub,
 		bobIKDHPub,
+		bobIKSignPub,
 		bobSPKPub,
 		bobOPKPub,
 	)
@@ -54,9 +68,11 @@ func TestX3DH_4DH(t *testing.T) {
 	result2, err := X3DHResponder(
 		bobIKDHPriv,
 		bobIKDHPub,
+		bobIKSignPub,
 		bobSPKPriv,
 		bobOPKPriv,
 		aliceIKDHPub, // In real protocol, this would be Alice's IK, not EK
+		aliceIKSignPub,
 		result1.EphemeralPub,
 	)
 	if err != nil {
@@ -79,14 +95,19 @@ func TestX3DH_4DH(t *testing.T) {
 // TestX3DH_3DH tests X3DH without one-time prekey (3-DH fallback)
 func TestX3DH_3DH(t *testing.T) {
 	aliceIKDHPub, aliceIKDHPriv := generateX25519TestKey(t)
+	aliceIKSignPub, _ := generateEd25519TestKey(t)
+	
 	bobIKDHPub, bobIKDHPriv := generateX25519TestKey(t)
+	bobIKSignPub, _ := generateEd25519TestKey(t)
 	bobSPKPub, bobSPKPriv := generateX25519TestKey(t)
 
 	// Alice initiates without OPK
 	result1, err := X3DHInitiator(
 		aliceIKDHPriv,
 		aliceIKDHPub,
+		aliceIKSignPub,
 		bobIKDHPub,
+		bobIKSignPub,
 		bobSPKPub,
 		nil, // No OPK
 	)
@@ -98,9 +119,11 @@ func TestX3DH_3DH(t *testing.T) {
 	result2, err := X3DHResponder(
 		bobIKDHPriv,
 		bobIKDHPub,
+		bobIKSignPub,
 		bobSPKPriv,
 		nil, // No OPK
 		aliceIKDHPub,
+		aliceIKSignPub,
 		result1.EphemeralPub,
 	)
 	if err != nil {
@@ -196,7 +219,9 @@ func TestDoubleRatchet_InitiatorResponder(t *testing.T) {
 	x3dhResult, err := X3DHInitiator(
 		alice.IKDHPriv,
 		alice.IKDHPub,
+		alice.IKSignPub,
 		bob.IKDHPub,
+		bob.IKSignPub,
 		bobSPKPub,
 		bobOPKPub,
 	)
@@ -242,12 +267,12 @@ func setupRatchetPair(t *testing.T) (*DoubleRatchetState, *DoubleRatchetState) {
 	bobOPKPub, bobOPKPriv := generateX25519TestKey(t)
 
 	// X3DH key agreement
-	x3dhAlice, err := X3DHInitiator(alice.IKDHPriv, alice.IKDHPub, bob.IKDHPub, bobSPKPub, bobOPKPub)
+	x3dhAlice, err := X3DHInitiator(alice.IKDHPriv, alice.IKDHPub, alice.IKSignPub, bob.IKDHPub, bob.IKSignPub, bobSPKPub, bobOPKPub)
 	if err != nil {
 		t.Fatalf("X3DH initiator failed: %v", err)
 	}
 
-	x3dhBob, err := X3DHResponder(bob.IKDHPriv, bob.IKDHPub, bobSPKPriv, bobOPKPriv, alice.IKDHPub, x3dhAlice.EphemeralPub)
+	x3dhBob, err := X3DHResponder(bob.IKDHPriv, bob.IKDHPub, bob.IKSignPub, bobSPKPriv, bobOPKPriv, alice.IKDHPub, alice.IKSignPub, x3dhAlice.EphemeralPub)
 	if err != nil {
 		t.Fatalf("X3DH responder failed: %v", err)
 	}

@@ -7,12 +7,11 @@
 package proto
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1460,13 +1459,22 @@ func (x *IdentityDocument) GetSignature() []byte {
 }
 
 // PrekeyBundle is a standalone prekey bundle for efficient DHT fetch
+// Per spec section 4.2 - published at SHA256("bt-prekeys-v1:" ‖ ed25519_pubkey)
 type PrekeyBundle struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SignedPrekeys  []*SignedPrekey        `protobuf:"bytes,1,rep,name=signed_prekeys,json=signedPrekeys,proto3" json:"signed_prekeys,omitempty"`
-	OneTimePrekeys []*OneTimePrekey       `protobuf:"bytes,2,rep,name=one_time_prekeys,json=oneTimePrekeys,proto3" json:"one_time_prekeys,omitempty"`
-	PublishedAt    uint64                 `protobuf:"varint,3,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"` // Unix timestamp when published
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Identity verification
+	IdentitySignPub []byte `protobuf:"bytes,1,opt,name=identity_sign_pub,json=identitySignPub,proto3" json:"identity_sign_pub,omitempty"` // IK_sign.pub (32 bytes)
+	IdentityDhPub   []byte `protobuf:"bytes,2,opt,name=identity_dh_pub,json=identityDhPub,proto3" json:"identity_dh_pub,omitempty"`       // IK_dh.pub (32 bytes)
+	// Signed prekeys (may contain multiple for overlap period)
+	SignedPrekeys []*SignedPrekey `protobuf:"bytes,3,rep,name=signed_prekeys,json=signedPrekeys,proto3" json:"signed_prekeys,omitempty"`
+	// One-time prekeys (batch of available prekeys)
+	OneTimePrekeys []*OneTimePrekey `protobuf:"bytes,4,rep,name=one_time_prekeys,json=oneTimePrekeys,proto3" json:"one_time_prekeys,omitempty"`
+	// Protocol capabilities
+	SupportedCipherSuites []string `protobuf:"bytes,5,rep,name=supported_cipher_suites,json=supportedCipherSuites,proto3" json:"supported_cipher_suites,omitempty"` // e.g. ["BT-X25519-XChaCha20Poly1305-SHA256"]
+	// Metadata
+	PublishedAt   uint64 `protobuf:"varint,6,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"` // Unix timestamp when published
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PrekeyBundle) Reset() {
@@ -1499,6 +1507,20 @@ func (*PrekeyBundle) Descriptor() ([]byte, []int) {
 	return file_proto_message_proto_rawDescGZIP(), []int{10}
 }
 
+func (x *PrekeyBundle) GetIdentitySignPub() []byte {
+	if x != nil {
+		return x.IdentitySignPub
+	}
+	return nil
+}
+
+func (x *PrekeyBundle) GetIdentityDhPub() []byte {
+	if x != nil {
+		return x.IdentityDhPub
+	}
+	return nil
+}
+
 func (x *PrekeyBundle) GetSignedPrekeys() []*SignedPrekey {
 	if x != nil {
 		return x.SignedPrekeys
@@ -1509,6 +1531,13 @@ func (x *PrekeyBundle) GetSignedPrekeys() []*SignedPrekey {
 func (x *PrekeyBundle) GetOneTimePrekeys() []*OneTimePrekey {
 	if x != nil {
 		return x.OneTimePrekeys
+	}
+	return nil
+}
+
+func (x *PrekeyBundle) GetSupportedCipherSuites() []string {
+	if x != nil {
+		return x.SupportedCipherSuites
 	}
 	return nil
 }
@@ -5803,6 +5832,84 @@ func (x *StoredMailboxMessage) GetSize() uint64 {
 	return 0
 }
 
+// MailboxIPFSFallback - announcement for IPFS-based fallback delivery
+// Used when no mailbox nodes are available - sender stores to IPFS and publishes CID
+type MailboxIPFSFallback struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	RecipientPubkey []byte                 `protobuf:"bytes,1,opt,name=recipient_pubkey,json=recipientPubkey,proto3" json:"recipient_pubkey,omitempty"` // Recipient's Ed25519 pub (32 bytes)
+	MessageCid      string                 `protobuf:"bytes,2,opt,name=message_cid,json=messageCid,proto3" json:"message_cid,omitempty"`                // IPFS CID where encrypted message is stored
+	Timestamp       uint64                 `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                   // Unix timestamp when stored
+	SenderPubkey    []byte                 `protobuf:"bytes,4,opt,name=sender_pubkey,json=senderPubkey,proto3" json:"sender_pubkey,omitempty"`          // Sender's Ed25519 pub (32 bytes)
+	SenderNote      string                 `protobuf:"bytes,5,opt,name=sender_note,json=senderNote,proto3" json:"sender_note,omitempty"`                // Optional note from sender (e.g. "mailbox fallback")
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MailboxIPFSFallback) Reset() {
+	*x = MailboxIPFSFallback{}
+	mi := &file_proto_message_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxIPFSFallback) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxIPFSFallback) ProtoMessage() {}
+
+func (x *MailboxIPFSFallback) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_message_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxIPFSFallback.ProtoReflect.Descriptor instead.
+func (*MailboxIPFSFallback) Descriptor() ([]byte, []int) {
+	return file_proto_message_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *MailboxIPFSFallback) GetRecipientPubkey() []byte {
+	if x != nil {
+		return x.RecipientPubkey
+	}
+	return nil
+}
+
+func (x *MailboxIPFSFallback) GetMessageCid() string {
+	if x != nil {
+		return x.MessageCid
+	}
+	return ""
+}
+
+func (x *MailboxIPFSFallback) GetTimestamp() uint64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *MailboxIPFSFallback) GetSenderPubkey() []byte {
+	if x != nil {
+		return x.SenderPubkey
+	}
+	return nil
+}
+
+func (x *MailboxIPFSFallback) GetSenderNote() string {
+	if x != nil {
+		return x.SenderNote
+	}
+	return ""
+}
+
 // CallSession - persisted call session state
 type CallSession struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
@@ -5830,7 +5937,7 @@ type CallSession struct {
 
 func (x *CallSession) Reset() {
 	*x = CallSession{}
-	mi := &file_proto_message_proto_msgTypes[62]
+	mi := &file_proto_message_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5842,7 +5949,7 @@ func (x *CallSession) String() string {
 func (*CallSession) ProtoMessage() {}
 
 func (x *CallSession) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[62]
+	mi := &file_proto_message_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5855,7 +5962,7 @@ func (x *CallSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallSession.ProtoReflect.Descriptor instead.
 func (*CallSession) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{62}
+	return file_proto_message_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *CallSession) GetCallId() string {
@@ -6003,7 +6110,7 @@ type ParticipantInfo struct {
 
 func (x *ParticipantInfo) Reset() {
 	*x = ParticipantInfo{}
-	mi := &file_proto_message_proto_msgTypes[63]
+	mi := &file_proto_message_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6015,7 +6122,7 @@ func (x *ParticipantInfo) String() string {
 func (*ParticipantInfo) ProtoMessage() {}
 
 func (x *ParticipantInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[63]
+	mi := &file_proto_message_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6028,7 +6135,7 @@ func (x *ParticipantInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParticipantInfo.ProtoReflect.Descriptor instead.
 func (*ParticipantInfo) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{63}
+	return file_proto_message_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ParticipantInfo) GetIdentityPubkey() []byte {
@@ -6123,7 +6230,7 @@ type GroupCallSession struct {
 
 func (x *GroupCallSession) Reset() {
 	*x = GroupCallSession{}
-	mi := &file_proto_message_proto_msgTypes[64]
+	mi := &file_proto_message_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6135,7 +6242,7 @@ func (x *GroupCallSession) String() string {
 func (*GroupCallSession) ProtoMessage() {}
 
 func (x *GroupCallSession) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[64]
+	mi := &file_proto_message_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6148,7 +6255,7 @@ func (x *GroupCallSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallSession.ProtoReflect.Descriptor instead.
 func (*GroupCallSession) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{64}
+	return file_proto_message_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *GroupCallSession) GetCallId() string {
@@ -6258,7 +6365,7 @@ type GroupCallOffer struct {
 
 func (x *GroupCallOffer) Reset() {
 	*x = GroupCallOffer{}
-	mi := &file_proto_message_proto_msgTypes[65]
+	mi := &file_proto_message_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6270,7 +6377,7 @@ func (x *GroupCallOffer) String() string {
 func (*GroupCallOffer) ProtoMessage() {}
 
 func (x *GroupCallOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[65]
+	mi := &file_proto_message_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6283,7 +6390,7 @@ func (x *GroupCallOffer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallOffer.ProtoReflect.Descriptor instead.
 func (*GroupCallOffer) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{65}
+	return file_proto_message_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *GroupCallOffer) GetCallId() string {
@@ -6352,7 +6459,7 @@ type GroupCallJoin struct {
 
 func (x *GroupCallJoin) Reset() {
 	*x = GroupCallJoin{}
-	mi := &file_proto_message_proto_msgTypes[66]
+	mi := &file_proto_message_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6364,7 +6471,7 @@ func (x *GroupCallJoin) String() string {
 func (*GroupCallJoin) ProtoMessage() {}
 
 func (x *GroupCallJoin) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[66]
+	mi := &file_proto_message_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6377,7 +6484,7 @@ func (x *GroupCallJoin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallJoin.ProtoReflect.Descriptor instead.
 func (*GroupCallJoin) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{66}
+	return file_proto_message_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *GroupCallJoin) GetCallId() string {
@@ -6454,7 +6561,7 @@ type GroupCallAccept struct {
 
 func (x *GroupCallAccept) Reset() {
 	*x = GroupCallAccept{}
-	mi := &file_proto_message_proto_msgTypes[67]
+	mi := &file_proto_message_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6466,7 +6573,7 @@ func (x *GroupCallAccept) String() string {
 func (*GroupCallAccept) ProtoMessage() {}
 
 func (x *GroupCallAccept) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[67]
+	mi := &file_proto_message_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6479,7 +6586,7 @@ func (x *GroupCallAccept) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallAccept.ProtoReflect.Descriptor instead.
 func (*GroupCallAccept) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{67}
+	return file_proto_message_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *GroupCallAccept) GetCallId() string {
@@ -6559,7 +6666,7 @@ type GroupCallLeave struct {
 
 func (x *GroupCallLeave) Reset() {
 	*x = GroupCallLeave{}
-	mi := &file_proto_message_proto_msgTypes[68]
+	mi := &file_proto_message_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6571,7 +6678,7 @@ func (x *GroupCallLeave) String() string {
 func (*GroupCallLeave) ProtoMessage() {}
 
 func (x *GroupCallLeave) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[68]
+	mi := &file_proto_message_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6584,7 +6691,7 @@ func (x *GroupCallLeave) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallLeave.ProtoReflect.Descriptor instead.
 func (*GroupCallLeave) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{68}
+	return file_proto_message_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *GroupCallLeave) GetCallId() string {
@@ -6635,7 +6742,7 @@ type GroupCallSFUElection struct {
 
 func (x *GroupCallSFUElection) Reset() {
 	*x = GroupCallSFUElection{}
-	mi := &file_proto_message_proto_msgTypes[69]
+	mi := &file_proto_message_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6647,7 +6754,7 @@ func (x *GroupCallSFUElection) String() string {
 func (*GroupCallSFUElection) ProtoMessage() {}
 
 func (x *GroupCallSFUElection) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[69]
+	mi := &file_proto_message_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6660,7 +6767,7 @@ func (x *GroupCallSFUElection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallSFUElection.ProtoReflect.Descriptor instead.
 func (*GroupCallSFUElection) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{69}
+	return file_proto_message_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GroupCallSFUElection) GetCallId() string {
@@ -6705,7 +6812,7 @@ type GroupCallSFUAck struct {
 
 func (x *GroupCallSFUAck) Reset() {
 	*x = GroupCallSFUAck{}
-	mi := &file_proto_message_proto_msgTypes[70]
+	mi := &file_proto_message_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6717,7 +6824,7 @@ func (x *GroupCallSFUAck) String() string {
 func (*GroupCallSFUAck) ProtoMessage() {}
 
 func (x *GroupCallSFUAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[70]
+	mi := &file_proto_message_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6730,7 +6837,7 @@ func (x *GroupCallSFUAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallSFUAck.ProtoReflect.Descriptor instead.
 func (*GroupCallSFUAck) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{70}
+	return file_proto_message_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *GroupCallSFUAck) GetCallId() string {
@@ -6783,7 +6890,7 @@ type GroupCallMediaPacket struct {
 
 func (x *GroupCallMediaPacket) Reset() {
 	*x = GroupCallMediaPacket{}
-	mi := &file_proto_message_proto_msgTypes[71]
+	mi := &file_proto_message_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6795,7 +6902,7 @@ func (x *GroupCallMediaPacket) String() string {
 func (*GroupCallMediaPacket) ProtoMessage() {}
 
 func (x *GroupCallMediaPacket) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[71]
+	mi := &file_proto_message_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6808,7 +6915,7 @@ func (x *GroupCallMediaPacket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallMediaPacket.ProtoReflect.Descriptor instead.
 func (*GroupCallMediaPacket) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{71}
+	return file_proto_message_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *GroupCallMediaPacket) GetCallId() string {
@@ -6869,7 +6976,7 @@ type GroupCallStateUpdate struct {
 
 func (x *GroupCallStateUpdate) Reset() {
 	*x = GroupCallStateUpdate{}
-	mi := &file_proto_message_proto_msgTypes[72]
+	mi := &file_proto_message_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6881,7 +6988,7 @@ func (x *GroupCallStateUpdate) String() string {
 func (*GroupCallStateUpdate) ProtoMessage() {}
 
 func (x *GroupCallStateUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[72]
+	mi := &file_proto_message_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6894,7 +7001,7 @@ func (x *GroupCallStateUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCallStateUpdate.ProtoReflect.Descriptor instead.
 func (*GroupCallStateUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{72}
+	return file_proto_message_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *GroupCallStateUpdate) GetCallId() string {
@@ -6979,7 +7086,7 @@ type PeerReputationMetrics struct {
 
 func (x *PeerReputationMetrics) Reset() {
 	*x = PeerReputationMetrics{}
-	mi := &file_proto_message_proto_msgTypes[73]
+	mi := &file_proto_message_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6991,7 +7098,7 @@ func (x *PeerReputationMetrics) String() string {
 func (*PeerReputationMetrics) ProtoMessage() {}
 
 func (x *PeerReputationMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[73]
+	mi := &file_proto_message_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7004,7 +7111,7 @@ func (x *PeerReputationMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerReputationMetrics.ProtoReflect.Descriptor instead.
 func (*PeerReputationMetrics) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{73}
+	return file_proto_message_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *PeerReputationMetrics) GetRelayReliability() float32 {
@@ -7152,7 +7259,7 @@ type PeerReputationRecord struct {
 
 func (x *PeerReputationRecord) Reset() {
 	*x = PeerReputationRecord{}
-	mi := &file_proto_message_proto_msgTypes[74]
+	mi := &file_proto_message_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7164,7 +7271,7 @@ func (x *PeerReputationRecord) String() string {
 func (*PeerReputationRecord) ProtoMessage() {}
 
 func (x *PeerReputationRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[74]
+	mi := &file_proto_message_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7177,7 +7284,7 @@ func (x *PeerReputationRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerReputationRecord.ProtoReflect.Descriptor instead.
 func (*PeerReputationRecord) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{74}
+	return file_proto_message_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *PeerReputationRecord) GetPeerId() []byte {
@@ -7238,7 +7345,7 @@ type ReputationAttestation struct {
 
 func (x *ReputationAttestation) Reset() {
 	*x = ReputationAttestation{}
-	mi := &file_proto_message_proto_msgTypes[75]
+	mi := &file_proto_message_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7250,7 +7357,7 @@ func (x *ReputationAttestation) String() string {
 func (*ReputationAttestation) ProtoMessage() {}
 
 func (x *ReputationAttestation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[75]
+	mi := &file_proto_message_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7263,7 +7370,7 @@ func (x *ReputationAttestation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReputationAttestation.ProtoReflect.Descriptor instead.
 func (*ReputationAttestation) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{75}
+	return file_proto_message_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *ReputationAttestation) GetAttesterPeerId() []byte {
@@ -7326,7 +7433,7 @@ type ReputationAttestationEnvelope struct {
 
 func (x *ReputationAttestationEnvelope) Reset() {
 	*x = ReputationAttestationEnvelope{}
-	mi := &file_proto_message_proto_msgTypes[76]
+	mi := &file_proto_message_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7338,7 +7445,7 @@ func (x *ReputationAttestationEnvelope) String() string {
 func (*ReputationAttestationEnvelope) ProtoMessage() {}
 
 func (x *ReputationAttestationEnvelope) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[76]
+	mi := &file_proto_message_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7351,7 +7458,7 @@ func (x *ReputationAttestationEnvelope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReputationAttestationEnvelope.ProtoReflect.Descriptor instead.
 func (*ReputationAttestationEnvelope) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{76}
+	return file_proto_message_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *ReputationAttestationEnvelope) GetAttestation() *ReputationAttestation {
@@ -7380,7 +7487,7 @@ type ReputationQuery struct {
 
 func (x *ReputationQuery) Reset() {
 	*x = ReputationQuery{}
-	mi := &file_proto_message_proto_msgTypes[77]
+	mi := &file_proto_message_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7392,7 +7499,7 @@ func (x *ReputationQuery) String() string {
 func (*ReputationQuery) ProtoMessage() {}
 
 func (x *ReputationQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[77]
+	mi := &file_proto_message_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7405,7 +7512,7 @@ func (x *ReputationQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReputationQuery.ProtoReflect.Descriptor instead.
 func (*ReputationQuery) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{77}
+	return file_proto_message_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ReputationQuery) GetTargetPeerId() []byte {
@@ -7443,7 +7550,7 @@ type ReputationResponse struct {
 
 func (x *ReputationResponse) Reset() {
 	*x = ReputationResponse{}
-	mi := &file_proto_message_proto_msgTypes[78]
+	mi := &file_proto_message_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7455,7 +7562,7 @@ func (x *ReputationResponse) String() string {
 func (*ReputationResponse) ProtoMessage() {}
 
 func (x *ReputationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[78]
+	mi := &file_proto_message_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7468,7 +7575,7 @@ func (x *ReputationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReputationResponse.ProtoReflect.Descriptor instead.
 func (*ReputationResponse) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{78}
+	return file_proto_message_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ReputationResponse) GetTargetPeerId() []byte {
@@ -7533,7 +7640,7 @@ type ReputationConfig struct {
 
 func (x *ReputationConfig) Reset() {
 	*x = ReputationConfig{}
-	mi := &file_proto_message_proto_msgTypes[79]
+	mi := &file_proto_message_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7545,7 +7652,7 @@ func (x *ReputationConfig) String() string {
 func (*ReputationConfig) ProtoMessage() {}
 
 func (x *ReputationConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_message_proto_msgTypes[79]
+	mi := &file_proto_message_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7558,7 +7665,7 @@ func (x *ReputationConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReputationConfig.ProtoReflect.Descriptor instead.
 func (*ReputationConfig) Descriptor() ([]byte, []int) {
-	return file_proto_message_proto_rawDescGZIP(), []int{79}
+	return file_proto_message_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *ReputationConfig) GetRelayReliabilityWeight() float32 {
@@ -7759,11 +7866,14 @@ const file_proto_message_proto_rawDesc = "" +
 	"avatar_cid\x18\x0e \x01(\tR\tavatarCid\x12B\n" +
 	"\vrevocations\x18\x0f \x03(\v2 .messenger.RevocationCertificateR\vrevocations\x123\n" +
 	"\bfeatures\x18\x10 \x01(\v2\x17.messenger.FeatureFlagsR\bfeatures\x12\x1c\n" +
-	"\tsignature\x18\x11 \x01(\fR\tsignature\"\xb5\x01\n" +
-	"\fPrekeyBundle\x12>\n" +
-	"\x0esigned_prekeys\x18\x01 \x03(\v2\x17.messenger.SignedPrekeyR\rsignedPrekeys\x12B\n" +
-	"\x10one_time_prekeys\x18\x02 \x03(\v2\x18.messenger.OneTimePrekeyR\x0eoneTimePrekeys\x12!\n" +
-	"\fpublished_at\x18\x03 \x01(\x04R\vpublishedAt\"\xf1\x03\n" +
+	"\tsignature\x18\x11 \x01(\fR\tsignature\"\xc1\x02\n" +
+	"\fPrekeyBundle\x12*\n" +
+	"\x11identity_sign_pub\x18\x01 \x01(\fR\x0fidentitySignPub\x12&\n" +
+	"\x0fidentity_dh_pub\x18\x02 \x01(\fR\ridentityDhPub\x12>\n" +
+	"\x0esigned_prekeys\x18\x03 \x03(\v2\x17.messenger.SignedPrekeyR\rsignedPrekeys\x12B\n" +
+	"\x10one_time_prekeys\x18\x04 \x03(\v2\x18.messenger.OneTimePrekeyR\x0eoneTimePrekeys\x126\n" +
+	"\x17supported_cipher_suites\x18\x05 \x03(\tR\x15supportedCipherSuites\x12!\n" +
+	"\fpublished_at\x18\x06 \x01(\x04R\vpublishedAt\"\xf1\x03\n" +
 	"\x0fBabylonEnvelope\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x129\n" +
 	"\fmessage_type\x18\x02 \x01(\x0e2\x16.messenger.MessageTypeR\vmessageType\x12'\n" +
@@ -8150,7 +8260,15 @@ const file_proto_message_proto_rawDesc = "" +
 	"\tstored_at\x18\x04 \x01(\x04R\bstoredAt\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x05 \x01(\x04R\texpiresAt\x12\x12\n" +
-	"\x04size\x18\x06 \x01(\x04R\x04size\"\xe8\x04\n" +
+	"\x04size\x18\x06 \x01(\x04R\x04size\"\xc5\x01\n" +
+	"\x13MailboxIPFSFallback\x12)\n" +
+	"\x10recipient_pubkey\x18\x01 \x01(\fR\x0frecipientPubkey\x12\x1f\n" +
+	"\vmessage_cid\x18\x02 \x01(\tR\n" +
+	"messageCid\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x04R\ttimestamp\x12#\n" +
+	"\rsender_pubkey\x18\x04 \x01(\fR\fsenderPubkey\x12\x1f\n" +
+	"\vsender_note\x18\x05 \x01(\tR\n" +
+	"senderNote\"\xe8\x04\n" +
 	"\vCallSession\x12\x17\n" +
 	"\acall_id\x18\x01 \x01(\tR\x06callId\x12%\n" +
 	"\x0elocal_identity\x18\x02 \x01(\fR\rlocalIdentity\x12'\n" +
@@ -8422,7 +8540,7 @@ func file_proto_message_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_message_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_proto_message_proto_msgTypes = make([]protoimpl.MessageInfo, 81)
+var file_proto_message_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
 var file_proto_message_proto_goTypes = []any{
 	(MessageType)(0),                      // 0: messenger.MessageType
 	(GroupType)(0),                        // 1: messenger.GroupType
@@ -8494,25 +8612,26 @@ var file_proto_message_proto_goTypes = []any{
 	(*MailboxStats)(nil),                  // 67: messenger.MailboxStats
 	(*MailboxConfig)(nil),                 // 68: messenger.MailboxConfig
 	(*StoredMailboxMessage)(nil),          // 69: messenger.StoredMailboxMessage
-	(*CallSession)(nil),                   // 70: messenger.CallSession
-	(*ParticipantInfo)(nil),               // 71: messenger.ParticipantInfo
-	(*GroupCallSession)(nil),              // 72: messenger.GroupCallSession
-	(*GroupCallOffer)(nil),                // 73: messenger.GroupCallOffer
-	(*GroupCallJoin)(nil),                 // 74: messenger.GroupCallJoin
-	(*GroupCallAccept)(nil),               // 75: messenger.GroupCallAccept
-	(*GroupCallLeave)(nil),                // 76: messenger.GroupCallLeave
-	(*GroupCallSFUElection)(nil),          // 77: messenger.GroupCallSFUElection
-	(*GroupCallSFUAck)(nil),               // 78: messenger.GroupCallSFUAck
-	(*GroupCallMediaPacket)(nil),          // 79: messenger.GroupCallMediaPacket
-	(*GroupCallStateUpdate)(nil),          // 80: messenger.GroupCallStateUpdate
-	(*PeerReputationMetrics)(nil),         // 81: messenger.PeerReputationMetrics
-	(*PeerReputationRecord)(nil),          // 82: messenger.PeerReputationRecord
-	(*ReputationAttestation)(nil),         // 83: messenger.ReputationAttestation
-	(*ReputationAttestationEnvelope)(nil), // 84: messenger.ReputationAttestationEnvelope
-	(*ReputationQuery)(nil),               // 85: messenger.ReputationQuery
-	(*ReputationResponse)(nil),            // 86: messenger.ReputationResponse
-	(*ReputationConfig)(nil),              // 87: messenger.ReputationConfig
-	nil,                                   // 88: messenger.VectorClock.ClocksEntry
+	(*MailboxIPFSFallback)(nil),           // 70: messenger.MailboxIPFSFallback
+	(*CallSession)(nil),                   // 71: messenger.CallSession
+	(*ParticipantInfo)(nil),               // 72: messenger.ParticipantInfo
+	(*GroupCallSession)(nil),              // 73: messenger.GroupCallSession
+	(*GroupCallOffer)(nil),                // 74: messenger.GroupCallOffer
+	(*GroupCallJoin)(nil),                 // 75: messenger.GroupCallJoin
+	(*GroupCallAccept)(nil),               // 76: messenger.GroupCallAccept
+	(*GroupCallLeave)(nil),                // 77: messenger.GroupCallLeave
+	(*GroupCallSFUElection)(nil),          // 78: messenger.GroupCallSFUElection
+	(*GroupCallSFUAck)(nil),               // 79: messenger.GroupCallSFUAck
+	(*GroupCallMediaPacket)(nil),          // 80: messenger.GroupCallMediaPacket
+	(*GroupCallStateUpdate)(nil),          // 81: messenger.GroupCallStateUpdate
+	(*PeerReputationMetrics)(nil),         // 82: messenger.PeerReputationMetrics
+	(*PeerReputationRecord)(nil),          // 83: messenger.PeerReputationRecord
+	(*ReputationAttestation)(nil),         // 84: messenger.ReputationAttestation
+	(*ReputationAttestationEnvelope)(nil), // 85: messenger.ReputationAttestationEnvelope
+	(*ReputationQuery)(nil),               // 86: messenger.ReputationQuery
+	(*ReputationResponse)(nil),            // 87: messenger.ReputationResponse
+	(*ReputationConfig)(nil),              // 88: messenger.ReputationConfig
+	nil,                                   // 89: messenger.VectorClock.ClocksEntry
 }
 var file_proto_message_proto_depIdxs = []int32{
 	13, // 0: messenger.IdentityDocument.devices:type_name -> messenger.DeviceCertificate
@@ -8553,7 +8672,7 @@ var file_proto_message_proto_depIdxs = []int32{
 	26, // 35: messenger.ChannelPayload.edit:type_name -> messenger.EditMessage
 	27, // 36: messenger.ChannelPayload.delete_msg:type_name -> messenger.DeleteMessage
 	13, // 37: messenger.DeviceAnnouncement.device:type_name -> messenger.DeviceCertificate
-	88, // 38: messenger.VectorClock.clocks:type_name -> messenger.VectorClock.ClocksEntry
+	89, // 38: messenger.VectorClock.clocks:type_name -> messenger.VectorClock.ClocksEntry
 	3,  // 39: messenger.DeviceSyncMessage.type:type_name -> messenger.SyncType
 	48, // 40: messenger.DeviceSyncMessage.vector_clock:type_name -> messenger.VectorClock
 	56, // 41: messenger.HistoryBatch.messages:type_name -> messenger.HistoryMessage
@@ -8562,19 +8681,19 @@ var file_proto_message_proto_depIdxs = []int32{
 	6,  // 44: messenger.ParticipantInfo.state:type_name -> messenger.ParticipantState
 	4,  // 45: messenger.GroupCallSession.call_type:type_name -> messenger.GroupCallType
 	5,  // 46: messenger.GroupCallSession.state:type_name -> messenger.GroupCallState
-	71, // 47: messenger.GroupCallSession.participants:type_name -> messenger.ParticipantInfo
+	72, // 47: messenger.GroupCallSession.participants:type_name -> messenger.ParticipantInfo
 	4,  // 48: messenger.GroupCallOffer.call_type:type_name -> messenger.GroupCallType
 	4,  // 49: messenger.GroupCallAccept.call_type:type_name -> messenger.GroupCallType
-	71, // 50: messenger.GroupCallAccept.participants:type_name -> messenger.ParticipantInfo
+	72, // 50: messenger.GroupCallAccept.participants:type_name -> messenger.ParticipantInfo
 	5,  // 51: messenger.GroupCallStateUpdate.state:type_name -> messenger.GroupCallState
-	71, // 52: messenger.GroupCallStateUpdate.participants:type_name -> messenger.ParticipantInfo
+	72, // 52: messenger.GroupCallStateUpdate.participants:type_name -> messenger.ParticipantInfo
 	4,  // 53: messenger.GroupCallStateUpdate.call_type:type_name -> messenger.GroupCallType
-	81, // 54: messenger.PeerReputationRecord.metrics:type_name -> messenger.PeerReputationMetrics
+	82, // 54: messenger.PeerReputationRecord.metrics:type_name -> messenger.PeerReputationMetrics
 	7,  // 55: messenger.PeerReputationRecord.tier:type_name -> messenger.ReputationTier
-	83, // 56: messenger.PeerReputationRecord.attestations:type_name -> messenger.ReputationAttestation
-	83, // 57: messenger.ReputationAttestationEnvelope.attestation:type_name -> messenger.ReputationAttestation
-	82, // 58: messenger.ReputationResponse.record:type_name -> messenger.PeerReputationRecord
-	83, // 59: messenger.ReputationResponse.attestations:type_name -> messenger.ReputationAttestation
+	84, // 56: messenger.PeerReputationRecord.attestations:type_name -> messenger.ReputationAttestation
+	84, // 57: messenger.ReputationAttestationEnvelope.attestation:type_name -> messenger.ReputationAttestation
+	83, // 58: messenger.ReputationResponse.record:type_name -> messenger.PeerReputationRecord
+	84, // 59: messenger.ReputationResponse.attestations:type_name -> messenger.ReputationAttestation
 	60, // [60:60] is the sub-list for method output_type
 	60, // [60:60] is the sub-list for method input_type
 	60, // [60:60] is the sub-list for extension type_name
@@ -8626,7 +8745,7 @@ func file_proto_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_message_proto_rawDesc), len(file_proto_message_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   81,
+			NumMessages:   82,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

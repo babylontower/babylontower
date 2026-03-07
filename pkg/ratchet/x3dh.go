@@ -39,16 +39,29 @@ type X3DHResult struct {
 	UsedOPKID uint64
 	// CipherSuite is the negotiated cipher suite
 	CipherSuite uint32
-	// EphemeralPub is the ephemeral public key (sent to responder)
+	// EphemeralPub is the ephemeral public key sent by initiator (32 bytes)
 	EphemeralPub *[32]byte
+	// RemoteSPKPub is the remote party's signed prekey public key (for Double Ratchet init)
+	RemoteSPKPub *[32]byte
+	// UsedOPKPub is the one-time prekey public key that was used (nil if not used)
+	UsedOPKPub *[32]byte
 }
 
 // X3DHInitiator performs the X3DH key exchange as the initiator (Alice)
 // Returns the shared secret and authenticated data
+// Parameters:
+//   - localIKDHPriv/ localIKDHPub: Local identity DH key pair
+//   - localIKSignPub: Local identity signing public key (for AD construction)
+//   - remoteIKDHPub: Remote identity DH public key
+//   - remoteIKSignPub: Remote identity signing public key (for AD construction)
+//   - remoteSPKPub: Remote signed prekey public key
+//   - remoteOPKPub: Remote one-time prekey public key (may be nil)
 func X3DHInitiator(
 	localIKDHPriv *[32]byte,
 	localIKDHPub *[32]byte,
+	localIKSignPub ed25519.PublicKey,
 	remoteIKDHPub *[32]byte,
+	remoteIKSignPub ed25519.PublicKey,
 	remoteSPKPub *[32]byte,
 	remoteOPKPub *[32]byte, // May be nil if no OPK available
 ) (*X3DHResult, error) {
@@ -104,8 +117,8 @@ func X3DHInitiator(
 		return nil, fmt.Errorf("failed to derive shared secret: %w", err)
 	}
 
-	// Step 5: Associated data
-	ad := append(localIKDHPub[:], remoteIKDHPub[:]...)
+	// Step 5: Associated data (per spec: AD = sender.IK_sign.pub ‖ recipient.IK_sign.pub)
+	ad := append(localIKSignPub[:], remoteIKSignPub[:]...)
 
 	// Step 6: Clean up sensitive data
 	zeroBytes(ekPriv[:])
@@ -122,16 +135,28 @@ func X3DHInitiator(
 		UsedOPKID:         usedOPKID,
 		CipherSuite:       CipherSuiteXChaCha20Poly1305,
 		EphemeralPub:      ekPub,
+		RemoteSPKPub:      remoteSPKPub,
+		UsedOPKPub:        func() *[32]byte { if remoteOPKPub != nil { var result [32]byte; copy(result[:], remoteOPKPub[:]); return &result }; return nil }(),
 	}, nil
 }
 
 // X3DHResponder performs the X3DH key exchange as the responder (Bob)
+// Parameters:
+//   - localIKDHPriv/ localIKDHPub: Local identity DH key pair
+//   - localIKSignPub: Local identity signing public key (for AD construction)
+//   - localSPKPriv: Local signed prekey private key
+//   - localOPKPriv: Local one-time prekey private key (may be nil)
+//   - remoteIKDHPub: Remote identity DH public key
+//   - remoteIKSignPub: Remote identity signing public key (for AD construction)
+//   - ekPub: Remote ephemeral public key
 func X3DHResponder(
 	localIKDHPriv *[32]byte,
 	localIKDHPub *[32]byte,
+	localIKSignPub ed25519.PublicKey,
 	localSPKPriv *[32]byte,
 	localOPKPriv *[32]byte, // May be nil if OPK was not used
 	remoteIKDHPub *[32]byte,
+	remoteIKSignPub ed25519.PublicKey,
 	ekPub *[32]byte,
 ) (*X3DHResult, error) {
 	// Step 1: Compute DH values (mirror of initiator)
@@ -176,8 +201,9 @@ func X3DHResponder(
 		return nil, fmt.Errorf("failed to derive shared secret: %w", err)
 	}
 
-	// Step 4: Associated data
-	ad := append(remoteIKDHPub[:], localIKDHPub[:]...)
+	// Step 4: Associated data (per spec: AD = sender.IK_sign.pub ‖ recipient.IK_sign.pub)
+	// For responder, sender is the remote party (initiator)
+	ad := append(remoteIKSignPub[:], localIKSignPub[:]...)
 
 	// Step 5: Clean up
 	zeroBytes(dh1)

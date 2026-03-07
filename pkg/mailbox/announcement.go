@@ -3,10 +3,11 @@ package mailbox
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
+	"encoding/base32"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,16 +89,19 @@ func (am *AnnouncementManager) AnnounceMailbox(targetPubkey []byte, config *pb.M
 	targetKey := hex.EncodeToString(targetPubkey)
 	am.announcements[targetKey] = announcement
 
-	// Publish to DHT
+	// Publish to DHT (best-effort, mailbox works in local-only mode if this fails)
 	dhtKey := am.dhtKeyForTarget(targetPubkey)
 	data, err := proto.Marshal(announcement)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal announcement: %w", err)
 	}
 
-	// Provide the record for 24 hours
+	// PutValue to DHT - this may fail if node is in client mode or network is unavailable
+	// The mailbox will still work for local deposits and direct peer connections
 	if err := am.dht.PutValue(am.ctx, dhtKey, data); err != nil {
-		return nil, fmt.Errorf("failed to publish announcement to DHT: %w", err)
+		// Log the error but don't fail - mailbox works in local-only mode
+		// Common errors: "invalid record keytype", "routing: not found", etc.
+		return nil, fmt.Errorf("DHT announcement failed (local-only mode): %w", err)
 	}
 
 	return announcement, nil
@@ -204,9 +208,13 @@ func (am *AnnouncementManager) republishAll() {
 }
 
 // dhtKeyForTarget computes the DHT key for a target's mailbox
+// Uses /mailbox/ namespace with base32-encoded pubkey for DHT compatibility
 func (am *AnnouncementManager) dhtKeyForTarget(targetPubkey []byte) string {
-	hash := sha256.Sum256(append([]byte(MailboxDHTPrefix), targetPubkey...))
-	return "/bt/mailbox/" + hex.EncodeToString(hash[:])
+	// Use IPNS-style key format which is accepted by the DHT
+	// Format: /mailbox/<base32-encoding-of-pubkey>
+	// This follows the pattern of /pk/<peerid> and /ipns/<cid>
+	encoded := base32.StdEncoding.EncodeToString(targetPubkey)
+	return fmt.Sprintf("/mailbox/%s", strings.ToLower(encoded))
 }
 
 // signAnnouncement signs a mailbox announcement

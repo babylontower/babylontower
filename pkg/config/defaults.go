@@ -72,5 +72,17 @@ func DefaultAppConfig() *AppConfig {
 			DHTPublish:      true,
 			RefreshInterval: 4 * time.Hour,
 		},
+		Bootstrap: BootstrapConfig{
+			PubSubTopic:             "/babylon/bootstrap",
+			ResponseProbability:     0.5,
+			MaxResponsesPerMinute:   30,
+			RequestDedupWindowSecs:  30,
+			MinUptimeSecs:           300, // 5 minutes
+			MinPeerCount:            3,
+			MinRoutingTableSize:     10,
+			StoredPeerTimeoutSecs:   10,
+			PubSubListenSecs:        5,
+			MinBabylonPeersRequired: 3,
+		},
 	}
 }

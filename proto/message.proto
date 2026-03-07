@@ -134,10 +134,23 @@ message IdentityDocument {
 }
 
 // PrekeyBundle is a standalone prekey bundle for efficient DHT fetch
+// Per spec section 4.2 - published at SHA256("bt-prekeys-v1:" ‖ ed25519_pubkey)
 message PrekeyBundle {
-  repeated SignedPrekey signed_prekeys = 1;
-  repeated OneTimePrekey one_time_prekeys = 2;
-  uint64 published_at = 3;  // Unix timestamp when published
+  // Identity verification
+  bytes identity_sign_pub = 1;   // IK_sign.pub (32 bytes)
+  bytes identity_dh_pub = 2;     // IK_dh.pub (32 bytes)
+  
+  // Signed prekeys (may contain multiple for overlap period)
+  repeated SignedPrekey signed_prekeys = 3;
+  
+  // One-time prekeys (batch of available prekeys)
+  repeated OneTimePrekey one_time_prekeys = 4;
+  
+  // Protocol capabilities
+  repeated string supported_cipher_suites = 5;  // e.g. ["BT-X25519-XChaCha20Poly1305-SHA256"]
+  
+  // Metadata
+  uint64 published_at = 6;  // Unix timestamp when published
 }
 
 // ============================================================================
@@ -724,6 +737,16 @@ message StoredMailboxMessage {
   uint64 stored_at = 4;        // Unix timestamp when stored
   uint64 expires_at = 5;       // Unix timestamp when this message expires
   uint64 size = 6;             // Size of the envelope in bytes
+}
+
+// MailboxIPFSFallback - announcement for IPFS-based fallback delivery
+// Used when no mailbox nodes are available - sender stores to IPFS and publishes CID
+message MailboxIPFSFallback {
+  bytes recipient_pubkey = 1;    // Recipient's Ed25519 pub (32 bytes)
+  string message_cid = 2;        // IPFS CID where encrypted message is stored
+  uint64 timestamp = 3;          // Unix timestamp when stored
+  bytes sender_pubkey = 4;       // Sender's Ed25519 pub (32 bytes)
+  string sender_note = 5;        // Optional note from sender (e.g. "mailbox fallback")
 }
 
 // ============================================================================

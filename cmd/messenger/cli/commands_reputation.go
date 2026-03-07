@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"babylontower/pkg/reputation"
+	"babylontower/pkg/app"
 )
 
 // handleReputation displays reputation information
@@ -29,13 +29,13 @@ func (h *CommandHandler) handleReputation(args []string) {
 
 // handleReputationSummary displays a summary of reputation tracking
 func (h *CommandHandler) handleReputationSummary() {
-	if h.messaging.ReputationTracker() == nil {
+	rt := h.messaging.ReputationTracker()
+	if rt == nil {
 		h.output(FormatErrorString("Reputation tracker not available"))
 		return
 	}
 
-	tracker := h.messaging.ReputationTracker()
-	records := tracker.GetAllRecords()
+	records := rt.GetAllRecords()
 
 	var sb strings.Builder
 	sb.WriteString("\n=== Reputation Summary ===\n\n")
@@ -45,12 +45,12 @@ func (h *CommandHandler) handleReputationSummary() {
 		sb.WriteString("Reputation is automatically tracked as you interact with peers.\n")
 	} else {
 		// Count tiers
-		tierCounts := make(map[reputation.Tier]int)
+		tierCounts := make(map[string]int)
 		totalScore := 0.0
 
 		for _, record := range records {
-			tierCounts[record.GetTier()]++
-			totalScore += record.GetCompositeScore()
+			tierCounts[record.Tier]++
+			totalScore += record.CompositeScore
 		}
 
 		avgScore := totalScore / float64(len(records))
@@ -58,10 +58,10 @@ func (h *CommandHandler) handleReputationSummary() {
 		fmt.Fprintf(&sb, "Total peers tracked: %d\n", len(records))
 		fmt.Fprintf(&sb, "Average reputation score: %.2f\n", avgScore)
 		sb.WriteString("\nTier distribution:\n")
-		fmt.Fprintf(&sb, "  Trusted (0.8-1.0):     %d peers\n", tierCounts[reputation.TierTrusted])
-		fmt.Fprintf(&sb, "  Reliable (0.6-0.8):    %d peers\n", tierCounts[reputation.TierReliable])
-		fmt.Fprintf(&sb, "  Contributor (0.3-0.6): %d peers\n", tierCounts[reputation.TierContributor])
-		fmt.Fprintf(&sb, "  Basic (0.0-0.3):       %d peers\n", tierCounts[reputation.TierBasic])
+		fmt.Fprintf(&sb, "  Trusted (0.8-1.0):     %d peers\n", tierCounts["Trusted"])
+		fmt.Fprintf(&sb, "  Reliable (0.6-0.8):    %d peers\n", tierCounts["Reliable"])
+		fmt.Fprintf(&sb, "  Contributor (0.3-0.6): %d peers\n", tierCounts["Contributor"])
+		fmt.Fprintf(&sb, "  Basic (0.0-0.3):       %d peers\n", tierCounts["Basic"])
 	}
 
 	sb.WriteString("\nUse /reputation list to see all peers\n")
@@ -73,13 +73,13 @@ func (h *CommandHandler) handleReputationSummary() {
 
 // handleReputationList lists all peers with their reputation
 func (h *CommandHandler) handleReputationList() {
-	if h.messaging.ReputationTracker() == nil {
+	rt := h.messaging.ReputationTracker()
+	if rt == nil {
 		h.output(FormatErrorString("Reputation tracker not available"))
 		return
 	}
 
-	tracker := h.messaging.ReputationTracker()
-	records := tracker.GetAllRecords()
+	records := rt.GetAllRecords()
 
 	if len(records) == 0 {
 		h.output(FormatInfo("No reputation records yet."))
@@ -92,7 +92,7 @@ func (h *CommandHandler) handleReputationList() {
 	// Sort by score descending
 	type scoredRecord struct {
 		peerID string
-		record *reputation.Record
+		record *app.ReputationRecord
 		score  float64
 	}
 
@@ -101,7 +101,7 @@ func (h *CommandHandler) handleReputationList() {
 		scored = append(scored, scoredRecord{
 			peerID: string(pid),
 			record: record,
-			score:  record.GetCompositeScore(),
+			score:  record.CompositeScore,
 		})
 	}
 
@@ -110,12 +110,12 @@ func (h *CommandHandler) handleReputationList() {
 	})
 
 	for i, sr := range scored {
-		metrics := sr.record.GetMetrics()
-		tier := sr.record.GetTier()
-		attestations := sr.record.GetAttestations()
+		metrics := sr.record.Metrics
+		tier := sr.record.Tier
+		attestations := sr.record.Attestations
 
 		fmt.Fprintf(&sb, "[%d] Peer: %s\n", i+1, sr.peerID[:16])
-		fmt.Fprintf(&sb, "    Score: %.3f (%s)\n", sr.score, tier.String())
+		fmt.Fprintf(&sb, "    Score: %.3f (%s)\n", sr.score, tier)
 		fmt.Fprintf(&sb, "    Relay: %.2f (%d/%d)\n",
 			metrics.RelayReliability,
 			metrics.RelaySuccessCount,
@@ -146,7 +146,8 @@ func (h *CommandHandler) handleReputationList() {
 
 // handleReputationTier shows peers in a specific tier
 func (h *CommandHandler) handleReputationTier(args []string) {
-	if h.messaging.ReputationTracker() == nil {
+	rt := h.messaging.ReputationTracker()
+	if rt == nil {
 		h.output(FormatErrorString("Reputation tracker not available"))
 		return
 	}
@@ -156,35 +157,34 @@ func (h *CommandHandler) handleReputationTier(args []string) {
 		return
 	}
 
-	var targetTier reputation.Tier
+	var targetTier string
 	switch strings.ToLower(args[0]) {
 	case "basic":
-		targetTier = reputation.TierBasic
+		targetTier = "Basic"
 	case "contributor":
-		targetTier = reputation.TierContributor
+		targetTier = "Contributor"
 	case "reliable":
-		targetTier = reputation.TierReliable
+		targetTier = "Reliable"
 	case "trusted":
-		targetTier = reputation.TierTrusted
+		targetTier = "Trusted"
 	default:
 		h.output(FormatErrorString("Invalid tier. Use: basic, contributor, reliable, or trusted"))
 		return
 	}
 
-	tracker := h.messaging.ReputationTracker()
-	peers := tracker.GetPeersByTier(targetTier)
+	peers := rt.GetPeersByTier(targetTier)
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n=== %s Tier Peers ===\n\n", targetTier.String())
+	fmt.Fprintf(&sb, "\n=== %s Tier Peers ===\n\n", targetTier)
 
 	if len(peers) == 0 {
-		fmt.Fprintf(&sb, "No peers in %s tier.\n", targetTier.String())
+		fmt.Fprintf(&sb, "No peers in %s tier.\n", targetTier)
 	} else {
 		for i, pid := range peers {
-			record := tracker.GetRecord(pid)
+			record := rt.GetRecord(pid)
 			if record != nil {
 				fmt.Fprintf(&sb, "[%d] %s - Score: %.3f\n",
-					i+1, string(pid)[:16], record.GetCompositeScore())
+					i+1, string(pid)[:16], record.CompositeScore)
 			}
 		}
 	}
@@ -195,7 +195,8 @@ func (h *CommandHandler) handleReputationTier(args []string) {
 
 // handleReputationTop shows the top N peers by reputation
 func (h *CommandHandler) handleReputationTop(args []string) {
-	if h.messaging.ReputationTracker() == nil {
+	rt := h.messaging.ReputationTracker()
+	if rt == nil {
 		h.output(FormatErrorString("Reputation tracker not available"))
 		return
 	}
@@ -211,8 +212,7 @@ func (h *CommandHandler) handleReputationTop(args []string) {
 		}
 	}
 
-	tracker := h.messaging.ReputationTracker()
-	topPeers := tracker.GetTopPeers(n)
+	topPeers := rt.GetTopPeers(n)
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "\n=== Top %d Peers by Reputation ===\n\n", len(topPeers))
@@ -221,10 +221,10 @@ func (h *CommandHandler) handleReputationTop(args []string) {
 		sb.WriteString("No reputation records yet.\n")
 	} else {
 		for i, pid := range topPeers {
-			record := tracker.GetRecord(pid)
+			record := rt.GetRecord(pid)
 			if record != nil {
 				fmt.Fprintf(&sb, "[%d] %s - Score: %.3f (%s)\n",
-					i+1, string(pid)[:16], record.GetCompositeScore(), record.GetTier().String())
+					i+1, string(pid)[:16], record.CompositeScore, record.Tier)
 			}
 		}
 	}

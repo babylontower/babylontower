@@ -390,6 +390,12 @@ func (s *BadgerStorage) Close() error {
 	return nil
 }
 
+// DB returns the underlying BadgerDB instance
+// This is used by subsystems that need direct database access (e.g., mailbox manager)
+func (s *BadgerStorage) DB() *badger.DB {
+	return s.db
+}
+
 // peerKey creates a key for peer storage
 // Format: peerPrefix + peer_id
 func peerKey(peerID string) []byte {

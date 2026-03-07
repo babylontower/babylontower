@@ -318,9 +318,12 @@ func extractSenderPubkey(envelopeData []byte) []byte {
 	if err := proto.Unmarshal(envelopeData, envelope); err != nil {
 		return nil
 	}
-	// The sender's device ID is stored in the envelope
-	// For now, we return the sender_device_id as a proxy for sender pubkey
-	// TODO: Extract actual sender identity pubkey from envelope
+	// Extract sender identity public key (32-byte Ed25519 pubkey)
+	// This is used for signature verification of the deposit request
+	if len(envelope.SenderIdentity) == 32 {
+		return envelope.SenderIdentity
+	}
+	// Fallback to sender_device_id for backward compatibility (will fail verification)
 	if len(envelope.SenderDeviceId) > 0 {
 		return envelope.SenderDeviceId
 	}

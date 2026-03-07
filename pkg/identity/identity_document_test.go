@@ -164,12 +164,12 @@ func TestSerializeDocumentForSigning(t *testing.T) {
 	doc, _ := manager.CreateIdentityDocument(0, nil, nil, nil, nil, "Test User")
 
 	// Serialize twice and verify determinism
-	data1, err := serializeDocumentForSigning(doc)
+	data1, err := SerializeDocumentForSigning(doc)
 	if err != nil {
 		t.Fatalf("Failed to serialize document: %v", err)
 	}
 
-	data2, err := serializeDocumentForSigning(doc)
+	data2, err := SerializeDocumentForSigning(doc)
 	if err != nil {
 		t.Fatalf("Failed to serialize document: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestDeriveIdentityDHTKey(t *testing.T) {
 
 	dhtKey := DeriveIdentityDHTKey(identity.IKSignPub)
 
-	// Verify format
+	// Verify format - using /bt/id/ namespace per protocol spec
 	expectedPrefix := "/bt/id/"
 	if len(dhtKey) <= len(expectedPrefix) {
 		t.Errorf("DHT key too short: %s", dhtKey)
@@ -220,7 +220,7 @@ func TestDerivePrekeyBundleDHTKey(t *testing.T) {
 
 	dhtKey := DerivePrekeyBundleDHTKey(identity.IKSignPub)
 
-	// Verify format
+	// Verify format - using /bt/prekeys/ namespace per protocol spec
 	expectedPrefix := "/bt/prekeys/"
 	if len(dhtKey) <= len(expectedPrefix) {
 		t.Errorf("DHT key too short: %s", dhtKey)

@@ -65,7 +65,9 @@ func TestX3DHSessionEstablishment(t *testing.T) {
 	x3dhResult, err := X3DHInitiator(
 		alice.IKDHPriv,
 		alice.IKDHPub,
+		alice.IKSignPub,
 		bob.IKDHPub,
+		bob.IKSignPub,
 		bobSPKPub,
 		bobOPKPub,
 	)
@@ -95,9 +97,11 @@ func TestX3DHSessionEstablishment(t *testing.T) {
 	bobX3DHResult, err := X3DHResponder(
 		bob.IKDHPriv,
 		bob.IKDHPub,
+		bob.IKSignPub,
 		bobSPKPriv,
 		bobOPKPriv,
 		alice.IKDHPub,
+		alice.IKSignPub,
 		x3dhResult.EphemeralPub,
 	)
 	if err != nil {
@@ -353,7 +357,9 @@ func TestX3DHWithoutOPK(t *testing.T) {
 	x3dhResult, err := X3DHInitiator(
 		alice.IKDHPriv,
 		alice.IKDHPub,
+		alice.IKSignPub,
 		bob.IKDHPub,
+		bob.IKSignPub,
 		bobSPKPub,
 		nil, // No OPK
 	)
@@ -365,9 +371,11 @@ func TestX3DHWithoutOPK(t *testing.T) {
 	bobX3DHResult, err := X3DHResponder(
 		bob.IKDHPriv,
 		bob.IKDHPub,
+		bob.IKSignPub,
 		bobSPKPriv,
 		nil, // No OPK
 		alice.IKDHPub,
+		alice.IKSignPub,
 		x3dhResult.EphemeralPub,
 	)
 	if err != nil {
@@ -417,7 +425,9 @@ func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.Identity
 	x3dhAlice, err := X3DHInitiator(
 		alice.IKDHPriv,
 		alice.IKDHPub,
+		alice.IKSignPub,
 		bob.IKDHPub,
+		bob.IKSignPub,
 		bobSPKPub,
 		bobOPKPub,
 	)
@@ -428,9 +438,11 @@ func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.Identity
 	x3dhBob, err := X3DHResponder(
 		bob.IKDHPriv,
 		bob.IKDHPub,
+		bob.IKSignPub,
 		bobSPKPriv,
 		bobOPKPriv,
 		alice.IKDHPub,
+		alice.IKSignPub,
 		x3dhAlice.EphemeralPub,
 	)
 	if err != nil {
@@ -479,7 +491,9 @@ func BenchmarkX3DH_4DH(b *testing.B) {
 		_, err := X3DHInitiator(
 			alice.IKDHPriv,
 			alice.IKDHPub,
+			alice.IKSignPub,
 			bob.IKDHPub,
+			bob.IKSignPub,
 			bobSPKPub,
 			bobOPKPub,
 		)

@@ -10,12 +10,15 @@ import (
 	"time"
 
 	bterrors "babylontower/pkg/errors"
+	"babylontower/pkg/identity"
 	"babylontower/pkg/ipfsnode"
+	"babylontower/pkg/mailbox"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/reputation"
 	"babylontower/pkg/storage"
 
 	"github.com/ipfs/go-log/v2"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -38,7 +41,35 @@ type Config struct {
 	OwnX25519PrivKey []byte
 	// OwnX25519PubKey is the owner's X25519 public key for sharing
 	OwnX25519PubKey []byte
+	// IdentityV1 is the v1 identity (optional, for protocol v1 features)
+	IdentityV1 *identity.IdentityV1
 }
+
+// Messenger is the interface for messaging operations.
+// This allows dependency injection and testing without concrete implementations.
+type Messenger interface {
+	// Lifecycle
+	Start() error
+	Stop() error
+
+	// Messaging operations
+	SendMessageToContact(text string, recipientEd25519PubKey, recipientX25519PubKey []byte) (*SendResult, error)
+	GetDecryptedMessagesWithMeta(contactPubKey []byte, limit, offset int) ([]*MessageWithMeta, error)
+	Messages() <-chan *MessageEvent
+	GetContactStatus(contactPubKey []byte) (*ContactStatus, error)
+	GetAllContactStatuses() ([]*ContactStatus, error)
+	IsStarted() bool
+
+	// Mailbox
+	GetMailboxManager() *mailbox.Manager
+	RetrieveOfflineMessages() error
+
+	// Reputation tracker access
+	ReputationTracker() *reputation.Tracker
+}
+
+// Ensure Service implements Messenger interface
+var _ Messenger = (*Service)(nil)
 
 // MessageEvent represents a new message received
 type MessageEvent struct {
@@ -73,6 +104,17 @@ type Service struct {
 
 	// Reputation tracker
 	reputationTracker *reputation.Tracker
+
+	// Mailbox manager for offline message delivery
+	mailboxManager *mailbox.Manager
+
+	// Identity document manager for DHT publication
+	identityManager *identity.DHTIdentityManager
+	identityV1      *identity.IdentityV1
+
+	// Lazy bootstrap tracking
+	lazyBootstrapTriggered map[string]bool // key: hex-encoded sender pubkey
+	lazyBootstrapMu        sync.RWMutex
 }
 
 // ContactPeerInfo contains cached information about a contact's peer presence
@@ -89,14 +131,15 @@ func NewService(config *Config, storage storage.Storage, ipfsNode *ipfsnode.Node
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Service{
-		config:       config,
-		storage:      storage,
-		ipfsNode:     ipfsNode,
-		ctx:          ctx,
-		cancel:       cancel,
-		isStarted:    false,
-		messageChan:  make(chan *MessageEvent, 100),
-		contactPeers: make(map[string]*ContactPeerInfo),
+		config:                 config,
+		storage:                storage,
+		ipfsNode:               ipfsNode,
+		ctx:                    ctx,
+		cancel:                 cancel,
+		isStarted:              false,
+		messageChan:            make(chan *MessageEvent, 100),
+		contactPeers:           make(map[string]*ContactPeerInfo),
+		lazyBootstrapTriggered: make(map[string]bool),
 	}
 }
 
@@ -118,6 +161,39 @@ func (s *Service) Start() error {
 		return errors.New("storage not initialized")
 	}
 
+	// Initialize identity document manager if IdentityV1 is available
+	if s.config.IdentityV1 != nil {
+		s.identityV1 = s.config.IdentityV1
+		s.identityManager = identity.NewDHTIdentityManager(s.ipfsNode)
+
+		// Publish identity document to DHT AFTER Babylon bootstrap completes
+		// This is critical per protocol spec - identity documents require Babylon DHT
+		// Run asynchronously to avoid blocking startup
+		go func() {
+			// Wait for Babylon DHT bootstrap to complete (max 60 seconds)
+			// Babylon DHT is the protocol layer required for identity operations
+			if err := s.ipfsNode.WaitForBabylonBootstrap(60 * time.Second); err != nil {
+				logger.Warnw("Babylon DHT bootstrap timeout, deferring identity publication", "error", err)
+				return
+			}
+
+			// Now publish identity document
+			if err := s.publishIdentityDocument(); err != nil {
+				logger.Warnw("failed to publish identity document (will retry later)", "error", err)
+			} else {
+				logger.Infow("identity document published successfully",
+					"fingerprint", s.identityV1.IdentityFingerprint())
+			}
+		}()
+
+		// Start periodic republish (every 4 hours as per protocol spec)
+		s.wg.Add(1)
+		go s.periodicIdentityRepublish()
+
+		logger.Infow("identity document publication scheduled (waiting for Babylon DHT bootstrap)",
+			"fingerprint", s.identityV1.IdentityFingerprint())
+	}
+
 	// Subscribe to own topic
 	topic := ipfsnode.TopicFromPublicKey(s.config.OwnEd25519PubKey)
 	sub, err := s.ipfsNode.Subscribe(topic)
@@ -132,9 +208,148 @@ func (s *Service) Start() error {
 	s.wg.Add(1)
 	go s.listenForMessages()
 
+	// Start periodic message retrieval from mailbox
+	s.wg.Add(1)
+	go s.periodicMessageRetrieval()
+
+	// Start periodic presence announcement
+	s.wg.Add(1)
+	go s.periodicPresenceAnnouncement()
+
 	logger.Infow("messaging service started", "topic", topic)
 
 	return nil
+}
+
+// publishIdentityDocument creates and publishes an identity document to the DHT
+func (s *Service) publishIdentityDocument() error {
+	if s.identityManager == nil || s.identityV1 == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	defer cancel()
+
+	// Wait for Babylon DHT to be ready before publishing
+	// Per protocol spec section 1.4, identity documents MUST be published to Babylon DHT
+	// with custom validators, not the default IPFS DHT
+	if err := s.waitForBabylonDHT(ctx); err != nil {
+		return fmt.Errorf("Babylon DHT not ready, cannot publish identity document: %w", err)
+	}
+
+	// Create identity document manager
+	docManager := identity.NewIdentityDocumentManager(s.identityV1)
+
+	// Generate prekeys
+	spk, err := s.identityV1.GenerateSignedPrekey(1)
+	if err != nil {
+		return fmt.Errorf("failed to generate SPK: %w", err)
+	}
+
+	opks, err := s.identityV1.GenerateOneTimePrekeys(1, identity.OPKBatchSize)
+	if err != nil {
+		return fmt.Errorf("failed to generate OPKs: %w", err)
+	}
+
+	// Create device certificate
+	deviceCert, err := s.identityV1.CreateDeviceCertificate()
+	if err != nil {
+		return fmt.Errorf("failed to create device certificate: %w", err)
+	}
+
+	// Create identity document
+	doc, err := docManager.CreateIdentityDocument(
+		0, // prevSequence
+		nil, // prevHash
+		[]*pb.DeviceCertificate{deviceCert},
+		[]*pb.SignedPrekey{spk},
+		opks,
+		s.identityV1.DeviceName,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create identity document: %w", err)
+	}
+
+	// Publish to DHT
+	if err := s.identityManager.PublishIdentityDocument(ctx, doc); err != nil {
+		return fmt.Errorf("failed to publish identity document: %w", err)
+	}
+
+	// Also publish prekey bundle separately for efficient lookup
+	if err := s.identityManager.PublishPrekeyBundle(ctx, s.identityV1.IKSignPub, []*pb.SignedPrekey{spk}, opks); err != nil {
+		logger.Warnw("failed to publish prekey bundle", "error", err)
+	}
+
+	logger.Infow("identity document published to DHT",
+		"sequence", doc.Sequence,
+		"devices", len(doc.Devices),
+		"spks", len(doc.SignedPrekeys),
+		"opks", len(doc.OneTimePrekeys))
+
+	return nil
+}
+
+// waitForBabylonDHT waits for Babylon DHT to be ready for protocol operations
+func (s *Service) waitForBabylonDHT(ctx context.Context) error {
+	// Check if IPFS node is initialized
+	if s.ipfsNode == nil {
+		return fmt.Errorf("IPFS node not initialized")
+	}
+
+	// Wait for Babylon DHT with timeout
+	if err := s.ipfsNode.WaitForBabylonDHT(30 * time.Second); err != nil {
+		return fmt.Errorf("Babylon DHT not ready: %w", err)
+	}
+
+	logger.Debug("Babylon DHT ready for protocol operations")
+	return nil
+}
+
+// periodicIdentityRepublish republishes the identity document every 4 hours
+func (s *Service) periodicIdentityRepublish() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(4 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.publishIdentityDocument(); err != nil {
+				logger.Warnw("periodic identity republish failed", "error", err)
+			} else {
+				logger.Debug("identity document republished")
+			}
+		}
+	}
+}
+
+// periodicPresenceAnnouncement publishes presence announcements periodically
+func (s *Service) periodicPresenceAnnouncement() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			// Check if service is still valid
+			if s == nil || s.ipfsNode == nil || s.config == nil {
+				logger.Debugw("presence announcement skipped - service not ready")
+				continue
+			}
+
+			// Publish presence announcement to signal we're online
+			if err := s.ipfsNode.PublishPresenceAnnouncement(s.ctx, s.config.OwnEd25519PubKey); err != nil {
+				logger.Debugw("presence announcement failed", "error", err)
+			}
+		}
+	}
 }
 
 // Stop gracefully shuts down the messaging service
@@ -189,17 +404,136 @@ func (s *Service) listenForMessages() {
 	}
 }
 
+// periodicMessageRetrieval periodically retrieves messages from mailbox nodes
+func (s *Service) periodicMessageRetrieval() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.RetrieveOfflineMessages(); err != nil {
+				logger.Debugw("periodic message retrieval failed", "error", err)
+			}
+		}
+	}
+}
+
+// RetrieveOfflineMessages retrieves messages from mailbox nodes
+func (s *Service) RetrieveOfflineMessages() error {
+	if s.mailboxManager == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	defer cancel()
+
+	result, err := s.mailboxManager.RetrieveMessages(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve messages from mailbox: %w", err)
+	}
+
+	if len(result.Envelopes) == 0 {
+		return nil
+	}
+
+	logger.Debugw("retrieved messages from mailbox", "count", len(result.Envelopes))
+
+	// Process all envelopes first
+	for _, envelope := range result.Envelopes {
+		if err := s.processBabylonEnvelope(envelope); err != nil {
+			logger.Warnw("failed to process mailbox message", "error", err)
+		}
+	}
+
+	// Acknowledge messages after successful processing
+	// This deletes them from the mailbox to prevent duplicate delivery
+	if err := s.mailboxManager.AcknowledgeMessages(ctx, result.MessageIDs); err != nil {
+		logger.Warnw("failed to acknowledge mailbox messages", "error", err)
+		// Don't fail the retrieval - messages were already processed
+	} else {
+		logger.Debugw("acknowledged mailbox messages", "count", len(result.MessageIDs))
+	}
+
+	return nil
+}
+
+// processBabylonEnvelope processes a BabylonEnvelope from mailbox storage.
+// The Payload field contains serialized SignedEnvelope bytes — the same format
+// that arrives via PubSub — so we reuse the standard processEnvelope path.
+func (s *Service) processBabylonEnvelope(envelope *pb.BabylonEnvelope) error {
+	if len(envelope.Payload) == 0 {
+		return errors.New("empty babylon envelope payload")
+	}
+	return s.processEnvelope(envelope.Payload)
+}
+
 // handlePubSubMessage processes an incoming PubSub message
+// LAZY BOOTSTRAP: Triggers Babylon bootstrap on first message from unknown peer
 func (s *Service) handlePubSubMessage(pubsubMsg *ipfsnode.Message) {
-	// The PubSub message contains the encrypted envelope directly
-	// (For PoC, we send envelopes directly instead of CIDs)
-	logger.Debugw("received envelope via PubSub", "size", len(pubsubMsg.Data), "from", pubsubMsg.From)
+	logger.Infow("received PubSub message",
+		"size", len(pubsubMsg.Data),
+		"from", pubsubMsg.From,
+		"topic", pubsubMsg.Topic)
+
+	// === LAZY BOOTSTRAP TRIGGER ===
+	// Check if this is the first message from a Babylon peer
+	// and trigger lazy bootstrap if our Babylon DHT is not ready
+	s.checkAndTriggerLazyBootstrap(pubsubMsg.From)
 
 	// Process the envelope directly
 	if err := s.processEnvelope(pubsubMsg.Data); err != nil {
-		logger.Errorw("failed to process envelope", "error", err, "from", pubsubMsg.From)
+		logger.Errorw("failed to process PubSub envelope", "error", err, "from", pubsubMsg.From)
 		return
 	}
+	logger.Infow("PubSub message processed successfully", "from", pubsubMsg.From)
+}
+
+// checkAndTriggerLazyBootstrap checks if lazy bootstrap should be triggered
+// and triggers it if conditions are met
+func (s *Service) checkAndTriggerLazyBootstrap(sender peer.ID) {
+	// Skip if Babylon bootstrap is already complete
+	if s.ipfsNode.IsBabylonBootstrapComplete() {
+		return
+	}
+
+	senderKey := sender.String()
+
+	// Check if we already triggered bootstrap for this sender
+	s.lazyBootstrapMu.RLock()
+	alreadyTriggered := s.lazyBootstrapTriggered[senderKey]
+	s.lazyBootstrapMu.RUnlock()
+
+	if alreadyTriggered {
+		return
+	}
+
+	// Mark as triggered to avoid duplicate triggers
+	s.lazyBootstrapMu.Lock()
+	s.lazyBootstrapTriggered[senderKey] = true
+	s.lazyBootstrapMu.Unlock()
+
+	// Trigger lazy bootstrap
+	logger.Infow("lazy Babylon bootstrap triggered by first message from peer",
+		"sender", sender.String(),
+		"bootstrap_complete", s.ipfsNode.IsBabylonBootstrapComplete(),
+		"bootstrap_deferred", s.ipfsNode.IsBabylonBootstrapDeferred())
+
+	// Run bootstrap in goroutine to avoid blocking message processing
+	go func() {
+		if err := s.ipfsNode.TriggerLazyBootstrap(); err != nil {
+			logger.Debugw("lazy bootstrap trigger failed",
+				"sender", sender.String(),
+				"error", err)
+		} else {
+			logger.Infow("lazy bootstrap completed successfully",
+				"triggered_by", sender.String())
+		}
+	}()
 }
 
 // processEnvelope verifies, decrypts, and stores an incoming envelope
@@ -273,6 +607,12 @@ func (s *Service) processEnvelope(envelopeBytes []byte) error {
 
 // Messages returns the channel for receiving message events
 func (s *Service) Messages() <-chan *MessageEvent {
+	if s == nil || s.messageChan == nil {
+		// Return a closed channel instead of nil to prevent panics
+		ch := make(chan *MessageEvent)
+		close(ch)
+		return ch
+	}
 	return s.messageChan
 }
 
@@ -575,7 +915,7 @@ func (s *Service) GetContactPeerInfo(contactPubKey []byte) (*ContactPeerInfo, bo
 	return &infoCopy, true
 }
 
-// GetAllContactStats returns statistics about all tracked contacts
+// GetAllContactStats returns statistics for all contacts
 func (s *Service) GetAllContactStats() map[string]*ContactPeerInfo {
 	s.contactMu.RLock()
 	defer s.contactMu.RUnlock()
@@ -759,4 +1099,14 @@ func (s *Service) ReputationTracker() *reputation.Tracker {
 // SetReputationTracker sets the reputation tracker instance
 func (s *Service) SetReputationTracker(tracker *reputation.Tracker) {
 	s.reputationTracker = tracker
+}
+
+// GetMailboxManager returns the mailbox manager instance
+func (s *Service) GetMailboxManager() *mailbox.Manager {
+	return s.mailboxManager
+}
+
+// SetMailboxManager sets the mailbox manager for offline message delivery
+func (s *Service) SetMailboxManager(m *mailbox.Manager) {
+	s.mailboxManager = m
 }

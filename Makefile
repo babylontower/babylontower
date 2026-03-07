@@ -1,4 +1,4 @@
-.PHONY: build test test-all test-integration test-coverage lint clean run proto help test-e2e docker-build docker-run docker-stop docker-clean build-all-platforms
+.PHONY: build test test-all test-integration test-coverage lint clean run proto help test-e2e docker-build docker-run docker-stop docker-clean build-all-platforms build-ui run-ui setup-ui-devcontainer build-ui-cross build-ui-linux build-ui-windows build-ui-darwin
 
 # Version
 VERSION=0.0.1
@@ -16,8 +16,10 @@ GOFMT=gofmt
 
 # Binary name
 BINARY_NAME=messenger
+BINARY_UI_NAME=babylon-ui
 BINARY_DIR=bin
 BINARY_PLATFORM_DIR=$(BINARY_DIR)/platform
+BINARY_UI_PLATFORM_DIR=$(BINARY_PLATFORM_DIR)/ui
 
 # Protobuf
 PROTO_DIR=proto
@@ -42,6 +44,65 @@ build:
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BINARY_DIR)
 	@$(GOBUILD) -o $(BINARY_DIR)/$(BINARY_NAME) ./cmd/messenger
+
+## build-ui: Build the Gio UI application
+build-ui:
+	@echo "Building $(BINARY_UI_NAME)..."
+	@mkdir -p $(BINARY_UI_PLATFORM_DIR)/native
+	@$(GOBUILD) -o $(BINARY_UI_PLATFORM_DIR)/native/$(BINARY_UI_NAME) ./cmd/babylon-ui
+	@echo "Build complete: $(BINARY_UI_PLATFORM_DIR)/native/$(BINARY_UI_NAME)"
+	@echo ""
+	@echo "Note: Gio requires system libraries for GUI rendering."
+	@echo "If build fails, rebuild the devcontainer:"
+	@echo "  1. VS Code: Ctrl+Shift+P → 'Dev Containers: Rebuild Container'"
+	@echo "  2. Wait for rebuild to complete"
+	@echo "  3. Run 'make build-ui' again"
+	@echo ""
+	@echo "Or see pkg/ui/DEVCONTAINER.md for setup instructions"
+	@echo ""
+	@echo "Run with: $(BINARY_UI_PLATFORM_DIR)/native/$(BINARY_UI_NAME)"
+
+## build-ui-cross: Cross-compile UI for multiple platforms
+build-ui-cross:
+	@echo "Cross-compiling $(BINARY_UI_NAME) for multiple platforms..."
+	@./scripts/build-ui-cross.sh all
+
+## build-ui-linux: Build UI for Linux
+build-ui-linux:
+	@echo "Building $(BINARY_UI_NAME) for Linux..."
+	@mkdir -p $(BINARY_UI_PLATFORM_DIR)/linux
+	@GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UI_PLATFORM_DIR)/linux/$(BINARY_UI_NAME) ./cmd/babylon-ui
+	@echo "Linux binary: $(BINARY_UI_PLATFORM_DIR)/linux/$(BINARY_UI_NAME)"
+
+## build-ui-windows: Build UI for Windows (requires mingw-w64)
+build-ui-windows:
+	@echo "Building $(BINARY_UI_NAME) for Windows..."
+	@mkdir -p $(BINARY_UI_PLATFORM_DIR)/windows
+	@GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 \
+		$(GOBUILD) -o $(BINARY_UI_PLATFORM_DIR)/windows/$(BINARY_UI_NAME).exe ./cmd/babylon-ui
+	@echo "Windows binary: $(BINARY_UI_PLATFORM_DIR)/windows/$(BINARY_UI_NAME).exe"
+
+## build-ui-darwin: Build UI for macOS
+build-ui-darwin:
+	@echo "Building $(BINARY_UI_NAME) for macOS..."
+	@mkdir -p $(BINARY_UI_PLATFORM_DIR)/darwin
+	@GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 \
+		$(GOBUILD) -o $(BINARY_UI_PLATFORM_DIR)/darwin/$(BINARY_UI_NAME) ./cmd/babylon-ui
+	@echo "macOS binary: $(BINARY_UI_PLATFORM_DIR)/darwin/$(BINARY_UI_NAME)"
+	@echo ""
+	@echo "Note: macOS build has limited functionality without native GUI libraries."
+	@echo "For full GUI support, build natively on macOS."
+
+## setup-ui-devcontainer: Show instructions for setting up UI devcontainer
+setup-ui-devcontainer:
+	@echo "Setting up devcontainer for Gio UI development..."
+	@echo ""
+	@./scripts/setup-ui-devcontainer.sh
+
+## run-ui: Build and run the Gio UI application
+run-ui: build-ui
+	@echo "Running $(BINARY_UI_NAME)..."
+	@$(BINARY_UI_PLATFORM_DIR)/native/$(BINARY_UI_NAME)
 
 ## build-all: Build for all platforms (linux, macos, windows)
 build-all: build-linux build-darwin build-windows

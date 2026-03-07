@@ -3,7 +3,6 @@
 **Version**: 1.0.0
 **Status**: Draft
 **Created**: February 25, 2026
-**Supersedes**: `poc.md` (PoC specification - unversioned)
 
 ---
 
@@ -60,8 +59,6 @@ Master Secret (32 bytes)
     ├─► HKDF(master, salt="bt-identity", info="identity-signing-key-0") → IK_sign (Ed25519)
     └─► HKDF(master, salt="bt-identity", info="identity-dh-key-0")      → IK_dh (X25519)
 ```
-
-**PoC compatibility note**: The PoC (unversioned) uses `HKDF(seed, salt="ed25519-derive", info="index-0")` and `HKDF(seed, salt="x25519-derive", info="index-1")`. The v1 derivation introduces a master secret intermediate step with new labels. Implementations must support both derivation paths during the transition period.
 
 **Identity Fingerprint** (for out-of-band verification):
 
@@ -886,8 +883,6 @@ Prekey bundles are:
 | Revocation | `babylon-rev-` + hex(SHA256(identity.pub)[:8]) | `babylon-rev-e4b2c1a9` |
 | Device Sync | `babylon-sync-` + hex(SHA256(root.pub)[:8]) | `babylon-sync-f5a6b7c8` |
 
-**PoC backward compatibility**: During the transition period, v1 clients subscribe to BOTH `babylon-` (PoC format) and `babylon-dm-` (v1 format) topics. v1 clients publish to v1 topics only.
-
 ### 4.4 Peer Routing Priority
 
 Messages are delivered through the first successful mechanism:
@@ -896,6 +891,30 @@ Messages are delivered through the first successful mechanism:
 2. **DHT FindPeer**: Look up recipient's PeerID via DHT, connect directly.
 3. **Circuit relay v2**: NAT traversal via libp2p relay + hole punching.
 4. **Mailbox deposit**: Recipient offline — deposit at mailbox nodes (see §6).
+
+### 4.5 Babylon Network Bootstrap
+
+Babylon nodes discover each other via **DHT rendezvous** on the public IPFS network. This is O(log N) per lookup, supporting millions of nodes without broadcast overhead.
+
+**Two-layer DHT architecture**:
+
+- **IPFS DHT** (transport layer): Connects to public IPFS bootstrap nodes. Provides general connectivity, PubSub mesh routing, NAT traversal via relay/hole-punching, and rendezvous-based Babylon node discovery.
+- **Babylon DHT** (protocol layer, prefix `/babylon`): Isolated from public IPFS. Stores identity documents (`/bt/id/`), prekey bundles (`/bt/prekeys/`), and other protocol records. Custom validators enforce signature verification and conflict resolution.
+
+**Bootstrap sequence**:
+
+1. Node connects to public IPFS DHT via standard libp2p bootstrap peers (transport layer).
+2. Node advertises itself at rendezvous namespace `babylon/rendezvous/v1` on the IPFS DHT using `routing.RoutingDiscovery.Advertise()`.
+3. Node queries `routing.RoutingDiscovery.FindPeers()` on the same namespace to discover other Babylon nodes.
+4. Discovered peers are connected via the Babylon DHT (protocol prefix `/babylon`), which is isolated from the public IPFS DHT.
+5. `babylonDHT.Bootstrap()` is called to initialize the routing table refresh manager.
+6. Node periodically re-advertises at the rendezvous namespace (every 4 hours).
+
+**Returning nodes**: Previously discovered Babylon peers are persisted to storage (source=`babylon`). On restart, the node first attempts to reconnect to stored peers (24-hour TTL) before falling back to rendezvous discovery.
+
+**Manual connection**: The `/connect <multiaddr>` command connects directly to a peer and triggers Babylon DHT bootstrap if not yet complete.
+
+**Lazy bootstrap**: If no Babylon peers are found during startup (e.g., first node on the network), bootstrap is deferred. It is triggered automatically when a peer is manually connected via `/connect`.
 
 ---
 
@@ -1207,16 +1226,9 @@ Capabilities are advertised in `IdentityDocument.features.custom_features` using
 
 | Version | Features |
 |---------|----------|
-| 0 | PoC (unversioned): static X25519 ECDH, XChaCha20-Poly1305, SignedEnvelope format, single device |
 | 1 | X3DH, Double Ratchet, Sender Keys, BabylonEnvelope, multi-device, groups, channels, RTC, mailbox |
 
-### 10.2 Backward Compatibility
-
-- **v1 client receiving PoC message**: Detect by absence of `protocol_version` field. Parse as legacy `SignedEnvelope` (PoC format). Decrypt using static X25519 ECDH (no ratchet). Display with `[PoC]` indicator.
-- **PoC client receiving v1 message**: Cannot parse `BabylonEnvelope`. Message is silently dropped. Users must upgrade.
-- **Transition period**: v1 clients subscribe to BOTH `babylon-` (PoC format) and `babylon-dm-` (v1 format) topics.
-
-### 10.3 Future Extensions
+### 10.2 Future Extensions
 
 - **New protobuf fields**: Always optional. Old clients ignore unknown fields (proto3 behavior).
 - **New message types**: Added to `MessageType` enum. Old clients ignore unknown types.
@@ -1229,17 +1241,13 @@ Capabilities are advertised in `IdentityDocument.features.custom_features` using
 
 ## 11. Storage Schema (BadgerDB Key Prefixes)
 
-Extends the existing v1 schema:
-
 ```
-Existing (v1):
+Storage schema:
     c:     + <pubkey>                          → Contact records (protobuf)
     m:     + <pubkey> + <ts> + <nonce>         → Message envelopes (protobuf)
     p:     + <peer_id>                         → Peer records (JSON)
     cfg:   + <config_key>                      → Configuration values
     bl:    + <peer_id>                         → Blacklist entries
-
-New (v1):
     id:    + <pubkey>                          → Cached IdentityDocuments
     pk:    + <pubkey>                          → Cached PrekeyBundles
     otpk:  + <prekey_id>                       → One-time prekey private keys
