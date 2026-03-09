@@ -9,6 +9,20 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
 
+// Helper to safely stop a node
+func stopNode(node *Node) func() {
+	return func() {
+		_ = node.Stop()
+	}
+}
+
+// Helper to safely close a subscription
+func closeSub(sub *Subscription) func() {
+	return func() {
+		_ = sub.Close()
+	}
+}
+
 // TestTopicFromPublicKey tests topic derivation from public key
 func TestTopicFromPublicKey(t *testing.T) {
 	// Generate a test public key
@@ -51,6 +65,9 @@ func TestTopicFromPublicKey(t *testing.T) {
 
 // TestRepoDirExpansion tests that ~ is expanded in repo directory
 func TestRepoDirExpansion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Skipf("Cannot get home directory: %v", err)

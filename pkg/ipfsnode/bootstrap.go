@@ -100,6 +100,7 @@ func (n *Node) bootstrapIPFSDHT() error {
 
 	// Mark complete — node can function even with limited routing
 	n.ipfsBootstrapComplete.Store(true)
+	close(n.ipfsBootstrapDone)
 	logger.Infow("IPFS DHT bootstrap complete (transport layer)",
 		"routing_table_size", routingTableSize,
 		"connected_peers", connectedPeers,
@@ -164,6 +165,7 @@ func (n *Node) bootstrapBabylonDHT() error {
 				"connected", result.BabylonPeersConnected)
 			n.babylonBootstrapComplete.Store(true)
 			n.babylonBootstrapDeferred.Store(false)
+			n.closeBabylonBootstrapDone()
 			return nil
 		}
 	}
@@ -173,7 +175,7 @@ func (n *Node) bootstrapBabylonDHT() error {
 	logger.Debugw("Babylon bootstrap stage 2: DHT rendezvous discovery")
 
 	// Wait for IPFS DHT to be ready before rendezvous lookup
-	if err := n.WaitForIPFSBootstrap(30 * time.Second); err != nil {
+	if err := n.WaitForIPFSBootstrap(15 * time.Second); err != nil {
 		logger.Debugw("IPFS bootstrap not ready for rendezvous", "error", err)
 	}
 
@@ -222,6 +224,7 @@ func (n *Node) bootstrapBabylonDHT() error {
 			"connected", result.BabylonPeersConnected)
 		n.babylonBootstrapComplete.Store(true)
 		n.babylonBootstrapDeferred.Store(false)
+		n.closeBabylonBootstrapDone()
 		return nil
 	}
 
@@ -230,6 +233,7 @@ func (n *Node) bootstrapBabylonDHT() error {
 	logger.Info("Babylon DHT bootstrap deferred - waiting for connections")
 	n.babylonBootstrapDeferred.Store(true)
 	n.babylonBootstrapComplete.Store(false)
+	n.closeBabylonBootstrapDone()
 
 	return ErrBabylonBootstrapDeferred
 }
@@ -810,7 +814,7 @@ func (n *Node) verifyBootstrapPeers(ctx context.Context) int {
 
 // ConnectToBootstrapPeers connects to all configured bootstrap peers
 func (n *Node) ConnectToBootstrapPeers() error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -850,7 +854,7 @@ func (n *Node) ConnectToBootstrapPeers() error {
 
 // ConnectToLocalNode connects to another node on the same machine
 func (n *Node) ConnectToLocalNode(multiaddrStr, peerID string) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 

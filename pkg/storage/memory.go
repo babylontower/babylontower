@@ -15,7 +15,7 @@ import (
 type MemoryStorage struct {
 	mu           sync.RWMutex
 	contacts     map[string]*pb.Contact
-	messages     map[string][]*pb.SignedEnvelope
+	messages     map[string][]*StoredMessage
 	peers        map[string]*PeerRecord
 	configs      map[string]string
 	blacklist    map[string]*BlacklistEntry
@@ -29,7 +29,7 @@ type MemoryStorage struct {
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
 		contacts:     make(map[string]*pb.Contact),
-		messages:     make(map[string][]*pb.SignedEnvelope),
+		messages:     make(map[string][]*StoredMessage),
 		peers:        make(map[string]*PeerRecord),
 		configs:      make(map[string]string),
 		blacklist:    make(map[string]*BlacklistEntry),
@@ -108,62 +108,39 @@ func (s *MemoryStorage) DeleteContact(pubKey []byte) error {
 	return nil
 }
 
-// AddMessage stores a message for a contact
-func (s *MemoryStorage) AddMessage(contactPubKey []byte, envelope *pb.SignedEnvelope) error {
+// AddMessage stores a plaintext message for a contact
+func (s *MemoryStorage) AddMessage(contactPubKey []byte, msg *StoredMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.messages[string(contactPubKey)] = append(s.messages[string(contactPubKey)], envelope)
+	s.messages[string(contactPubKey)] = append(s.messages[string(contactPubKey)], msg)
 	return nil
 }
 
 // GetMessages retrieves messages for a contact
 // limit specifies maximum number of messages (0 = no limit)
 // offset specifies number of messages to skip
-func (s *MemoryStorage) GetMessages(contactPubKey []byte, limit, offset int) ([]*pb.SignedEnvelope, error) {
+func (s *MemoryStorage) GetMessages(contactPubKey []byte, limit, offset int) ([]*StoredMessage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	allMessages, ok := s.messages[string(contactPubKey)]
 	if !ok {
-		return []*pb.SignedEnvelope{}, nil
+		return []*StoredMessage{}, nil
 	}
 
-	// Apply offset
 	if offset >= len(allMessages) {
-		return []*pb.SignedEnvelope{}, nil
+		return []*StoredMessage{}, nil
 	}
 	start := offset
 
-	// Apply limit
 	end := len(allMessages)
 	if limit > 0 && start+limit < end {
 		end = start + limit
 	}
 
-	result := make([]*pb.SignedEnvelope, end-start)
+	result := make([]*StoredMessage, end-start)
 	copy(result, allMessages[start:end])
-	return result, nil
-}
-
-// GetMessagesWithTimestamps retrieves messages with timestamps
-// For in-memory storage, timestamps are generated from current time
-func (s *MemoryStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, offset int) ([]*MessageWithKey, error) {
-	envelopes, err := s.GetMessages(contactPubKey, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	// For in-memory storage, we don't have real timestamps
-	// Return with zero timestamps (will be handled by caller)
-	result := make([]*MessageWithKey, len(envelopes))
-	for i, env := range envelopes {
-		result[i] = &MessageWithKey{
-			Envelope:  env,
-			Timestamp: 0,
-			Nonce:     nil,
-		}
-	}
 	return result, nil
 }
 
@@ -187,7 +164,14 @@ func (s *MemoryStorage) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.contacts = make(map[string]*pb.Contact)
-	s.messages = make(map[string][]*pb.SignedEnvelope)
+	s.messages = make(map[string][]*StoredMessage)
+	s.peers = make(map[string]*PeerRecord)
+	s.configs = make(map[string]string)
+	s.blacklist = make(map[string]*BlacklistEntry)
+	s.groups = make(map[string]*pb.GroupState)
+	s.senderKeys = make(map[string]map[string]*pb.SenderKeyDistribution)
+	s.channels = make(map[string]*pb.ChannelState)
+	s.channelPosts = make(map[string]map[string]*pb.ChannelPost)
 }
 
 // ContactCount returns the number of contacts
@@ -211,7 +195,7 @@ func (s *MemoryStorage) Clone() *MemoryStorage {
 
 	clone := &MemoryStorage{
 		contacts:  make(map[string]*pb.Contact),
-		messages:  make(map[string][]*pb.SignedEnvelope),
+		messages:  make(map[string][]*StoredMessage),
 		peers:     make(map[string]*PeerRecord),
 		configs:   make(map[string]string),
 		blacklist: make(map[string]*BlacklistEntry),
@@ -222,9 +206,10 @@ func (s *MemoryStorage) Clone() *MemoryStorage {
 	}
 
 	for k, msgs := range s.messages {
-		clone.messages[k] = make([]*pb.SignedEnvelope, len(msgs))
+		clone.messages[k] = make([]*StoredMessage, len(msgs))
 		for i, msg := range msgs {
-			clone.messages[k][i] = proto.Clone(msg).(*pb.SignedEnvelope)
+			msgCopy := *msg
+			clone.messages[k][i] = &msgCopy
 		}
 	}
 

@@ -14,6 +14,8 @@ import (
 	"babylontower/pkg/ipfsnode"
 	"babylontower/pkg/mailbox"
 	pb "babylontower/pkg/proto"
+	"babylontower/pkg/protocol"
+	"babylontower/pkg/ratchet"
 	"babylontower/pkg/reputation"
 	"babylontower/pkg/storage"
 
@@ -77,14 +79,20 @@ type MessageEvent struct {
 	ContactPubKey []byte
 	// Message is the decrypted message
 	Message *pb.Message
-	// Envelope is the original signed envelope (for storage)
-	Envelope *pb.SignedEnvelope
+	// BabylonEnvelope is the original Protocol v1 envelope
+	BabylonEnvelope *pb.BabylonEnvelope
+}
+
+// MessagingStore combines the storage sub-interfaces needed by the messaging service.
+type MessagingStore interface {
+	storage.ContactStore
+	storage.MessageStore
 }
 
 // Service is the main messaging service that handles all protocol operations
 type Service struct {
 	config       *Config
-	storage      storage.Storage
+	storage      MessagingStore
 	ipfsNode     *ipfsnode.Node
 	subscription *ipfsnode.Subscription
 
@@ -112,6 +120,15 @@ type Service struct {
 	identityManager *identity.DHTIdentityManager
 	identityV1      *identity.IdentityV1
 
+	// Double Ratchet sessions per contact (Protocol v1)
+	// Key: hex-encoded recipient Ed25519 pubkey
+	ratchetSessions map[string]*ratchet.DoubleRatchetState
+	// X3DH headers to include in outgoing messages until session is confirmed.
+	// Cleared when we receive a message from the contact (confirming they
+	// have a matching session). Key: hex-encoded recipient Ed25519 pubkey.
+	pendingX3DHHeaders map[string][]byte
+	ratchetMu          sync.RWMutex
+
 	// Lazy bootstrap tracking
 	lazyBootstrapTriggered map[string]bool // key: hex-encoded sender pubkey
 	lazyBootstrapMu        sync.RWMutex
@@ -127,7 +144,7 @@ type ContactPeerInfo struct {
 }
 
 // NewService creates a new messaging service
-func NewService(config *Config, storage storage.Storage, ipfsNode *ipfsnode.Node) *Service {
+func NewService(config *Config, storage MessagingStore, ipfsNode *ipfsnode.Node) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Service{
@@ -139,6 +156,8 @@ func NewService(config *Config, storage storage.Storage, ipfsNode *ipfsnode.Node
 		isStarted:              false,
 		messageChan:            make(chan *MessageEvent, 100),
 		contactPeers:           make(map[string]*ContactPeerInfo),
+		ratchetSessions:        make(map[string]*ratchet.DoubleRatchetState),
+		pendingX3DHHeaders:     make(map[string][]byte),
 		lazyBootstrapTriggered: make(map[string]bool),
 	}
 }
@@ -169,10 +188,12 @@ func (s *Service) Start() error {
 		// Publish identity document to DHT AFTER Babylon bootstrap completes
 		// This is critical per protocol spec - identity documents require Babylon DHT
 		// Run asynchronously to avoid blocking startup
+		s.wg.Add(1)
 		go func() {
-			// Wait for Babylon DHT bootstrap to complete (max 60 seconds)
+			defer s.wg.Done()
+			// Wait for Babylon DHT bootstrap to complete
 			// Babylon DHT is the protocol layer required for identity operations
-			if err := s.ipfsNode.WaitForBabylonBootstrap(60 * time.Second); err != nil {
+			if err := s.ipfsNode.WaitForBabylonBootstrap(15 * time.Second); err != nil {
 				logger.Warnw("Babylon DHT bootstrap timeout, deferring identity publication", "error", err)
 				return
 			}
@@ -339,7 +360,7 @@ func (s *Service) periodicPresenceAnnouncement() {
 			return
 		case <-ticker.C:
 			// Check if service is still valid
-			if s == nil || s.ipfsNode == nil || s.config == nil {
+			if s.ipfsNode == nil || s.config == nil {
 				logger.Debugw("presence announcement skipped - service not ready")
 				continue
 			}
@@ -463,13 +484,17 @@ func (s *Service) RetrieveOfflineMessages() error {
 }
 
 // processBabylonEnvelope processes a BabylonEnvelope from mailbox storage.
-// The Payload field contains serialized SignedEnvelope bytes — the same format
-// that arrives via PubSub — so we reuse the standard processEnvelope path.
 func (s *Service) processBabylonEnvelope(envelope *pb.BabylonEnvelope) error {
 	if len(envelope.Payload) == 0 {
 		return errors.New("empty babylon envelope payload")
 	}
-	return s.processEnvelope(envelope.Payload)
+
+	// Verify envelope signature
+	if err := protocol.VerifyEnvelope(envelope); err != nil {
+		return fmt.Errorf("envelope signature verification failed: %w", err)
+	}
+
+	return s.decryptAndProcessBabylonEnvelope(envelope)
 }
 
 // handlePubSubMessage processes an incoming PubSub message
@@ -536,73 +561,261 @@ func (s *Service) checkAndTriggerLazyBootstrap(sender peer.ID) {
 	}()
 }
 
-// processEnvelope verifies, decrypts, and stores an incoming envelope
-// This is called internally when a PubSub message is received
+// processEnvelope verifies, decrypts, and stores an incoming Protocol v1 envelope.
+// This is called internally when a PubSub message is received.
 func (s *Service) processEnvelope(envelopeBytes []byte) error {
-	// Parse signed envelope
-	signedEnvelope, err := ParseSignedEnvelope(envelopeBytes)
+	// Parse as BabylonEnvelope (Protocol v1)
+	var babylonEnvelope pb.BabylonEnvelope
+	if err := proto.Unmarshal(envelopeBytes, &babylonEnvelope); err != nil {
+		return fmt.Errorf("failed to parse BabylonEnvelope: %w", err)
+	}
+
+	// Verify envelope signature
+	if err := protocol.VerifyEnvelope(&babylonEnvelope); err != nil {
+		return fmt.Errorf("envelope signature verification failed: %w", err)
+	}
+
+	return s.decryptAndProcessBabylonEnvelope(&babylonEnvelope)
+}
+
+// decryptAndProcessBabylonEnvelope decrypts and processes a verified BabylonEnvelope
+// per Protocol v1 spec §2.2 (X3DH), §2.3 (Double Ratchet), §3.3 (payload format).
+func (s *Service) decryptAndProcessBabylonEnvelope(envelope *pb.BabylonEnvelope) error {
+	senderPubKey := envelope.SenderIdentity
+
+	if len(senderPubKey) == 0 {
+		return errors.New("missing sender identity in envelope")
+	}
+
+	// Check if sender is a known contact
+	if _, err := s.storage.GetContact(senderPubKey); err != nil {
+		logger.Debugw("message from unknown contact", "sender", hex.EncodeToString(senderPubKey)[:16])
+	}
+
+	senderHex := hex.EncodeToString(senderPubKey)
+	s.ratchetMu.RLock()
+	ratchetState, hasSession := s.ratchetSessions[senderHex]
+	s.ratchetMu.RUnlock()
+
+	// Handle legacy payload format (RatchetHeader in x3dh_header, nonce+ciphertext in payload)
+	if isLegacyPayload(envelope.X3DhHeader, envelope.Payload) {
+		return s.decryptLegacyPayload(envelope, senderPubKey, senderHex, ratchetState, hasSession)
+	}
+
+	// Protocol v1 compliant path
+
+	// If no session exists, establish one via X3DH responder
+	if !hasSession {
+		if len(envelope.X3DhHeader) == 0 {
+			return fmt.Errorf("no ratchet session and no X3DH header from sender %s", senderHex[:16])
+		}
+		var err error
+		ratchetState, err = s.createX3DHResponderSession(envelope.X3DhHeader, senderPubKey, senderHex)
+		if err != nil {
+			return fmt.Errorf("X3DH session establishment failed for sender %s: %w", senderHex[:16], err)
+		}
+	}
+
+	// Decode RatchetHeader + ciphertext from payload
+	ratchetHeader, ciphertext, err := decodeRatchetPayload(envelope.Payload)
 	if err != nil {
-		return fmt.Errorf("failed to parse signed envelope: %w", err)
+		return fmt.Errorf("failed to decode ratchet payload: %w", err)
 	}
 
-	// Verify signature
-	valid, err := VerifyEnvelope(signedEnvelope)
+	// Decrypt with Double Ratchet
+	var dhPub [32]byte
+	copy(dhPub[:], ratchetHeader.DhRatchetPub)
+	header := &ratchet.RatchetHeader{
+		DHRatchetPub:     &dhPub,
+		PreviousChainLen: ratchetHeader.PreviousChainLength,
+		MessageNumber:    ratchetHeader.MessageNumber,
+	}
+
+	// Per spec §2.3: AD = sender.IK_sign.pub ‖ recipient.IK_sign.pub
+	ad := append(senderPubKey, s.config.OwnEd25519PubKey...)
+	plaintext, err := ratchetState.Decrypt(header, ciphertext, ad)
 	if err != nil {
-		return fmt.Errorf("signature verification failed: %w", err)
-	}
-	if !valid {
-		return ErrInvalidSignature
+		return fmt.Errorf("Double Ratchet decrypt failed: %w", err)
 	}
 
-	// Parse envelope
-	envelope, err := ParseEnvelope(signedEnvelope)
+	return s.processDecryptedPayload(plaintext, envelope, senderPubKey)
+}
+
+// decryptLegacyPayload handles the old payload format where RatchetHeader was
+// in x3dh_header and payload was nonce+ciphertext. Provides backward compat
+// during transition to Protocol v1 compliant format.
+func (s *Service) decryptLegacyPayload(
+	envelope *pb.BabylonEnvelope,
+	senderPubKey []byte, senderHex string,
+	ratchetState *ratchet.DoubleRatchetState, hasSession bool,
+) error {
+	if !hasSession {
+		return fmt.Errorf("no ratchet session for sender %s (legacy format)", senderHex[:16])
+	}
+
+	var ratchetHeader pb.RatchetHeader
+	if err := proto.Unmarshal(envelope.X3DhHeader, &ratchetHeader); err != nil {
+		return fmt.Errorf("failed to parse legacy ratchet header: %w", err)
+	}
+
+	if len(envelope.Payload) <= 24 {
+		return errors.New("legacy payload too short for nonce + ciphertext")
+	}
+
+	var dhPub [32]byte
+	copy(dhPub[:], ratchetHeader.DhRatchetPub)
+	header := &ratchet.RatchetHeader{
+		DHRatchetPub:     &dhPub,
+		PreviousChainLen: ratchetHeader.PreviousChainLength,
+		MessageNumber:    ratchetHeader.MessageNumber,
+	}
+
+	ciphertext := envelope.Payload[24:] // skip nonce — ratchet derives its own
+	ad := append(senderPubKey, s.config.OwnEd25519PubKey...)
+
+	plaintext, err := ratchetState.Decrypt(header, ciphertext, ad)
 	if err != nil {
-		return fmt.Errorf("failed to parse envelope: %w", err)
+		return fmt.Errorf("Double Ratchet decrypt failed (legacy): %w", err)
 	}
 
-	// Decrypt envelope
-	plaintext, err := DecryptEnvelope(envelope, s.config.OwnX25519PrivKey)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt envelope: %w", err)
+	return s.processDecryptedPayload(plaintext, envelope, senderPubKey)
+}
+
+// processDecryptedPayload handles the plaintext after Double Ratchet decryption:
+// parses DMPayload, stores the message, and emits the message event.
+func (s *Service) processDecryptedPayload(plaintext []byte, envelope *pb.BabylonEnvelope, senderPubKey []byte) error {
+	// Clear pending X3DH header for this contact — receiving a message from them
+	// confirms they have an established session, so we no longer need to include
+	// the X3DHHeader in outgoing messages to them.
+	senderHex := hex.EncodeToString(senderPubKey)
+	s.ratchetMu.Lock()
+	delete(s.pendingX3DHHeaders, senderHex)
+	s.ratchetMu.Unlock()
+
+	// Parse DMPayload
+	var dmPayload pb.DMPayload
+	if err := proto.Unmarshal(plaintext, &dmPayload); err != nil {
+		return fmt.Errorf("failed to parse DMPayload: %w", err)
 	}
 
-	// Parse message
-	msg, err := ParseMessage(plaintext)
-	if err != nil {
-		return fmt.Errorf("failed to parse message: %w", err)
+	// Extract text from DMPayload
+	var msgText string
+	if textContent := dmPayload.GetText(); textContent != nil {
+		msgText = textContent.Text
 	}
 
-	// Get sender's public key
-	senderPubKey := signedEnvelope.SenderPubkey
-
-	// Check if sender is a known contact (optional for PoC)
-	contact, err := s.storage.GetContact(senderPubKey)
-	if err != nil {
-		logger.Debugw("message from unknown contact", "sender", hex.EncodeToString(senderPubKey))
-		// For PoC, we still process the message
+	msg := &pb.Message{
+		Text:      msgText,
+		Timestamp: envelope.Timestamp,
 	}
-	_ = contact
 
-	// Store message
-	if err := s.storage.AddMessage(senderPubKey, signedEnvelope); err != nil {
+	// Store plaintext message locally
+	storedMsg := &storage.StoredMessage{
+		Text:         msgText,
+		Timestamp:    envelope.Timestamp,
+		SenderPubKey: senderPubKey,
+		IsOutgoing:   false,
+	}
+	if err := s.storage.AddMessage(senderPubKey, storedMsg); err != nil {
 		logger.Warnw("failed to store message", "error", err)
 	}
 
 	// Emit message event
 	event := &MessageEvent{
-		ContactPubKey: senderPubKey,
-		Message:       msg,
-		Envelope:      signedEnvelope,
+		ContactPubKey:   senderPubKey,
+		Message:         msg,
+		BabylonEnvelope: envelope,
 	}
 
 	select {
 	case s.messageChan <- event:
-		logger.Debugw("message event emitted", "from", hex.EncodeToString(senderPubKey))
+		logger.Debugw("message event emitted", "from", hex.EncodeToString(senderPubKey)[:16])
 	default:
 		logger.Warnw("message channel full, dropping event")
 	}
 
 	return nil
+}
+
+// createX3DHResponderSession performs X3DH key agreement as the responder (Bob)
+// per Protocol v1 spec §2.2 and creates a Double Ratchet responder session.
+//
+// The sender's X3DHHeader contains their IK_dh.pub and ephemeral public key.
+// We use our own IK_dh as both IK and SPK (since the sender used our IK_dh
+// as SPK fallback when DHT prekey bundles are not available).
+func (s *Service) createX3DHResponderSession(
+	x3dhHeaderBytes []byte,
+	senderPubKey []byte,
+	senderHex string,
+) (*ratchet.DoubleRatchetState, error) {
+	if s.config.IdentityV1 == nil {
+		return nil, errors.New("IdentityV1 not configured, cannot perform X3DH responder")
+	}
+
+	// Parse X3DHHeader from envelope
+	var x3dhHeader pb.X3DHHeader
+	if err := proto.Unmarshal(x3dhHeaderBytes, &x3dhHeader); err != nil {
+		return nil, fmt.Errorf("failed to parse X3DHHeader: %w", err)
+	}
+
+	if len(x3dhHeader.InitiatorIdentityDhPub) != 32 {
+		return nil, errors.New("invalid initiator IK_dh.pub length in X3DHHeader")
+	}
+	if len(x3dhHeader.EphemeralPub) != 32 {
+		return nil, errors.New("invalid ephemeral pub length in X3DHHeader")
+	}
+
+	// Prepare keys for X3DH responder
+	var remoteIKDHPub [32]byte
+	copy(remoteIKDHPub[:], x3dhHeader.InitiatorIdentityDhPub)
+
+	var ekPub [32]byte
+	copy(ekPub[:], x3dhHeader.EphemeralPub)
+
+	// Per spec §2.2: Bob uses SPK.priv for DH1 and DH3.
+	// Since sender used our IK_dh as SPK fallback, we use IK_dh.priv as SPK.priv.
+	x3dhResult, err := ratchet.X3DHResponder(
+		s.config.IdentityV1.IKDHPriv,     // local IK_dh.priv
+		s.config.IdentityV1.IKDHPub,      // local IK_dh.pub
+		s.config.IdentityV1.IKSignPub,    // local IK_sign.pub (for AD)
+		s.config.IdentityV1.IKDHPriv,     // local SPK.priv = IK_dh.priv (fallback)
+		nil,                               // no OPK
+		&remoteIKDHPub,                    // remote IK_dh.pub
+		senderPubKey,                      // remote IK_sign.pub (for AD)
+		&ekPub,                            // remote ephemeral pub
+	)
+	if err != nil {
+		return nil, fmt.Errorf("X3DH responder key agreement failed: %w", err)
+	}
+
+	// Create Double Ratchet responder state (per spec §2.3)
+	// Bob.dh_sending_keypair = (SPK.priv, SPK.pub)
+	// Since SPK = IK_dh in fallback mode:
+	sessionID := fmt.Sprintf("dm:%s", senderHex)
+	state, err := ratchet.NewDoubleRatchetStateResponder(
+		sessionID,
+		s.config.OwnEd25519PubKey,
+		senderPubKey,
+		x3dhResult.SharedSecret,
+		s.config.IdentityV1.IKDHPriv,     // SPK.priv = IK_dh.priv
+		s.config.IdentityV1.IKDHPub,      // SPK.pub = IK_dh.pub
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Double Ratchet responder: %w", err)
+	}
+
+	s.ratchetMu.Lock()
+	if existing, ok := s.ratchetSessions[senderHex]; ok {
+		s.ratchetMu.Unlock()
+		return existing, nil
+	}
+	s.ratchetSessions[senderHex] = state
+	s.ratchetMu.Unlock()
+
+	logger.Infow("established X3DH ratchet session (responder)",
+		"from", senderHex[:16])
+
+	return state, nil
 }
 
 // Messages returns the channel for receiving message events
@@ -626,27 +839,6 @@ func (s *Service) IsStarted() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.isStarted
-}
-
-// GetContactX25519PubKey retrieves a contact's X25519 public key
-// This is a helper that would need to be implemented with contact storage
-// For PoC, we assume the caller provides the X25519 key directly
-func GetContactX25519PubKey(contactEd25519PubKey []byte) ([]byte, error) {
-	// In a full implementation, this would:
-	// 1. Look up the contact in storage
-	// 2. Retrieve their X25519 public key (stored when contact was added)
-	// For PoC, we return an error indicating this needs to be handled by the caller
-	return nil, errors.New("contact X25519 key lookup not implemented - caller must provide key")
-}
-
-// SerializeEnvelope serializes a SignedEnvelope to bytes
-func SerializeEnvelope(envelope *pb.SignedEnvelope) ([]byte, error) {
-	return proto.Marshal(envelope)
-}
-
-// DeserializeEnvelope deserializes bytes to a SignedEnvelope
-func DeserializeEnvelope(data []byte) (*pb.SignedEnvelope, error) {
-	return ParseSignedEnvelope(data)
 }
 
 // FindAndConnectResult contains the result of a find and connect operation
@@ -927,61 +1119,6 @@ func (s *Service) GetAllContactStats() map[string]*ContactPeerInfo {
 	}
 	return stats
 }
-
-// FindAndConnect attempts to find and connect to a peer by their public key
-// It tries multiple discovery mechanisms in order:
-// 1. Address book lookup (fastest, if previously connected)
-// 2. DHT FindPeer query (requires bootstrap peers)
-// 3. Manual connection (if multiaddr provided)
-func (s *Service) FindAndConnect(contactPubKey []byte, addrBook interface{}, multiaddr string) (*FindAndConnectResult, error) {
-	s.mu.RLock()
-	if !s.isStarted {
-		s.mu.RUnlock()
-		return nil, ErrServiceNotStarted
-	}
-	s.mu.RUnlock()
-
-	// Try address book first (if provided)
-	// Note: addrBook is passed as interface{} to avoid circular import
-	// In main.go, this will be type-asserted to *peerstore.AddrBook
-
-	// Try DHT FindPeer
-	// For this to work, we need the peer's PeerID
-	// In a full implementation, PeerID would be stored with the contact
-	// For now, we attempt DHT lookup assuming PeerID might match public key hash
-
-	// If multiaddr is provided, try direct connection
-	if multiaddr != "" {
-		if err := s.ipfsNode.ConnectToPeer(multiaddr); err != nil {
-			return nil, fmt.Errorf("failed to connect to peer: %w", err)
-		}
-		logger.Debugw("connected to peer via manual multiaddr", "multiaddr", multiaddr)
-		return &FindAndConnectResult{
-			Source:    "manual",
-			Addresses: []string{multiaddr},
-		}, nil
-	}
-
-	// DHT discovery would go here if we had PeerID
-	// For now, return error indicating manual connection is needed
-	return nil, errors.New("peer not found - provide multiaddr or add contact to address book")
-}
-
-// Message Retry Logic
-
-// SendMessageWithRetry sends a message with retry logic (deprecated - use SendMessage directly)
-// This method is kept for backward compatibility but simply calls SendMessage
-func (s *Service) SendMessageWithRetry(
-	text string,
-	recipientEd25519PubKey []byte,
-	recipientX25519PubKey []byte,
-	maxAttempts int,
-) (*SendResult, error) {
-	return s.SendMessage(text, recipientEd25519PubKey, recipientX25519PubKey)
-}
-
-// SendResultWithRetry is deprecated - use SendResult instead
-type SendResultWithRetry = SendResult
 
 // PubSub Mesh Optimization
 

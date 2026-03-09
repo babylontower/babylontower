@@ -56,7 +56,7 @@ func (n *Node) Context() context.Context {
 
 // IsStarted returns true if the node is running
 func (n *Node) IsStarted() bool {
-	return n.isStarted
+	return n.isStarted.Load()
 }
 
 // IsIPFSBootstrapComplete returns true if IPFS DHT bootstrap is complete
@@ -83,23 +83,41 @@ func (n *Node) IsBabylonDHTReady() bool {
 	return n.babylonDHT != nil && (n.babylonBootstrapComplete.Load() || n.babylonBootstrapDeferred.Load())
 }
 
+// closeBabylonBootstrapDone safely closes the babylonBootstrapDone channel (idempotent).
+func (n *Node) closeBabylonBootstrapDone() {
+	select {
+	case <-n.babylonBootstrapDone:
+		// already closed
+	default:
+		close(n.babylonBootstrapDone)
+	}
+}
+
 // WaitForBabylonDHT waits for Babylon DHT to be ready for protocol operations.
 // Returns nil if Babylon DHT is ready (either bootstrap complete or deferred for lazy triggering).
 // Returns context.DeadlineExceeded if timeout expires before DHT is ready.
 func (n *Node) WaitForBabylonDHT(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if n.babylonDHT != nil && (n.babylonBootstrapComplete.Load() || n.babylonBootstrapDeferred.Load()) {
-			if n.babylonBootstrapComplete.Load() {
-				logger.Debug("Babylon DHT bootstrap complete")
-			} else if n.babylonBootstrapDeferred.Load() {
-				logger.Debug("Babylon DHT bootstrap deferred (lazy triggering enabled)")
-			}
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+	// Fast path: already ready
+	if n.babylonDHT != nil && (n.babylonBootstrapComplete.Load() || n.babylonBootstrapDeferred.Load()) {
+		return nil
 	}
-	return fmt.Errorf("Babylon DHT not ready after %v (bootstrap neither complete nor deferred)", timeout)
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-n.babylonBootstrapDone:
+		if n.babylonBootstrapComplete.Load() {
+			logger.Debug("Babylon DHT bootstrap complete")
+		} else if n.babylonBootstrapDeferred.Load() {
+			logger.Debug("Babylon DHT bootstrap deferred (lazy triggering enabled)")
+		}
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("Babylon DHT not ready after %v (bootstrap neither complete nor deferred)", timeout)
+	case <-n.ctx.Done():
+		return n.ctx.Err()
+	}
 }
 
 // IsRendezvousActive returns true if the node is advertising on the rendezvous namespace
@@ -111,7 +129,7 @@ func (n *Node) IsRendezvousActive() bool {
 func (n *Node) GetNetworkInfo() *NetworkInfo {
 	info := &NetworkInfo{
 		PeerID:             n.PeerID(),
-		IsStarted:          n.isStarted,
+		IsStarted:          n.isStarted.Load(),
 		ConnectedPeerCount: 0,
 	}
 
@@ -166,10 +184,10 @@ func (n *Node) GetMetricsFull() *MetricsFull {
 // GetDHTInfo returns detailed information about the DHT state
 func (n *Node) GetDHTInfo() *DHTInfo {
 	info := &DHTInfo{
-		IsStarted: n.isStarted,
+		IsStarted: n.isStarted.Load(),
 	}
 
-	if !n.isStarted || n.dht == nil {
+	if !n.isStarted.Load() || n.dht == nil {
 		return info
 	}
 
@@ -328,36 +346,42 @@ func (n *Node) TriggerRendezvousDiscovery() int {
 	return len(peers)
 }
 
-// TriggerLazyBootstrap manually triggers lazy Babylon bootstrap
-// This is useful for debugging or forcing bootstrap without waiting for messages
-func (n *Node) TriggerLazyBootstrapManual() error {
-	return n.TriggerLazyBootstrap()
-}
-
 // WaitForIPFSBootstrap waits for IPFS DHT bootstrap to complete
 func (n *Node) WaitForIPFSBootstrap(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if n.ipfsBootstrapComplete.Load() {
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+	// Fast path
+	if n.ipfsBootstrapComplete.Load() {
+		return nil
 	}
-	return context.DeadlineExceeded
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-n.ipfsBootstrapDone:
+		return nil
+	case <-timer.C:
+		return context.DeadlineExceeded
+	case <-n.ctx.Done():
+		return n.ctx.Err()
+	}
 }
 
 // WaitForBabylonBootstrap waits for Babylon DHT bootstrap to complete
 func (n *Node) WaitForBabylonBootstrap(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if n.babylonBootstrapComplete.Load() {
-			return nil
-		}
-		// Also consider deferred as "done" - it will be triggered later
-		if n.babylonBootstrapDeferred.Load() {
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+	// Fast path
+	if n.babylonBootstrapComplete.Load() || n.babylonBootstrapDeferred.Load() {
+		return nil
 	}
-	return context.DeadlineExceeded
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-n.babylonBootstrapDone:
+		return nil
+	case <-timer.C:
+		return context.DeadlineExceeded
+	case <-n.ctx.Done():
+		return n.ctx.Err()
+	}
 }

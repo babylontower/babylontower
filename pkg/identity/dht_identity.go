@@ -48,10 +48,8 @@ func NewDHTIdentityManager(dhtClient DHTClient) *DHTIdentityManager {
 // Uses Babylon DHT for protocol-layer storage
 func (m *DHTIdentityManager) PublishIdentityDocument(ctx context.Context, doc *pb.IdentityDocument) error {
 	// Check if Babylon DHT is ready
-	if waiter, ok := m.dhtClient.(interface{ IsBabylonDHTReady() bool }); ok {
-		if !waiter.IsBabylonDHTReady() {
-			logger.Warnw("Babylon DHT not ready, identity publication may fail")
-		}
+	if !m.dhtClient.IsBabylonDHTReady() {
+		logger.Warnw("Babylon DHT not ready, identity publication may fail")
 	}
 
 	// Serialize the document

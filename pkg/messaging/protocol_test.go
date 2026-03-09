@@ -101,16 +101,6 @@ func TestIsContactOnline_NotStarted(t *testing.T) {
 	assert.ErrorIs(t, err, ErrServiceNotStarted)
 }
 
-func TestFindAndConnect_NotStarted(t *testing.T) {
-	svc := NewService(&Config{
-		OwnEd25519PubKey:  make([]byte, 32),
-		OwnEd25519PrivKey: make([]byte, 64),
-	}, nil, nil)
-
-	_, err := svc.FindAndConnect([]byte("key"), nil, "")
-	assert.ErrorIs(t, err, ErrServiceNotStarted)
-}
-
 func TestReputationTracker_NilByDefault(t *testing.T) {
 	svc := NewService(&Config{
 		OwnEd25519PubKey:  make([]byte, 32),

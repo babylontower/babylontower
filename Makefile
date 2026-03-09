@@ -49,7 +49,11 @@ build:
 build-ui:
 	@echo "Building $(BINARY_UI_NAME)..."
 	@mkdir -p $(BINARY_UI_PLATFORM_DIR)/native
+ifeq ($(OS),Windows_NT)
+	@$(GOBUILD) -ldflags "-H windowsgui" -o $(BINARY_UI_PLATFORM_DIR)/native/$(BINARY_UI_NAME).exe ./cmd/babylon-ui
+else
 	@$(GOBUILD) -o $(BINARY_UI_PLATFORM_DIR)/native/$(BINARY_UI_NAME) ./cmd/babylon-ui
+endif
 	@echo "Build complete: $(BINARY_UI_PLATFORM_DIR)/native/$(BINARY_UI_NAME)"
 	@echo ""
 	@echo "Note: Gio requires system libraries for GUI rendering."
@@ -79,7 +83,7 @@ build-ui-windows:
 	@echo "Building $(BINARY_UI_NAME) for Windows..."
 	@mkdir -p $(BINARY_UI_PLATFORM_DIR)/windows
 	@GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 \
-		$(GOBUILD) -o $(BINARY_UI_PLATFORM_DIR)/windows/$(BINARY_UI_NAME).exe ./cmd/babylon-ui
+		$(GOBUILD) -ldflags "-H windowsgui" -o $(BINARY_UI_PLATFORM_DIR)/windows/$(BINARY_UI_NAME).exe ./cmd/babylon-ui
 	@echo "Windows binary: $(BINARY_UI_PLATFORM_DIR)/windows/$(BINARY_UI_NAME).exe"
 
 ## build-ui-darwin: Build UI for macOS

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"babylontower/pkg/identity"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
@@ -460,9 +462,9 @@ func (d *PeerDiscoveryImpl) GetDiscoveryStats() map[string]interface{} {
 }
 
 // identityDHTKey creates the DHT key for an identity document.
+// Delegates to identity.DeriveIdentityDHTKey for canonical key derivation.
 func (d *PeerDiscoveryImpl) identityDHTKey(identityPub []byte) string {
-	hash := sha256.Sum256(identityPub)
-	return DHTNamespaceIdentity + hex.EncodeToString(hash[:16])
+	return identity.DeriveIdentityDHTKey(identityPub)
 }
 
 // ConnectToPeer attempts to connect to a peer.

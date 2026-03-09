@@ -386,7 +386,11 @@ func DepositToMailbox(ctx context.Context, h host.Host, mailboxPeerID string, ta
 	}
 
 	// Sign request
-	signature, err := crypto.Sign(senderIdentity.Ed25519PrivKey, mustMarshal(req))
+	reqData, err := proto.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal deposit request: %w", err)
+	}
+	signature, err := crypto.Sign(senderIdentity.Ed25519PrivKey, reqData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign request: %w", err)
 	}
@@ -465,11 +469,3 @@ func generateRequestID() uint64 {
 	return binary.BigEndian.Uint64(buf[:])
 }
 
-// mustMarshal marshals a protobuf message, panicking on error
-func mustMarshal(msg proto.Message) []byte {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		panic(err)
-	}
-	return data
-}

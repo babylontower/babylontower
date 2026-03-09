@@ -13,6 +13,9 @@ import (
 
 // TestSubscriptionLifecycle tests subscription creation and cleanup
 func TestSubscriptionLifecycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -63,6 +66,9 @@ func TestSubscriptionLifecycle(t *testing.T) {
 
 // TestPublishSubscribe tests basic pubsub functionality
 func TestPublishSubscribe(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -117,6 +123,9 @@ func TestPublishSubscribe(t *testing.T) {
 
 // TestPublishToPublicKey tests publishing to a topic derived from public key
 func TestPublishToPublicKey(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -178,6 +187,9 @@ func TestPublishToPublicKey(t *testing.T) {
 
 // TestMultipleSubscriptions tests multiple subscriptions on same topic
 func TestMultipleSubscriptions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -256,6 +268,9 @@ func TestMultipleSubscriptions(t *testing.T) {
 
 // TestListTopicsAndPeers tests listing topics and peers
 func TestListTopicsAndPeers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,

@@ -390,7 +390,7 @@ func TestSFURelayForLargeGroups(t *testing.T) {
 
 // BenchmarktestCallSessionCreation benchmarks call session creation
 func BenchmarkCallSessionCreation(b *testing.B) {
-	alice, bob := setupTwoUsers(&testing.T{})
+	alice, bob := setupTwoUsers(b)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -407,7 +407,7 @@ func BenchmarkCallSessionCreation(b *testing.B) {
 
 // BenchmarkSignalingMessageSigning benchmarks signaling message signing
 func BenchmarkSignalingMessageSigning(b *testing.B) {
-	alice, _ := setupTwoUsers(&testing.T{})
+	alice, _ := setupTwoUsers(b)
 	msg := &SignalingMessage{
 		Type:      MSG_TYPE_OFFER,
 		CallID:    "test-call-id",
@@ -508,7 +508,7 @@ type ICECandidate struct {
 	MLineIndex uint32
 }
 
-func setupTwoUsers(t *testing.T) (*identity.IdentityV1, *identity.IdentityV1) {
+func setupTwoUsers(t testing.TB) (*identity.IdentityV1, *identity.IdentityV1) {
 	aliceEntropy, _ := bip39.NewEntropy(128)
 	aliceMnemonic, _ := bip39.NewMnemonic(aliceEntropy)
 	alice, _ := identity.NewIdentityV1(aliceMnemonic, "Alice")

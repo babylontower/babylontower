@@ -89,7 +89,7 @@ func (tc *topicCache) closeAll() {
 // Subscribe subscribes to a topic and returns a subscription
 // The subscription receives messages via the Messages channel
 func (n *Node) Subscribe(topic string) (*Subscription, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 
@@ -130,7 +130,7 @@ func (n *Node) Subscribe(topic string) (*Subscription, error) {
 // Publish publishes data to a topic
 // Returns the sequence number of the published message
 func (n *Node) Publish(topic string, data []byte) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -165,7 +165,7 @@ func (n *Node) PublishTo(pubKey []byte, data []byte) error {
 // This ensures messages are not published into the void when no peers are connected
 // timeout: maximum time to wait for peers (use 0 for no wait)
 func (n *Node) PublishWithPeerWait(topic string, data []byte, timeout time.Duration) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -181,6 +181,7 @@ func (n *Node) PublishWithPeerWait(topic string, data []byte, timeout time.Durat
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
+	waitLoop:
 		for {
 			select {
 			case <-ctx.Done():
@@ -190,6 +191,7 @@ func (n *Node) PublishWithPeerWait(topic string, data []byte, timeout time.Durat
 					"waited", timeout,
 					"peer_count", peerCount)
 				// Continue anyway - message may still propagate
+				break waitLoop
 			case <-ticker.C:
 				peerCount := len(n.pubsub.ListPeers(topic))
 				if peerCount > 0 {
@@ -199,7 +201,6 @@ func (n *Node) PublishWithPeerWait(topic string, data []byte, timeout time.Durat
 					goto publish
 				}
 			}
-			break // Exit after timeout
 		}
 	}
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"babylontower/pkg/crypto"
+	bterrors "babylontower/pkg/errors"
 	pb "babylontower/pkg/proto"
 
 	"golang.org/x/crypto/curve25519"
@@ -16,9 +17,10 @@ import (
 )
 
 var (
-	ErrInvalidSignature = errors.New("invalid signature")
-	ErrInvalidEnvelope  = errors.New("invalid envelope")
-	ErrDecryptionFailed = errors.New("decryption failed")
+	// Aliases to canonical sentinels in pkg/errors for cross-package errors.Is() compatibility.
+	ErrInvalidSignature = bterrors.ErrInvalidSignature
+	ErrInvalidEnvelope  = bterrors.ErrInvalidEnvelope
+	ErrDecryptionFailed = bterrors.ErrDecryptionFailed
 )
 
 // BuildMessage creates a new Message protobuf with the given text and timestamp
@@ -239,6 +241,32 @@ func CreateOutgoingMessage(
 	return SignEnvelope(envelope, senderEd25519PrivKey)
 }
 
+// BuildMessageForTesting builds a message without sending.
+// Useful for testing the encryption/decryption flow.
+func BuildMessageForTesting(
+	text string,
+	recipientX25519PubKey []byte,
+	senderPrivKey ed25519.PrivateKey,
+) (*pb.SignedEnvelope, *pb.Message, error) {
+	msg := BuildMessageNow(text)
+	plaintext, err := proto.Marshal(msg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	envelope, _, err := BuildEnvelope(plaintext, recipientX25519PubKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build envelope: %w", err)
+	}
+
+	signedEnvelope, err := SignEnvelope(envelope, senderPrivKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to sign envelope: %w", err)
+	}
+
+	return signedEnvelope, msg, nil
+}
+
 // ProcessIncomingMessage performs the complete incoming message flow
 func ProcessIncomingMessage(
 	signedEnvelope *pb.SignedEnvelope,
@@ -271,80 +299,3 @@ func ProcessIncomingMessage(
 	return msg, senderPubKey, nil
 }
 
-// encryptEphemeralKey encrypts the ephemeral private key for local storage
-// IMPORTANT: This encrypted key is NOT sent over the network - only stored locally
-func encryptEphemeralKey(
-	ephemeralPrivKey []byte,
-	senderX25519PrivKey []byte,
-	recipientX25519PubKey []byte,
-) ([]byte, error) {
-	sharedSecret, err := crypto.ComputeSharedSecret(senderX25519PrivKey, recipientX25519PubKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
-	}
-
-	encryptionKey, err := crypto.DeriveKey(sharedSecret, nil, []byte("ephemeral-key-encryption"), crypto.KeySize)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive encryption key: %w", err)
-	}
-
-	nonce, err := crypto.GenerateNonce()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate nonce: %w", err)
-	}
-
-	ciphertext, err := crypto.Encrypt(encryptionKey, nonce, ephemeralPrivKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt ephemeral key: %w", err)
-	}
-
-	encrypted := make([]byte, len(nonce)+len(ciphertext))
-	copy(encrypted[:len(nonce)], nonce)
-	copy(encrypted[len(nonce):], ciphertext)
-
-	return encrypted, nil
-}
-
-// decryptEphemeralKey decrypts the ephemeral private key from local storage
-func decryptEphemeralKey(
-	encryptedData []byte,
-	senderX25519PrivKey []byte,
-	recipientX25519PubKey []byte,
-) ([]byte, error) {
-	if len(encryptedData) < crypto.NonceSize {
-		return nil, errors.New("encrypted data too short")
-	}
-
-	nonce := encryptedData[:crypto.NonceSize]
-	ciphertext := encryptedData[crypto.NonceSize:]
-
-	sharedSecret, err := crypto.ComputeSharedSecret(senderX25519PrivKey, recipientX25519PubKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute shared secret: %w", err)
-	}
-
-	encryptionKey, err := crypto.DeriveKey(sharedSecret, nil, []byte("ephemeral-key-encryption"), crypto.KeySize)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive encryption key: %w", err)
-	}
-
-	plaintext, err := crypto.Decrypt(encryptionKey, nonce, ciphertext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt ephemeral key: %w", err)
-	}
-
-	return plaintext, nil
-}
-
-// decryptEphemeralKeyFromEnvelope decrypts the ephemeral private key stored in a SignedEnvelope
-func decryptEphemeralKeyFromEnvelope(
-	signedEnvelope *pb.SignedEnvelope,
-	ownX25519PrivKey []byte,
-	recipientX25519PubKey []byte,
-) ([]byte, error) {
-	if len(signedEnvelope.EncryptedEphemeralPriv) == 0 {
-		return nil, nil
-	}
-
-	return decryptEphemeralKey(signedEnvelope.EncryptedEphemeralPriv, ownX25519PrivKey, recipientX25519PubKey)
-}

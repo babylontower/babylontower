@@ -29,64 +29,47 @@ import (
 //   - BootstrapResult with detailed statistics
 //   - Error if timeout occurs or bootstrap fails
 func (n *Node) BootstrapAndWait(timeout time.Duration) (*BootstrapResult, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 
 	startTime := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 
 	logger.Infow("bootstrap initiated, waiting for completion",
 		"timeout", timeout,
 		"start_time", startTime)
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	// Wait for IPFS bootstrap (transport layer)
-	ipfsTicker := time.NewTicker(500 * time.Millisecond)
-	defer ipfsTicker.Stop()
+	select {
+	case <-n.ipfsBootstrapDone:
+		logger.Info("IPFS DHT bootstrap complete")
+	case <-timer.C:
+		result := n.collectBootstrapResult(startTime)
+		return result, fmt.Errorf("bootstrap timeout: IPFS DHT not ready")
+	case <-n.ctx.Done():
+		result := n.collectBootstrapResult(startTime)
+		return result, n.ctx.Err()
+	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			// Timeout - return partial result
-			result := n.collectBootstrapResult(startTime)
-			if !n.ipfsBootstrapComplete.Load() {
-				return result, fmt.Errorf("bootstrap timeout: IPFS DHT not ready")
-			}
-			return result, fmt.Errorf("bootstrap timeout: Babylon DHT not ready")
-
-		case <-ipfsTicker.C:
-			if n.ipfsBootstrapComplete.Load() {
-				logger.Info("IPFS DHT bootstrap complete")
-
-				// Now wait for Babylon bootstrap
-				babylonTicker := time.NewTicker(500 * time.Millisecond)
-				for {
-					select {
-					case <-ctx.Done():
-						babylonTicker.Stop()
-						result := n.collectBootstrapResult(startTime)
-						if !n.babylonBootstrapComplete.Load() {
-							return result, fmt.Errorf("bootstrap timeout: Babylon DHT not ready")
-						}
-						return result, nil
-
-					case <-babylonTicker.C:
-						if n.babylonBootstrapComplete.Load() {
-							babylonTicker.Stop()
-							logger.Info("Babylon DHT bootstrap complete")
-							result := n.collectBootstrapResult(startTime)
-							return result, nil
-						} else if n.babylonBootstrapDeferred.Load() {
-							babylonTicker.Stop()
-							logger.Info("Babylon DHT bootstrap deferred (lazy mode)")
-							result := n.collectBootstrapResult(startTime)
-							return result, nil
-						}
-					}
-				}
-			}
+	// Wait for Babylon bootstrap (protocol layer)
+	select {
+	case <-n.babylonBootstrapDone:
+		if n.babylonBootstrapComplete.Load() {
+			logger.Info("Babylon DHT bootstrap complete")
+		} else {
+			logger.Info("Babylon DHT bootstrap deferred (lazy mode)")
 		}
+		result := n.collectBootstrapResult(startTime)
+		return result, nil
+	case <-timer.C:
+		result := n.collectBootstrapResult(startTime)
+		return result, fmt.Errorf("bootstrap timeout: Babylon DHT not ready")
+	case <-n.ctx.Done():
+		result := n.collectBootstrapResult(startTime)
+		return result, n.ctx.Err()
 	}
 }
 
@@ -127,7 +110,7 @@ func (n *Node) IsBootstrapComplete() bool {
 // ConnectToPeers connects to multiple peers in parallel
 // Returns the number of successful and failed connections
 func (n *Node) ConnectToPeers(maddrs []string) (connected int, failed int) {
-	if !n.isStarted || len(maddrs) == 0 {
+	if !n.isStarted.Load() || len(maddrs) == 0 {
 		return 0, 0
 	}
 
@@ -163,7 +146,7 @@ func (n *Node) ConnectToPeers(maddrs []string) (connected int, failed int) {
 
 // DisconnectFromPeer disconnects from a peer by peer ID
 func (n *Node) DisconnectFromPeer(peerID string) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -177,7 +160,7 @@ func (n *Node) DisconnectFromPeer(peerID string) error {
 
 // ListConnectedPeers returns information about all connected peers
 func (n *Node) ListConnectedPeers() []PeerInfo {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil
 	}
 

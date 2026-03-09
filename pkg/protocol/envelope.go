@@ -25,11 +25,12 @@ const (
 
 // Topic prefixes for Protocol v1 routing
 const (
-	TopicDMPrefix         = "babylon-dm-"
-	TopicGroupPrefix      = "babylon-grp-"
-	TopicChannelPrefix    = "babylon-ch-"
-	TopicRevocationPrefix = "babylon-rev-"
-	TopicSyncPrefix       = "babylon-sync-"
+	TopicDMPrefix          = "babylon-dm-"
+	TopicGroupPrefix       = "babylon-grp-"
+	TopicPublicGroupPrefix = "babylon-pub-"
+	TopicChannelPrefix     = "babylon-ch-"
+	TopicRevocationPrefix  = "babylon-rev-"
+	TopicSyncPrefix        = "babylon-sync-"
 )
 
 // EnvelopeBuilder helps construct BabylonEnvelope messages
@@ -212,7 +213,7 @@ func (b *EnvelopeBuilder) Build() (*pb.BabylonEnvelope, error) {
 
 // signEnvelope signs the envelope fields 1-10
 func (b *EnvelopeBuilder) signEnvelope(env *pb.BabylonEnvelope) ([]byte, error) {
-	data, err := b.serializeForSigning(env)
+	data, err := SerializeEnvelopeForSigning(env)
 	if err != nil {
 		return nil, err
 	}
@@ -220,8 +221,9 @@ func (b *EnvelopeBuilder) signEnvelope(env *pb.BabylonEnvelope) ([]byte, error) 
 	return signature, nil
 }
 
-// serializeForSigning serializes envelope fields 1-10 for signing
-func (b *EnvelopeBuilder) serializeForSigning(env *pb.BabylonEnvelope) ([]byte, error) {
+// SerializeEnvelopeForSigning serializes BabylonEnvelope fields 1-10 for signing.
+// This is the canonical serialization used by both signing and verification.
+func SerializeEnvelopeForSigning(env *pb.BabylonEnvelope) ([]byte, error) {
 	data := make([]byte, 0, 256)
 
 	// Field 1: protocol_version (4 bytes)
@@ -280,46 +282,10 @@ func VerifyEnvelope(env *pb.BabylonEnvelope) error {
 		return errors.New("invalid sender identity length")
 	}
 
-	// Create temporary builder for verification
-	data := make([]byte, 0, 256)
-
-	// Serialize fields 1-10 (same as signing)
-	verBytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(verBytes, env.ProtocolVersion)
-	data = append(data, verBytes...)
-
-	typeBytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(typeBytes, uint32(env.MessageType))
-	data = append(data, typeBytes...)
-
-	data = append(data, env.SenderIdentity...)
-
-	if len(env.RecipientIdentity) > 0 {
-		data = append(data, env.RecipientIdentity...)
+	data, err := SerializeEnvelopeForSigning(env)
+	if err != nil {
+		return fmt.Errorf("failed to serialize for verification: %w", err)
 	}
-
-	tsBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(tsBytes, env.Timestamp)
-	data = append(data, tsBytes...)
-
-	data = append(data, env.MessageId...)
-
-	if len(env.GroupId) > 0 {
-		data = append(data, env.GroupId...)
-	}
-
-	if len(env.ChannelId) > 0 {
-		data = append(data, env.ChannelId...)
-	}
-
-	if len(env.Payload) > 0 {
-		lenBytes := make([]byte, 4)
-		binary.LittleEndian.PutUint32(lenBytes, uint32(len(env.Payload)))
-		data = append(data, lenBytes...)
-		data = append(data, env.Payload...)
-	}
-
-	data = append(data, env.SenderDeviceId...)
 
 	if !ed25519.Verify(env.SenderIdentity, data, env.Signature) {
 		return errors.New("invalid envelope signature")
@@ -335,11 +301,19 @@ func DeriveDMTopic(recipientIdentity ed25519.PublicKey) string {
 	return TopicDMPrefix + hexPrefix
 }
 
-// DeriveGroupTopic derives the group topic from group ID
+// DeriveGroupTopic derives the private group topic from group ID
 func DeriveGroupTopic(groupID []byte) string {
 	hash := sha256.Sum256(groupID)
 	hexPrefix := hex.EncodeToString(hash[:8])
 	return TopicGroupPrefix + hexPrefix
+}
+
+// DerivePublicGroupTopic derives the public group topic from group ID
+// Per §4.3: Public groups MUST use "babylon-pub-" prefix (distinct from "babylon-grp-")
+func DerivePublicGroupTopic(groupID []byte) string {
+	hash := sha256.Sum256(groupID)
+	hexPrefix := hex.EncodeToString(hash[:8])
+	return TopicPublicGroupPrefix + hexPrefix
 }
 
 // DeriveChannelTopic derives the channel topic from channel ID

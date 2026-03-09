@@ -46,7 +46,7 @@ func (s *DoubleRatchetState) Encrypt(plaintext, associatedData []byte) (*Encrypt
 	}
 
 	// Encrypt using XChaCha20-Poly1305
-	aead, err := chacha20poly1305.New(messageKey)
+	aead, err := chacha20poly1305.NewX(messageKey)
 	if err != nil {
 		zeroBytes(messageKey)
 		zeroBytes(nonce)
@@ -302,7 +302,7 @@ func decryptWithKey(messageKey []byte, counter uint32, ciphertext, associatedDat
 		return nil, err
 	}
 
-	aead, err := chacha20poly1305.New(messageKey)
+	aead, err := chacha20poly1305.NewX(messageKey)
 	if err != nil {
 		return nil, err
 	}

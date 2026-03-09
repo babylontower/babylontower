@@ -122,8 +122,7 @@ func prekeyBundleKey(identityPubHash []byte) []byte {
 
 // SaveIdentityDocument stores an identity document
 func (s *BadgerStorage) SaveIdentityDocument(identityPub ed25519.PublicKey, record *IdentityDocumentRecord) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	// Compute identity pubkey hash for key derivation
 	hash := sha256.Sum256(identityPub)
@@ -146,8 +145,7 @@ func (s *BadgerStorage) SaveIdentityDocument(identityPub ed25519.PublicKey, reco
 
 // GetIdentityDocument retrieves an identity document by identity public key
 func (s *BadgerStorage) GetIdentityDocument(identityPub ed25519.PublicKey) (*IdentityDocumentRecord, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	hash := sha256.Sum256(identityPub)
 	key := identityKey(hash[:16])
@@ -176,8 +174,7 @@ func (s *BadgerStorage) GetIdentityDocument(identityPub ed25519.PublicKey) (*Ide
 
 // SaveDeviceCertificate stores a device certificate
 func (s *BadgerStorage) SaveDeviceCertificate(deviceID []byte, cert *pb.DeviceCertificate) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := deviceKey(deviceID)
 
@@ -198,8 +195,7 @@ func (s *BadgerStorage) SaveDeviceCertificate(deviceID []byte, cert *pb.DeviceCe
 
 // GetDeviceCertificate retrieves a device certificate by device ID
 func (s *BadgerStorage) GetDeviceCertificate(deviceID []byte) (*pb.DeviceCertificate, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := deviceKey(deviceID)
 
@@ -227,8 +223,7 @@ func (s *BadgerStorage) GetDeviceCertificate(deviceID []byte) (*pb.DeviceCertifi
 
 // SaveSignedPrekey stores a signed prekey
 func (s *BadgerStorage) SaveSignedPrekey(spk *pb.SignedPrekey) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := spkKey(spk.PrekeyId)
 
@@ -249,8 +244,7 @@ func (s *BadgerStorage) SaveSignedPrekey(spk *pb.SignedPrekey) error {
 
 // GetSignedPrekey retrieves a signed prekey by prekey ID
 func (s *BadgerStorage) GetSignedPrekey(prekeyID uint64) (*pb.SignedPrekey, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := spkKey(prekeyID)
 
@@ -278,8 +272,7 @@ func (s *BadgerStorage) GetSignedPrekey(prekeyID uint64) (*pb.SignedPrekey, erro
 
 // SaveOneTimePrekey stores a one-time prekey
 func (s *BadgerStorage) SaveOneTimePrekey(opk *pb.OneTimePrekey) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := opkKey(opk.PrekeyId)
 
@@ -300,8 +293,7 @@ func (s *BadgerStorage) SaveOneTimePrekey(opk *pb.OneTimePrekey) error {
 
 // GetOneTimePrekey retrieves a one-time prekey by prekey ID
 func (s *BadgerStorage) GetOneTimePrekey(prekeyID uint64) (*pb.OneTimePrekey, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := opkKey(prekeyID)
 
@@ -329,8 +321,7 @@ func (s *BadgerStorage) GetOneTimePrekey(prekeyID uint64) (*pb.OneTimePrekey, er
 
 // DeleteOneTimePrekey removes a consumed one-time prekey
 func (s *BadgerStorage) DeleteOneTimePrekey(prekeyID uint64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := opkKey(prekeyID)
 
@@ -346,8 +337,7 @@ func (s *BadgerStorage) DeleteOneTimePrekey(prekeyID uint64) error {
 
 // ListOneTimePrekeys lists all stored one-time prekeys
 func (s *BadgerStorage) ListOneTimePrekeys() ([]*pb.OneTimePrekey, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var opks []*pb.OneTimePrekey
 
@@ -380,8 +370,7 @@ func (s *BadgerStorage) ListOneTimePrekeys() ([]*pb.OneTimePrekey, error) {
 
 // SaveSessionState stores a Double Ratchet session state
 func (s *BadgerStorage) SaveSessionState(state *SessionState) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := sessionKey(state.SessionID)
 
@@ -402,8 +391,7 @@ func (s *BadgerStorage) SaveSessionState(state *SessionState) error {
 
 // GetSessionState retrieves a session state by session ID
 func (s *BadgerStorage) GetSessionState(sessionID string) (*SessionState, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := sessionKey(sessionID)
 
@@ -431,8 +419,7 @@ func (s *BadgerStorage) GetSessionState(sessionID string) (*SessionState, error)
 
 // SavePrekeyBundleCache stores a prekey bundle cache
 func (s *BadgerStorage) SavePrekeyBundleCache(identityPub ed25519.PublicKey, cache *PrekeyBundleCache) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	hash := sha256.Sum256(identityPub)
 	key := prekeyBundleKey(hash[:16])
@@ -454,8 +441,7 @@ func (s *BadgerStorage) SavePrekeyBundleCache(identityPub ed25519.PublicKey, cac
 
 // GetPrekeyBundleCache retrieves a prekey bundle cache
 func (s *BadgerStorage) GetPrekeyBundleCache(identityPub ed25519.PublicKey) (*PrekeyBundleCache, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	hash := sha256.Sum256(identityPub)
 	key := prekeyBundleKey(hash[:16])
@@ -484,8 +470,7 @@ func (s *BadgerStorage) GetPrekeyBundleCache(identityPub ed25519.PublicKey) (*Pr
 
 // CountOneTimePrekeys counts the number of stored one-time prekeys
 func (s *BadgerStorage) CountOneTimePrekeys() (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	count := 0
 

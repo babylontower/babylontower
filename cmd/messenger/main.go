@@ -195,7 +195,7 @@ func loadAppConfig(dataDir, configFile, logLevel, logFile string) (*app.AppConfi
 		IPFSDir:      filepath.Join(dataDir, "ipfs"),
 		LogLevel:     cfg.Logging.Level,
 		LogFile:      resolvePath(cfg.Logging.File, dataDir),
-		IPFSConfig:   cfg.ToIPFSConfig(),
+		NetworkConfig: cfg.ToIPFSConfig(),
 	}, nil
 }
 

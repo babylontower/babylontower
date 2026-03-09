@@ -43,6 +43,9 @@ func TestNodeOperationsBeforeStart(t *testing.T) {
 
 // TestAddData tests adding data to IPFS
 func TestAddData(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -79,6 +82,9 @@ func TestAddData(t *testing.T) {
 
 // TestConnectToPeersParallel tests parallel peer connection
 func TestConnectToPeersParallel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -108,6 +114,9 @@ func TestConnectToPeersParallel(t *testing.T) {
 
 // TestConnectToBootstrapPeersWithDNS tests DNS resolution for bootstrap peers
 func TestConnectToBootstrapPeersWithDNS(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,

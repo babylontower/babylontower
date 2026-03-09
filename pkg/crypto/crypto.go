@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 
+	bterrors "babylontower/pkg/errors"
+
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
@@ -27,8 +29,8 @@ const (
 var SecureRandom = rand.Reader
 
 var (
-	// ErrDecryptionFailed is returned when decryption fails
-	ErrDecryptionFailed = errors.New("decryption failed")
+	// ErrDecryptionFailed aliases the canonical sentinel from pkg/errors.
+	ErrDecryptionFailed = bterrors.ErrDecryptionFailed
 	// ErrInvalidKeySize is returned when a key has an invalid size
 	ErrInvalidKeySize = errors.New("invalid key size")
 	// ErrInvalidNonceSize is returned when a nonce has an invalid size

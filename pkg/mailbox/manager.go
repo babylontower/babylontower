@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -123,7 +124,7 @@ func (m *Manager) Start() error {
 
 	// Wait for Babylon DHT bootstrap before attempting announcements
 	// This ensures we're connected to Babylon network for proper DHT operations
-	if err := m.ipfsNode.WaitForBabylonBootstrap(60 * time.Second); err != nil {
+	if err := m.ipfsNode.WaitForBabylonBootstrap(15 * time.Second); err != nil {
 		logger.Warnw("Babylon DHT bootstrap timeout, mailbox DHT announcements may fail", "error", err)
 		// Continue anyway - mailbox can still work via direct peer connections
 	}
@@ -180,12 +181,14 @@ func (m *Manager) Stop() error {
 }
 
 // DepositMessage deposits a message for a recipient
-// This is called when the recipient is offline
+// Per §6.2: Check PubSub subscribers first; if no subscribers within 5 seconds,
+// recipient is assumed offline and mailbox deposit proceeds.
 //
 // Delivery strategy (per protocol v1, Section 6):
-// 1. Try connected peers that accept mailbox deposits (direct libp2p stream)
-// 2. Try DHT-discovered mailboxes (up to 3, in parallel)
-// 3. If no mailbox available, log warning and return (message already sent via PubSub)
+// 1. Check if recipient is online (PubSub subscriber check with 5s timeout)
+// 2. Try connected peers that accept mailbox deposits (direct libp2p stream)
+// 3. Try DHT-discovered mailboxes (up to 3, in parallel)
+// 4. If no mailbox available, store locally as fallback
 func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, envelope *pb.BabylonEnvelope) error {
 	// Validate inputs to prevent panics
 	if len(recipientPubkey) == 0 {
@@ -193,6 +196,14 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 	}
 	if envelope == nil {
 		return errors.New("envelope is nil")
+	}
+
+	// §6.2: Check if recipient is online before depositing to mailbox
+	// "If no topic subscribers within 5 seconds, recipient is assumed offline"
+	if m.ipfsNode != nil && !CheckOffline(m.ipfsNode, recipientPubkey) {
+		logger.Debugw("recipient appears online (has PubSub subscribers), skipping mailbox deposit",
+			"recipient", hex.EncodeToString(recipientPubkey)[:16])
+		return nil
 	}
 
 	logger.Infow("depositing message to mailbox",
@@ -253,9 +264,14 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 	}
 
 	if len(mailboxes) > 0 {
+		// §6.2: Sort by reputation score (highest first) for selection heuristic
+		sort.Slice(mailboxes, func(i, j int) bool {
+			return mailboxes[i].ReputationScore > mailboxes[j].ReputationScore
+		})
+
 		logger.Debugw("found DHT mailboxes", "count", len(mailboxes))
 
-		// Try up to 3 mailboxes in parallel
+		// Try up to 3 mailboxes in parallel (highest reputation first)
 		maxMailboxes := 3
 		if len(mailboxes) < maxMailboxes {
 			maxMailboxes = len(mailboxes)
@@ -296,6 +312,7 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 		// Collect results
 		successCount := 0
 		var lastErr error
+	collectLoop:
 		for i := 0; i < maxMailboxes; i++ {
 			select {
 			case result := <-results:
@@ -311,7 +328,7 @@ func (m *Manager) DepositMessage(ctx context.Context, recipientPubkey []byte, en
 						"error", result.err)
 				}
 			case <-done:
-				break
+				break collectLoop
 			}
 		}
 
@@ -366,12 +383,15 @@ type MailboxRetrievalResult struct {
 	MessageIDs [][]byte
 }
 
-// RetrieveMessages retrieves messages from mailbox nodes
+// RetrieveMessages retrieves messages from mailbox nodes.
+// Per §6.3: Recipient deduplicates by message_id.
 // Strategy: Query connected peers first (they may have stored messages for us),
-// then check local storage, then try DHT-discovered mailboxes
+// then check local storage, then try DHT-discovered mailboxes.
 func (m *Manager) RetrieveMessages(ctx context.Context) (*MailboxRetrievalResult, error) {
 	var allEnvelopes []*pb.BabylonEnvelope
 	var allMessageIDs [][]byte
+	// §6.3: Track seen message IDs for deduplication across sources
+	seenIDs := make(map[string]bool)
 
 	logger.Infow("retrieving messages from mailbox", "method", "starting")
 
@@ -412,15 +432,23 @@ func (m *Manager) RetrieveMessages(ctx context.Context) (*MailboxRetrievalResult
 					"count", len(resp.Envelopes))
 			}
 
-			// Parse envelopes from response
-			for _, envData := range resp.Envelopes {
+			// Parse envelopes from response (with deduplication)
+			for i, envData := range resp.Envelopes {
 				envelope := &pb.BabylonEnvelope{}
 				if err := proto.Unmarshal(envData, envelope); err != nil {
 					continue
 				}
+				// §6.3: Deduplicate by message_id
+				msgIDKey := hex.EncodeToString(envelope.MessageId)
+				if seenIDs[msgIDKey] {
+					continue
+				}
+				seenIDs[msgIDKey] = true
 				allEnvelopes = append(allEnvelopes, envelope)
+				if i < len(resp.MessageIds) {
+					allMessageIDs = append(allMessageIDs, resp.MessageIds[i])
+				}
 			}
-			allMessageIDs = append(allMessageIDs, resp.MessageIds...)
 
 			// Acknowledge receipt from this peer
 			if len(resp.MessageIds) > 0 {
@@ -441,6 +469,12 @@ func (m *Manager) RetrieveMessages(ctx context.Context) (*MailboxRetrievalResult
 			if err := proto.Unmarshal(msg.Envelope, envelope); err != nil {
 				continue
 			}
+			// §6.3: Deduplicate by message_id
+			msgIDKey := hex.EncodeToString(envelope.MessageId)
+			if seenIDs[msgIDKey] {
+				continue
+			}
+			seenIDs[msgIDKey] = true
 			allEnvelopes = append(allEnvelopes, envelope)
 			allMessageIDs = append(allMessageIDs, msg.MessageID)
 		}
@@ -468,14 +502,22 @@ func (m *Manager) RetrieveMessages(ctx context.Context) (*MailboxRetrievalResult
 					"count", len(resp.Envelopes))
 			}
 
-			for _, envData := range resp.Envelopes {
+			for i, envData := range resp.Envelopes {
 				envelope := &pb.BabylonEnvelope{}
 				if err := proto.Unmarshal(envData, envelope); err != nil {
 					continue
 				}
+				// §6.3: Deduplicate by message_id
+				msgIDKey := hex.EncodeToString(envelope.MessageId)
+				if seenIDs[msgIDKey] {
+					continue
+				}
+				seenIDs[msgIDKey] = true
 				allEnvelopes = append(allEnvelopes, envelope)
+				if i < len(resp.MessageIds) {
+					allMessageIDs = append(allMessageIDs, resp.MessageIds[i])
+				}
 			}
-			allMessageIDs = append(allMessageIDs, resp.MessageIds...)
 
 			if len(resp.MessageIds) > 0 {
 				_, _ = AcknowledgeMessages(ctx, m.host, string(mailbox.MailboxPeerId), m.identity, resp.MessageIds)

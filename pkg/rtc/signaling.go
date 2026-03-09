@@ -207,24 +207,22 @@ func (s *SignalingService) SendHangup(callID string, reason string) error {
 	return nil
 }
 
-// sendSignalingMessage sends a signaling message through the messaging service
+// sendSignalingMessage sends a signaling message through the messaging service.
+// Per §8.1: RTC signaling is carried as DM through Double Ratchet encryption.
 func (s *SignalingService) sendSignalingMessage(
 	recipientPubKey []byte,
 	messageType pb.MessageType,
 	payload []byte,
 ) error {
-	// The messaging service should handle the actual encryption and transmission
-	// This is a placeholder that would integrate with the messaging service's
-	// Double Ratchet encryption
+	if s.messaging == nil {
+		return ErrSignalingNotStarted
+	}
 
-	// For now, we'll log the signaling message
 	logger.Debugw("sending signaling message", "type", messageType.String(), "remote", hex.EncodeToString(recipientPubKey)[:16])
 
-	// TODO: Integrate with messaging service to send encrypted signaling message
-	// The messaging service needs to be extended to support sending raw payloads
-	// that are encrypted with the Double Ratchet but not wrapped in DMPayload
-
-	return nil
+	// Send RTC signaling as a DM via the messaging service's SendSignalingPayload.
+	// The messaging service encrypts with Double Ratchet and transmits via PubSub.
+	return s.messaging.SendSignalingPayload(recipientPubKey, messageType, payload)
 }
 
 // HandleSignalingMessage processes an incoming signaling message

@@ -152,34 +152,6 @@ func TestCLICommands(t *testing.T) {
 	t.Log("✓ CLI commands responsive")
 }
 
-// TestContactAddition tests adding contacts
-func TestContactAddition(t *testing.T) {
-	binaryPath := findBinary()
-	if binaryPath == "" {
-		t.Skip("Binary not found. Run 'make build' first")
-	}
-
-	env, alice, bob, err := testutil.CreateTwoInstanceSetup(binaryPath)
-	if err != nil {
-		t.Fatalf("Failed to create test setup: %v", err)
-	}
-	defer env.Cleanup()
-
-	if alice.PublicKey == "" || bob.PublicKey == "" {
-		t.Fatal("Public keys not available")
-	}
-
-	t.Logf("Alice adding Bob as contact: %s", bob.PublicKey)
-	t.Logf("Bob adding Alice as contact: %s", alice.PublicKey)
-
-	// In a full implementation, we would:
-	// 1. Send /add command with public key
-	// 2. Verify contact appears in /list
-	// 3. Verify duplicate contact is rejected
-
-	t.Log("✓ Contact addition flow validated")
-}
-
 // Helper functions
 
 func findBinary() string {

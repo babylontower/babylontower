@@ -169,30 +169,29 @@ func TestBlacklistEntryIsExpired(t *testing.T) {
 }
 
 func TestBlacklistPersistence(t *testing.T) {
-	storage := setupTestStorage(t)
-	defer func() {
-		if err := storage.Close(); err != nil {
-			t.Errorf("Close failed: %v", err)
-		}
-	}()
+	dir := t.TempDir()
+	storage, err := NewBadgerStorage(Config{Path: dir})
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
 
 	peerID := "QmPersistent"
 	reason := "Persistent test"
 
 	// Blacklist peer
-	err := storage.BlacklistPeer(peerID, reason)
+	err = storage.BlacklistPeer(peerID, reason)
 	if err != nil {
 		t.Fatalf("BlacklistPeer failed: %v", err)
 	}
 
-	// Close and reopen storage
+	// Close and reopen storage from the same directory
 	if err := storage.Close(); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
 
-	storage2, err := NewBadgerStorage(Config{Path: t.TempDir()})
+	storage2, err := NewBadgerStorage(Config{Path: dir})
 	if err != nil {
-		t.Fatalf("Failed to create new storage: %v", err)
+		t.Fatalf("Failed to reopen storage: %v", err)
 	}
 	defer func() {
 		if err := storage2.Close(); err != nil {
@@ -200,9 +199,14 @@ func TestBlacklistPersistence(t *testing.T) {
 		}
 	}()
 
-	// Note: BadgerDB persists to disk, but we're using a new temp dir
-	// This test verifies the blacklist API works across storage instances
-	// For true persistence test, we'd need to use the same directory
+	// Verify blacklisted peer persisted across restart
+	isBlacklisted, err := storage2.IsBlacklisted(peerID)
+	if err != nil {
+		t.Fatalf("IsBlacklisted failed: %v", err)
+	}
+	if !isBlacklisted {
+		t.Error("Peer should still be blacklisted after storage restart")
+	}
 }
 
 func TestBlacklistConcurrent(t *testing.T) {

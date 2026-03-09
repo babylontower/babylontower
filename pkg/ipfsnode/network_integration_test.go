@@ -16,7 +16,7 @@ import (
 func TestTwoNodePubSub(t *testing.T) {
 	t.Log("=== Two-Node PubSub Test ===")
 
-	_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Create temporary directories for nodes
@@ -114,7 +114,7 @@ func TestTwoNodePubSub(t *testing.T) {
 		}
 		t.Log("✓ Message received correctly")
 
-	case <-time.After(5 * time.Second):
+	case <-ctx.Done():
 		t.Error("Timeout waiting for message")
 	}
 

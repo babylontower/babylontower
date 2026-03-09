@@ -37,16 +37,17 @@ func NewNode(config *Config) (*Node, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	node := &Node{
-		config:              config,
-		ctx:                 ctx,
-		cancel:              cancel,
-		isStarted:           false,
-		topicCache:          newTopicCache(),
-		dhtMaintenanceDone:  make(chan struct{}),
-		peerScores:          make(map[string]*PeerScore),
-		healthCheckInterval: 2 * time.Minute,
-		metrics:             NewMetricsCollector(),
-		startTime:           time.Time{}, // Will be set on Start()
+		config:               config,
+		ctx:                  ctx,
+		cancel:               cancel,
+		topicCache:           newTopicCache(),
+		dhtMaintenanceDone:   make(chan struct{}),
+		ipfsBootstrapDone:    make(chan struct{}),
+		babylonBootstrapDone: make(chan struct{}),
+		peerScores:           make(map[string]*PeerScore),
+		healthCheckInterval:  2 * time.Minute,
+		metrics:              NewMetricsCollector(),
+		startTime:            time.Time{}, // Will be set on Start()
 	}
 
 	return node, nil
@@ -65,7 +66,7 @@ func NewNode(config *Config) (*Node, error) {
 // - Discover other Babylon nodes via DHT rendezvous (O(log N) scalable)
 // - Trigger Babylon bootstrap lazily on first connection
 func (n *Node) Start() error {
-	if n.isStarted {
+	if n.isStarted.Load() {
 		return nil
 	}
 
@@ -95,7 +96,7 @@ func (n *Node) Start() error {
 	// Advertise on DHT rendezvous namespace so other Babylon nodes can find us
 	bterrors.SafeGo("rendezvous-advertise", func() {
 		// Wait for IPFS DHT to have some peers before advertising
-		if err := n.WaitForIPFSBootstrap(30 * time.Second); err != nil {
+		if err := n.WaitForIPFSBootstrap(15 * time.Second); err != nil {
 			logger.Warnw("IPFS bootstrap not ready for rendezvous, advertising anyway", "error", err)
 		}
 		n.startRendezvousAdvertise()
@@ -145,7 +146,7 @@ func (n *Node) Start() error {
 	n.startDHTMaintenance()
 
 	// ========== NODE STARTED ==========
-	n.isStarted = true
+	n.isStarted.Store(true)
 	n.startTime = time.Now()
 
 	logger.Infow("IPFS node started successfully (decoupled bootstrap)",
@@ -325,7 +326,7 @@ func (n *Node) initializeHost() error {
 
 // Stop gracefully shuts down the IPFS node
 func (n *Node) Stop() error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil
 	}
 
@@ -361,7 +362,12 @@ func (n *Node) Stop() error {
 		logger.Warnw("DHT maintenance did not stop gracefully", "timeout", "2s")
 	}
 
-	// Close DHT
+	// Close DHTs
+	if n.babylonDHT != nil {
+		if err := n.babylonDHT.Close(); err != nil {
+			logger.Warnw("Babylon DHT close error", "error", err)
+		}
+	}
 	if n.dht != nil {
 		if err := n.dht.Close(); err != nil {
 			logger.Warnw("DHT close error", "error", err)
@@ -375,7 +381,7 @@ func (n *Node) Stop() error {
 		}
 	}
 
-	n.isStarted = false
+	n.isStarted.Store(false)
 	logger.Info("IPFS node stopped")
 
 	return nil

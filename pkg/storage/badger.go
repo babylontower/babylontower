@@ -1,12 +1,12 @@
 package storage
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
-	"sync"
 	"time"
 
 	bterrors "babylontower/pkg/errors"
@@ -20,7 +20,8 @@ import (
 var logger = log.Logger("babylontower/storage")
 
 const (
-	// Key prefixes
+	// Key prefixes — §11 defines 16 prefixes for Protocol v1
+	// Core (PoC layer):
 	contactPrefix   = "c:"
 	messagePrefix   = "m:"
 	peerPrefix      = "p:"
@@ -28,6 +29,17 @@ const (
 	groupPrefix     = "g:"
 	senderKeyPrefix = "sk:"
 	blacklistPrefix = "bl:"
+	// Protocol v1 prefixes (defined in identity_v1.go):
+	//   identityPrefix     = "id:"   — Identity documents
+	//   devicePrefix       = "dev:"  — Device certificates
+	//   spkPrefix          = "spk:"  — Signed prekeys
+	//   opkPrefix          = "opk:"  — One-time prekeys
+	//   sessionPrefix      = "dr:"   — Double Ratchet sessions
+	//   prekeyBundlePrefix = "pb:"   — Prekey bundle cache
+	// Additional Protocol v1 prefixes:
+	groupStatePrefix = "gs:" // Group state (distinct from group metadata in "g:")
+	mailboxPrefix    = "mb:" // Mailbox messages
+	unreadPrefix     = "un:" // Unread message counters
 
 	// Key component sizes
 	pubKeySize    = 32
@@ -35,10 +47,10 @@ const (
 	nonceSize     = 24
 )
 
-// BadgerStorage implements Storage using BadgerDB
+// BadgerStorage implements Storage using BadgerDB.
+// No external mutex needed — BadgerDB v3 provides MVCC snapshot isolation.
 type BadgerStorage struct {
 	db *badger.DB
-	mu sync.RWMutex
 }
 
 // Config holds BadgerDB configuration
@@ -92,8 +104,7 @@ func contactKey(pubKey []byte) []byte {
 
 // AddContact stores a contact in the database
 func (s *BadgerStorage) AddContact(contact *pb.Contact) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	data, err := proto.Marshal(contact)
 	if err != nil {
@@ -114,8 +125,7 @@ func (s *BadgerStorage) AddContact(contact *pb.Contact) error {
 
 // GetContact retrieves a contact by public key
 func (s *BadgerStorage) GetContact(pubKey []byte) (*pb.Contact, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := contactKey(pubKey)
 
@@ -167,8 +177,7 @@ func (s *BadgerStorage) GetContactX25519Key(pubKey []byte) ([]byte, error) {
 
 // ListContacts returns all contacts in the database
 func (s *BadgerStorage) ListContacts() ([]*pb.Contact, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var contacts []*pb.Contact
 
@@ -201,8 +210,7 @@ func (s *BadgerStorage) ListContacts() ([]*pb.Contact, error) {
 
 // DeleteContact removes a contact from the database
 func (s *BadgerStorage) DeleteContact(pubKey []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := contactKey(pubKey)
 
@@ -216,28 +224,24 @@ func (s *BadgerStorage) DeleteContact(pubKey []byte) error {
 	return nil
 }
 
-// AddMessage stores an encrypted message for a contact
-func (s *BadgerStorage) AddMessage(contactPubKey []byte, envelope *pb.SignedEnvelope) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Parse the envelope to get timestamp and nonce
-	envData := envelope.Envelope
-	var env pb.Envelope
-	if err := proto.Unmarshal(envData, &env); err != nil {
-		return fmt.Errorf("failed to parse envelope: %w", err)
+// AddMessage stores a plaintext message for a contact
+func (s *BadgerStorage) AddMessage(contactPubKey []byte, msg *StoredMessage) error {
+	timestamp := msg.Timestamp
+	if timestamp == 0 {
+		timestamp = uint64(time.Now().Unix())
 	}
 
-	// Extract timestamp from the encrypted message
-	// We need to decrypt to get the timestamp for ordering
-	// For now, we'll use current timestamp as fallback
-	timestamp := uint64(time.Now().Unix())
+	// Generate random suffix for key uniqueness
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		return fmt.Errorf("failed to generate key suffix: %w", err)
+	}
 
-	key := messageKey(contactPubKey, timestamp, env.Nonce)
+	key := messageKey(contactPubKey, timestamp, suffix)
 
-	data, err := proto.Marshal(envelope)
+	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal envelope: %w", err)
+		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
 	err = s.db.Update(func(txn *badger.Txn) error {
@@ -250,16 +254,12 @@ func (s *BadgerStorage) AddMessage(contactPubKey []byte, envelope *pb.SignedEnve
 	return nil
 }
 
-// GetMessagesWithTimestamps retrieves messages for a contact with timestamps extracted from keys
-// limit specifies maximum number of messages (0 = no limit)
-// offset specifies number of messages to skip
-func (s *BadgerStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, offset int) ([]*MessageWithKey, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// GetMessages retrieves plaintext messages for a contact, ordered by timestamp.
+// limit specifies maximum number of messages (0 = no limit).
+// offset specifies number of messages to skip.
+func (s *BadgerStorage) GetMessages(contactPubKey []byte, limit, offset int) ([]*StoredMessage, error) {
+	var messages []*StoredMessage
 
-	var messages []*MessageWithKey
-
-	// Build prefix for this contact's messages
 	prefix := make([]byte, 0, 2+pubKeySize)
 	prefix = append(prefix, messagePrefix...)
 	prefix = append(prefix, contactPubKey...)
@@ -274,48 +274,26 @@ func (s *BadgerStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, o
 		skipped := 0
 
 		for it.Rewind(); it.Valid(); it.Next() {
-			// Handle offset
 			if skipped < offset {
 				skipped++
 				continue
 			}
-			// Handle limit
 			if limit > 0 && count >= limit {
 				break
 			}
 
 			item := it.Item()
-			key := item.Key()
-
-			// Extract timestamp from key (format: prefix + pubkey + timestamp + nonce)
-			// timestamp starts at position: len(prefix) + len(pubkey) = 2 + 32 = 34
-			tsStart := len(messagePrefix) + len(contactPubKey)
-			if len(key) < tsStart+timestampSize {
-				continue
-			}
-			timestamp := binary.BigEndian.Uint64(key[tsStart : tsStart+timestampSize])
-
-			// Extract nonce (after timestamp)
-			nonceStart := tsStart + timestampSize
-			if nonceStart >= len(key) {
-				continue
-			}
-			nonce := make([]byte, len(key)-nonceStart)
-			copy(nonce, key[nonceStart:])
-
 			data, err := item.ValueCopy(nil)
 			if err != nil {
 				return err
 			}
-			var envelope pb.SignedEnvelope
-			if err := proto.Unmarshal(data, &envelope); err != nil {
-				return err
+
+			var msg StoredMessage
+			if err := json.Unmarshal(data, &msg); err != nil {
+				// Skip entries that can't be decoded (e.g. old encrypted format)
+				continue
 			}
-			messages = append(messages, &MessageWithKey{
-				Envelope:  &envelope,
-				Timestamp: timestamp,
-				Nonce:     nonce,
-			})
+			messages = append(messages, &msg)
 			count++
 		}
 		return nil
@@ -327,26 +305,9 @@ func (s *BadgerStorage) GetMessagesWithTimestamps(contactPubKey []byte, limit, o
 	return messages, nil
 }
 
-// GetMessages retrieves messages for a contact, ordered by timestamp
-// limit specifies maximum number of messages (0 = no limit)
-// offset specifies number of messages to skip
-func (s *BadgerStorage) GetMessages(contactPubKey []byte, limit, offset int) ([]*pb.SignedEnvelope, error) {
-	messages, err := s.GetMessagesWithTimestamps(contactPubKey, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	envelopes := make([]*pb.SignedEnvelope, 0, len(messages))
-	for _, m := range messages {
-		envelopes = append(envelopes, m.Envelope)
-	}
-	return envelopes, nil
-}
-
 // DeleteMessages removes all messages for a contact
 func (s *BadgerStorage) DeleteMessages(contactPubKey []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	// Build prefix for this contact's messages
 	prefix := make([]byte, 0, 2+pubKeySize)
@@ -381,8 +342,7 @@ func (s *BadgerStorage) DeleteMessages(contactPubKey []byte) error {
 
 // Close gracefully shuts down the database
 func (s *BadgerStorage) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	if s.db != nil {
 		return s.db.Close()
@@ -416,8 +376,7 @@ func configKey(key string) []byte {
 
 // AddPeer stores a peer record in the database
 func (s *BadgerStorage) AddPeer(peer *PeerRecord) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	data, err := json.Marshal(peer)
 	if err != nil {
@@ -438,8 +397,7 @@ func (s *BadgerStorage) AddPeer(peer *PeerRecord) error {
 
 // GetPeer retrieves a peer by peer ID
 func (s *BadgerStorage) GetPeer(peerID string) (*PeerRecord, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := peerKey(peerID)
 
@@ -467,8 +425,7 @@ func (s *BadgerStorage) GetPeer(peerID string) (*PeerRecord, error) {
 
 // ListPeers returns all peers, limited to the specified count (0 = no limit)
 func (s *BadgerStorage) ListPeers(limit int) ([]*PeerRecord, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var peers []*PeerRecord
 
@@ -507,8 +464,7 @@ func (s *BadgerStorage) ListPeers(limit int) ([]*PeerRecord, error) {
 
 // ListPeersBySource returns peers filtered by their source
 func (s *BadgerStorage) ListPeersBySource(source PeerSource) ([]*PeerRecord, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var peers []*PeerRecord
 
@@ -543,8 +499,7 @@ func (s *BadgerStorage) ListPeersBySource(source PeerSource) ([]*PeerRecord, err
 
 // DeletePeer removes a peer from the database
 func (s *BadgerStorage) DeletePeer(peerID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := peerKey(peerID)
 
@@ -562,8 +517,7 @@ func (s *BadgerStorage) DeletePeer(peerID string) error {
 // maxAgeDays: remove peers not seen in this many days
 // keepCount: maximum number of peers to keep (0 = no limit)
 func (s *BadgerStorage) PrunePeers(maxAgeDays int, keepCount int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	maxAge := time.Duration(maxAgeDays) * 24 * time.Hour
 	cutoff := time.Now().Add(-maxAge)
@@ -653,8 +607,7 @@ func (s *BadgerStorage) PrunePeers(maxAgeDays int, keepCount int) error {
 
 // GetConfig retrieves a configuration value by key
 func (s *BadgerStorage) GetConfig(key string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	dbKey := configKey(key)
 
@@ -683,8 +636,7 @@ func (s *BadgerStorage) GetConfig(key string) (string, error) {
 
 // SetConfig stores a configuration value
 func (s *BadgerStorage) SetConfig(key, value string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	dbKey := configKey(key)
 
@@ -700,8 +652,7 @@ func (s *BadgerStorage) SetConfig(key, value string) error {
 
 // DeleteConfig removes a configuration value
 func (s *BadgerStorage) DeleteConfig(key string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	dbKey := configKey(key)
 
@@ -726,8 +677,7 @@ func blacklistKey(peerID string) []byte {
 
 // BlacklistPeer adds a peer to the blacklist with a reason
 func (s *BadgerStorage) BlacklistPeer(peerID string, reason string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	entry := &BlacklistEntry{
 		PeerID:        peerID,
@@ -755,8 +705,7 @@ func (s *BadgerStorage) BlacklistPeer(peerID string, reason string) error {
 
 // IsBlacklisted checks if a peer is blacklisted
 func (s *BadgerStorage) IsBlacklisted(peerID string) (bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := blacklistKey(peerID)
 
@@ -783,7 +732,7 @@ func (s *BadgerStorage) IsBlacklisted(peerID string) (bool, error) {
 	if entry.IsExpired() {
 		// Auto-remove expired entry
 		bterrors.SafeGo("blacklist-expire-cleanup", func() {
-			if err := s.DeleteConfig(string(blacklistKey(peerID))); err != nil {
+			if err := s.RemoveFromBlacklist(peerID); err != nil {
 				logger.Debugw("failed to delete expired blacklist entry", "peer", peerID, "error", err)
 			}
 		})
@@ -795,8 +744,7 @@ func (s *BadgerStorage) IsBlacklisted(peerID string) (bool, error) {
 
 // ListBlacklisted returns all blacklisted peers
 func (s *BadgerStorage) ListBlacklisted() ([]*BlacklistEntry, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var entries []*BlacklistEntry
 
@@ -832,8 +780,7 @@ func (s *BadgerStorage) ListBlacklisted() ([]*BlacklistEntry, error) {
 
 // RemoveFromBlacklist removes a peer from the blacklist
 func (s *BadgerStorage) RemoveFromBlacklist(peerID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := blacklistKey(peerID)
 

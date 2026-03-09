@@ -34,8 +34,7 @@ func senderKeyKey(groupID, senderPubkey []byte) []byte {
 
 // SaveGroup stores a group state in the database
 func (s *BadgerStorage) SaveGroup(group *pb.GroupState) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	data, err := proto.Marshal(group)
 	if err != nil {
@@ -58,8 +57,7 @@ func (s *BadgerStorage) SaveGroup(group *pb.GroupState) error {
 
 // GetGroup retrieves a group state from the database
 func (s *BadgerStorage) GetGroup(groupID []byte) (*pb.GroupState, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := groupKey(groupID)
 
@@ -94,8 +92,7 @@ func (s *BadgerStorage) GetGroup(groupID []byte) (*pb.GroupState, error) {
 
 // ListGroups returns all groups in the database
 func (s *BadgerStorage) ListGroups() ([]*pb.GroupState, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var groups []*pb.GroupState
 
@@ -132,8 +129,7 @@ func (s *BadgerStorage) ListGroups() ([]*pb.GroupState, error) {
 
 // DeleteGroup removes a group from the database
 func (s *BadgerStorage) DeleteGroup(groupID []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := groupKey(groupID)
 
@@ -151,8 +147,7 @@ func (s *BadgerStorage) DeleteGroup(groupID []byte) error {
 
 // SaveSenderKey stores a sender key distribution in the database
 func (s *BadgerStorage) SaveSenderKey(sk *pb.SenderKeyDistribution) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	data, err := proto.Marshal(sk)
 	if err != nil {
@@ -175,8 +170,7 @@ func (s *BadgerStorage) SaveSenderKey(sk *pb.SenderKeyDistribution) error {
 
 // GetSenderKey retrieves a sender key from the database
 func (s *BadgerStorage) GetSenderKey(groupID, senderPubkey []byte) (*pb.SenderKeyDistribution, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := senderKeyKey(groupID, senderPubkey)
 
@@ -211,8 +205,7 @@ func (s *BadgerStorage) GetSenderKey(groupID, senderPubkey []byte) (*pb.SenderKe
 
 // ListSenderKeys returns all sender keys for a group
 func (s *BadgerStorage) ListSenderKeys(groupID []byte) ([]*pb.SenderKeyDistribution, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var senderKeys []*pb.SenderKeyDistribution
 
@@ -252,8 +245,7 @@ func (s *BadgerStorage) ListSenderKeys(groupID []byte) ([]*pb.SenderKeyDistribut
 
 // DeleteSenderKey removes a sender key from the database
 func (s *BadgerStorage) DeleteSenderKey(groupID, senderPubkey []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := senderKeyKey(groupID, senderPubkey)
 
@@ -270,8 +262,7 @@ func (s *BadgerStorage) DeleteSenderKey(groupID, senderPubkey []byte) error {
 
 // DeleteAllSenderKeys removes all sender keys for a group
 func (s *BadgerStorage) DeleteAllSenderKeys(groupID []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	prefix := append([]byte(senderKeyPrefix), []byte(hex.EncodeToString(groupID))...)
 	prefix = append(prefix, ':')

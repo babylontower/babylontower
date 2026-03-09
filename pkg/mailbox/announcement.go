@@ -3,11 +3,10 @@ package mailbox
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/base32"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -208,13 +207,11 @@ func (am *AnnouncementManager) republishAll() {
 }
 
 // dhtKeyForTarget computes the DHT key for a target's mailbox
-// Uses /mailbox/ namespace with base32-encoded pubkey for DHT compatibility
+// Per §6.1: DHT key = SHA256("bt-mailbox-v1:" ‖ target_pubkey)
 func (am *AnnouncementManager) dhtKeyForTarget(targetPubkey []byte) string {
-	// Use IPNS-style key format which is accepted by the DHT
-	// Format: /mailbox/<base32-encoding-of-pubkey>
-	// This follows the pattern of /pk/<peerid> and /ipns/<cid>
-	encoded := base32.StdEncoding.EncodeToString(targetPubkey)
-	return fmt.Sprintf("/mailbox/%s", strings.ToLower(encoded))
+	data := append([]byte(MailboxDHTPrefix), targetPubkey...)
+	hash := sha256.Sum256(data)
+	return "/bt/mailbox/" + hex.EncodeToString(hash[:])
 }
 
 // signAnnouncement signs a mailbox announcement
@@ -270,11 +267,10 @@ func (am *AnnouncementManager) verifyAnnouncementSignature(announcement *pb.Mail
 	// The announcement is signed by the mailbox node's device key.
 	// We verify using TargetPubkey as the signer when the mailbox serves itself,
 	// otherwise this requires looking up the mailbox node's identity key.
-	// For now, verify against TargetPubkey if it's a valid Ed25519 key.
 	if len(announcement.TargetPubkey) == ed25519.PublicKeySize {
 		return crypto.Verify(announcement.TargetPubkey, data, announcement.Signature)
 	}
 
-	// Cannot verify without the signer's public key
-	return true
+	// Reject announcements with unverifiable signatures
+	return false
 }

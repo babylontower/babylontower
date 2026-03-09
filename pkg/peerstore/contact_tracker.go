@@ -20,7 +20,7 @@ import (
 
 // ContactTracker manages contact peer information and online status
 type ContactTracker struct {
-	storage  storage.Storage
+	storage  storage.ContactStore
 	ipfsNode *ipfsnode.Node
 	mu       sync.RWMutex
 	// Cache of contact peer IDs for quick lookup (key: hex-encoded Ed25519 pubkey)
@@ -42,7 +42,7 @@ type ContactPeerInfo struct {
 }
 
 // NewContactTracker creates a new contact tracker
-func NewContactTracker(storage storage.Storage, ipfsNode *ipfsnode.Node) *ContactTracker {
+func NewContactTracker(storage storage.ContactStore, ipfsNode *ipfsnode.Node) *ContactTracker {
 	return &ContactTracker{
 		storage:         storage,
 		ipfsNode:        ipfsNode,

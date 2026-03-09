@@ -33,6 +33,10 @@ type application struct {
 	groups    *groups.Service
 	mailbox   *mailbox.Manager
 
+	// High-level managers (lazy-initialized)
+	contactMgr *contactManager
+	chatMgr    *chatManager
+
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -213,7 +217,7 @@ func createStorage(appConfig *AppConfig) (storage.Storage, error) {
 
 // createIPFSNode creates the IPFS node.
 func createIPFSNode(appConfig *AppConfig, sharedStore storage.Storage) (*ipfsnode.Node, error) {
-	ipfsConfig := appConfig.IPFSConfig
+	ipfsConfig := appConfig.NetworkConfig
 
 	// Load stored peers using shared storage (avoids BadgerDB lock conflicts)
 	storedPeers, err := loadStoredPeers(sharedStore, ipfsConfig)
@@ -275,19 +279,15 @@ func createMailboxManager(node *ipfsnode.Node, ident *identity.Identity, store s
 
 // createGroupsService creates the groups service.
 func createGroupsService(ident *identity.Identity, store storage.Storage) *groups.Service {
-	storeImpl, ok := store.(*storage.BadgerStorage)
-	if !ok {
-		// For non-BadgerStorage, create with nil storage (will fail on operations)
-		return groups.NewService(nil, ident.Ed25519PubKey, ident.Ed25519PrivKey,
-			groups.WithX25519PublicKey(ident.X25519PubKey))
-	}
-	return groups.NewService(storeImpl, ident.Ed25519PubKey, ident.Ed25519PrivKey,
+	// Storage interface satisfies groups.GroupStorage since both BadgerStorage
+	// and MemoryStorage implement SaveGroup and SaveSenderKey
+	return groups.NewService(store, ident.Ed25519PubKey, ident.Ed25519PrivKey,
 		groups.WithX25519PublicKey(ident.X25519PubKey))
 }
 
 // loadStoredPeers loads stored peers from storage.
 // Uses the shared storage instance to avoid BadgerDB lock conflicts.
-func loadStoredPeers(sharedStore storage.Storage, ipfsConfig *config.IPFSConfig) ([]libp2ppeer.AddrInfo, error) {
+func loadStoredPeers(sharedStore storage.Storage, ipfsConfig *config.NetworkConfig) ([]libp2ppeer.AddrInfo, error) {
 	// Use the shared storage instance instead of creating a new one
 	peers, err := sharedStore.ListPeers(ipfsConfig.MaxStoredPeers)
 	if err != nil {
@@ -335,8 +335,12 @@ func filterGoodPeers(peers []*storage.PeerRecord) []libp2ppeer.AddrInfo {
 
 // parsePeerRecord converts a PeerRecord to AddrInfo.
 func parsePeerRecord(peer *storage.PeerRecord) (libp2ppeer.AddrInfo, error) {
+	peerID, err := libp2ppeer.Decode(peer.PeerID)
+	if err != nil {
+		return libp2ppeer.AddrInfo{}, fmt.Errorf("invalid peer ID %q: %w", peer.PeerID, err)
+	}
 	addrInfo := libp2ppeer.AddrInfo{
-		ID: libp2ppeer.ID(peer.PeerID),
+		ID: peerID,
 	}
 
 	for _, addrStr := range peer.Multiaddrs {
@@ -407,15 +411,42 @@ func (a *application) Stop() error {
 // Identity methods
 
 func (a *application) GetIdentity() *IdentityInfo {
-	return &IdentityInfo{
-		PublicKey:  a.identity.PublicKeyHex(),
-		PeerID:     a.ipfsNode.PeerID(),
-		Multiaddrs: a.ipfsNode.Multiaddrs(),
-		Mnemonic:   a.identity.Mnemonic,
+	fingerprint, _ := a.identity.ComputeFingerprint()
+	displayName := ""
+	if a.config != nil {
+		displayName = a.config.DisplayName
 	}
+	info := &IdentityInfo{
+		PublicKey:       a.identity.PublicKeyHex(),
+		PublicKeyBase58: a.identity.PublicKeyBase58(),
+		X25519KeyBase58: a.identity.X25519PublicKeyBase58(),
+		Mnemonic:        a.identity.Mnemonic,
+		Fingerprint:     fingerprint,
+		ContactLink:     GenerateContactLink(a.identity.Ed25519PubKey, a.identity.X25519PubKey, displayName),
+		DisplayName:     displayName,
+	}
+	if a.ipfsNode != nil {
+		info.PeerID = a.ipfsNode.PeerID()
+		info.Multiaddrs = a.ipfsNode.Multiaddrs()
+	}
+	return info
 }
 
 // Service accessors
+
+func (a *application) Contacts() ContactManager {
+	if a.contactMgr == nil {
+		a.contactMgr = &contactManager{app: a}
+	}
+	return a.contactMgr
+}
+
+func (a *application) Chat() ChatManager {
+	if a.chatMgr == nil {
+		a.chatMgr = newChatManager(a)
+	}
+	return a.chatMgr
+}
 
 func (a *application) Messenger() Messenger {
 	return &messengerAdapter{svc: a.messaging}
@@ -423,6 +454,10 @@ func (a *application) Messenger() Messenger {
 
 func (a *application) Groups() GroupManager {
 	return a.groups
+}
+
+func (a *application) UIGroups() UIGroupManager {
+	return newUIGroupManager(a)
 }
 
 func (a *application) Network() NetworkNode {

@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	bterrors "babylontower/pkg/errors"
 )
 
 var (
-	// ErrInvalidSignature is returned when signature verification fails
-	ErrInvalidSignature = errors.New("invalid signature")
+	// ErrInvalidSignature aliases the canonical sentinel from pkg/errors.
+	ErrInvalidSignature = bterrors.ErrInvalidSignature
 	// ErrInvalidPrivateKey is returned when a private key is invalid
 	ErrInvalidPrivateKey = errors.New("invalid private key")
 	// ErrInvalidPublicKey is returned when a public key is invalid

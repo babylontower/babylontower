@@ -245,7 +245,7 @@ func TestRelayNodeDiscovery(t *testing.T) {
 
 // BenchmarkMailboxEncryption benchmarks message encryption for mailbox
 func BenchmarkMailboxEncryption(b *testing.B) {
-	_, bob := setupTwoUsers(&testing.T{})
+	_, bob := setupTwoUsers(b)
 	mailboxKey := deriveMailboxKey(bob.IKSignPub)
 	message := []byte("Test message for mailbox benchmark")
 
@@ -260,7 +260,7 @@ func BenchmarkMailboxEncryption(b *testing.B) {
 
 // BenchmarkMailboxDecryption benchmarks message decryption from mailbox
 func BenchmarkMailboxDecryption(b *testing.B) {
-	_, bob := setupTwoUsers(&testing.T{})
+	_, bob := setupTwoUsers(b)
 	mailboxKey := deriveMailboxKey(bob.IKSignPub)
 	message := []byte("Test message for mailbox benchmark")
 	nonce, ciphertext, _ := crypto.EncryptWithSharedSecret(mailboxKey, message)
@@ -319,7 +319,7 @@ func (m *InMemoryMailbox) GetMessageCount(recipientPub []byte) int {
 	return len(m.messages[key])
 }
 
-func setupTwoUsers(t *testing.T) (*identity.IdentityV1, *identity.IdentityV1) {
+func setupTwoUsers(t testing.TB) (*identity.IdentityV1, *identity.IdentityV1) {
 	aliceEntropy, _ := bip39.NewEntropy(128)
 	aliceMnemonic, _ := bip39.NewMnemonic(aliceEntropy)
 	alice, _ := identity.NewIdentityV1(aliceMnemonic, "Alice")

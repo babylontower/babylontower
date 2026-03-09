@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,8 @@ import (
 	"babylontower/pkg/crypto"
 	"babylontower/pkg/ipfsnode"
 	pb "babylontower/pkg/proto"
+	"babylontower/pkg/protocol"
+	"babylontower/pkg/ratchet"
 	"babylontower/pkg/storage"
 
 	"google.golang.org/protobuf/proto"
@@ -43,7 +46,7 @@ type DeviceSession struct {
 // FanoutManager handles message encryption fanout to multiple devices
 type FanoutManager struct {
 	deviceManager *DeviceManager
-	storage       storage.Storage
+	storage       storage.ConfigStore
 	ipfsNode      *ipfsnode.Node
 
 	ctx    context.Context
@@ -55,6 +58,11 @@ type FanoutManager struct {
 	sessions map[string]map[string]*DeviceSession
 	sessMu   sync.RWMutex
 
+	// Double Ratchet states per device session
+	// Key: "identity_hex:device_hex" -> ratchet state
+	ratchetStates map[string]*ratchet.DoubleRatchetState
+	ratchetMu     sync.RWMutex
+
 	// Optimization: symmetric key cache for recipients with 5+ devices
 	symmetricKeys map[string][]byte // recipient identity -> cached symmetric key
 	symKeyMu      sync.RWMutex
@@ -63,7 +71,7 @@ type FanoutManager struct {
 // FanoutConfig holds configuration for the fanout manager
 type FanoutConfig struct {
 	DeviceManager *DeviceManager
-	Storage       storage.Storage
+	Storage       storage.ConfigStore
 	IPFSNode      *ipfsnode.Node
 }
 
@@ -78,6 +86,7 @@ func NewFanoutManager(config *FanoutConfig) *FanoutManager {
 		ctx:           ctx,
 		cancel:        cancel,
 		sessions:      make(map[string]map[string]*DeviceSession),
+		ratchetStates: make(map[string]*ratchet.DoubleRatchetState),
 		symmetricKeys: make(map[string][]byte),
 	}
 }
@@ -93,6 +102,10 @@ func (fm *FanoutManager) SendMessageToIdentity(
 		return nil, errors.New("no recipient devices")
 	}
 
+	// §7.5: Clean up cached sessions for revoked devices whenever we receive
+	// an updated device list (derived from a refreshed IdentityDocument).
+	fm.cleanupStaleSessions(recipientIdentityPub, recipientDevices)
+
 	// Optimization: for 5+ devices, use symmetric key encryption
 	if len(recipientDevices) >= 5 {
 		return fm.sendWithSymmetricKey(text, recipientIdentityPub, recipientDevices)
@@ -100,6 +113,40 @@ func (fm *FanoutManager) SendMessageToIdentity(
 
 	// Standard fanout: encrypt separately for each device
 	return fm.sendWithFanout(text, recipientIdentityPub, recipientDevices)
+}
+
+// cleanupStaleSessions removes cached sessions for devices no longer in the active device list.
+func (fm *FanoutManager) cleanupStaleSessions(identityPub []byte, activeDevices []*pb.DeviceCertificate) {
+	identityHex := hex.EncodeToString(identityPub)
+
+	activeSet := make(map[string]bool, len(activeDevices))
+	for _, dev := range activeDevices {
+		activeSet[hex.EncodeToString(dev.DeviceId)] = true
+	}
+
+	fm.sessMu.Lock()
+	if sessions, ok := fm.sessions[identityHex]; ok {
+		for deviceID := range sessions {
+			if !activeSet[deviceID] {
+				delete(sessions, deviceID)
+				logger.Infow("cleaned up session for removed device", "identity", identityHex[:16], "device", deviceID)
+			}
+		}
+	}
+	fm.sessMu.Unlock()
+
+	fm.ratchetMu.Lock()
+	for key := range fm.ratchetStates {
+		// Keys are "identity_hex:device_hex"
+		if len(key) > len(identityHex)+1 && key[:len(identityHex)] == identityHex {
+			deviceHex := key[len(identityHex)+1:]
+			if !activeSet[deviceHex] {
+				delete(fm.ratchetStates, key)
+				logger.Infow("cleaned up ratchet state for removed device", "identity", identityHex[:16], "device", deviceHex)
+			}
+		}
+	}
+	fm.ratchetMu.Unlock()
 }
 
 // sendWithFanout encrypts the message separately for each device
@@ -160,7 +207,7 @@ func (fm *FanoutManager) sendWithSymmetricKey(
 		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	ciphertext, err := crypto.Encrypt(plaintext, symKey, nonce)
+	ciphertext, err := crypto.Encrypt(symKey, nonce, plaintext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt message: %w", err)
 	}
@@ -239,25 +286,23 @@ func (fm *FanoutManager) sendToDevice(
 	deviceID := hex.EncodeToString(device.DeviceId)
 	identityHex := hex.EncodeToString(recipientIdentityPub)
 
-	// Get or create session
+	// Get or create session (performs X3DH if new)
 	session, err := fm.getOrCreateSession(recipientIdentityPub, device)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	// In full implementation, this would use Double Ratchet to derive message key
-	// For now, we use a simplified approach
-	messageKey := fm.deriveMessageKey(session)
-
-	// Build DMPayload
-	ratchetHeader := &pb.RatchetHeader{
-		DhRatchetPub:        session.DHRatchet,
-		PreviousChainLength: 0, // Would track in full implementation
-		MessageNumber:       session.MessageCounter,
+	// Get the Double Ratchet state for this session
+	ratchetKey := identityHex + ":" + deviceID
+	fm.ratchetMu.RLock()
+	ratchetState, ok := fm.ratchetStates[ratchetKey]
+	fm.ratchetMu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("ratchet state not found for session %s", ratchetKey)
 	}
 
+	// Build DMPayload
 	payload := &pb.DMPayload{
-		RatchetHeader: ratchetHeader,
 		Content: &pb.DMPayload_Text{
 			Text: &pb.TextMessage{
 				Text: text,
@@ -270,36 +315,56 @@ func (fm *FanoutManager) sendToDevice(
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	// Encrypt payload with message key
-	nonce := make([]byte, 24)
-	if _, err := crypto.SecureRandom.Read(nonce); err != nil {
-		return nil, fmt.Errorf("failed to generate nonce: %w", err)
-	}
-
-	ciphertext, err := crypto.Encrypt(payloadBytes, messageKey, nonce)
+	// Encrypt payload using Double Ratchet
+	ad := append(fm.deviceManager.identitySignPub, recipientIdentityPub...)
+	encryptedMsg, err := ratchetState.Encrypt(payloadBytes, ad)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt payload: %w", err)
+		return nil, fmt.Errorf("Double Ratchet encrypt failed: %w", err)
 	}
 
-	// Build BabylonEnvelope
-	envelope := &pb.BabylonEnvelope{
-		ProtocolVersion:   1,
-		MessageType:       pb.MessageType_DM_TEXT,
-		SenderIdentity:    fm.deviceManager.identitySignPub,
-		RecipientIdentity: recipientIdentityPub,
-		Timestamp:         uint64(time.Now().Unix()),
-		MessageId:         generateMessageID(),
-		Payload:           ciphertext,
-		SenderDeviceId:    fm.deviceManager.deviceID,
-		CipherSuiteId:     0x0001,
+	// Build the ratchet header from the encrypted message
+	ratchetHeader := &pb.RatchetHeader{
+		DhRatchetPub:        encryptedMsg.Header.DHRatchetPub[:],
+		PreviousChainLength: encryptedMsg.Header.PreviousChainLen,
+		MessageNumber:       encryptedMsg.Header.MessageNumber,
 	}
 
-	// Sign envelope with device key
-	signature, err := fm.signBabylonEnvelope(envelope)
+	// Re-marshal DMPayload with ratchet header for the envelope
+	payloadWithHeader := &pb.DMPayload{
+		RatchetHeader: ratchetHeader,
+		Content: &pb.DMPayload_Text{
+			Text: &pb.TextMessage{
+				Text: text,
+			},
+		},
+	}
+	_ = payloadWithHeader // header is carried separately
+
+	// The ciphertext includes the encrypted payload + nonce
+	ciphertextWithNonce := append(encryptedMsg.Nonce, encryptedMsg.Ciphertext...)
+
+	// Serialize ratchet header into X3DH header field for transport
+	ratchetHeaderBytes, err := proto.Marshal(ratchetHeader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign envelope: %w", err)
+		return nil, fmt.Errorf("failed to marshal ratchet header: %w", err)
 	}
-	envelope.Signature = signature
+
+	// Build BabylonEnvelope using EnvelopeBuilder
+	envelope, err := protocol.NewEnvelopeBuilder(
+		fm.deviceManager.identitySignPub,
+		fm.deviceManager.deviceID,
+		fm.deviceManager.deviceSignPriv,
+	).
+		MessageType(pb.MessageType_DM_TEXT).
+		Recipient(recipientIdentityPub).
+		Payload(ciphertextWithNonce).
+		Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build envelope: %w", err)
+	}
+
+	// Attach ratchet header
+	envelope.X3DhHeader = ratchetHeaderBytes
 
 	// Publish to recipient's topic
 	topic := ipfsnode.TopicFromPublicKey(recipientIdentityPub)
@@ -339,13 +404,57 @@ func (fm *FanoutManager) getOrCreateSession(recipientIdentityPub []byte, device 
 	}
 	fm.sessMu.RUnlock()
 
-	// Create new session
+	// Create new session with X3DH key agreement
 	fm.sessMu.Lock()
 	defer fm.sessMu.Unlock()
 
+	// Double-check after acquiring write lock
 	if fm.sessions[identityHex] == nil {
 		fm.sessions[identityHex] = make(map[string]*DeviceSession)
 	}
+	if session, ok := fm.sessions[identityHex][deviceID]; ok {
+		return session, nil
+	}
+
+	// Perform X3DH key agreement using device's DH public key as SPK
+	var ikDHPriv, ikDHPub [32]byte
+	copy(ikDHPriv[:], fm.deviceManager.identityDHPriv)
+	copy(ikDHPub[:], fm.deviceManager.identityDHPub)
+
+	var deviceDHPub [32]byte
+	copy(deviceDHPub[:], device.DeviceDhPub)
+
+	x3dhResult, err := ratchet.X3DHInitiator(
+		&ikDHPriv,
+		&ikDHPub,
+		fm.deviceManager.identitySignPub,
+		&deviceDHPub, // recipient device DH key as IK
+		device.DeviceSignPub,
+		&deviceDHPub, // use device DH key as SPK (best available)
+		nil,          // no OPK available
+	)
+	if err != nil {
+		return nil, fmt.Errorf("X3DH key agreement failed: %w", err)
+	}
+
+	// Initialize Double Ratchet state
+	sessionID := fmt.Sprintf("fanout:%s:%s", identityHex, deviceID)
+	ratchetState, err := ratchet.NewDoubleRatchetStateInitiator(
+		sessionID,
+		fm.deviceManager.identitySignPub,
+		device.DeviceSignPub,
+		x3dhResult.SharedSecret,
+		&deviceDHPub,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize Double Ratchet: %w", err)
+	}
+
+	// Store ratchet state
+	ratchetKey := identityHex + ":" + deviceID
+	fm.ratchetMu.Lock()
+	fm.ratchetStates[ratchetKey] = ratchetState
+	fm.ratchetMu.Unlock()
 
 	session := &DeviceSession{
 		DeviceID:       device.DeviceId,
@@ -354,35 +463,36 @@ func (fm *FanoutManager) getOrCreateSession(recipientIdentityPub []byte, device 
 		CreatedAt:      time.Now(),
 		LastUsedAt:     time.Now(),
 		MessageCounter: 0,
-		// In full implementation, would perform X3DH to establish session key
-		SessionKey: make([]byte, 32),
-		ChainKey:   make([]byte, 32),
-		DHRatchet:  make([]byte, 32),
+		SessionKey:     x3dhResult.SharedSecret,
+		ChainKey:       x3dhResult.SharedSecret, // initial chain key from X3DH
+		DHRatchet:      x3dhResult.EphemeralPub[:],
 	}
 
 	fm.sessions[identityHex][deviceID] = session
 	return session, nil
 }
 
-// deriveMessageKey derives a message key from the session (simplified)
-func (fm *FanoutManager) deriveMessageKey(session *DeviceSession) []byte {
-	// In full implementation, this would use Double Ratchet KDF
-	// For now, use a simple HKDF
-	data := append(session.SessionKey, session.ChainKey...)
-	hash := sha256.Sum256(data)
-	return hash[:32]
+// getRatchetState returns the Double Ratchet state for a device session
+func (fm *FanoutManager) getRatchetState(identityHex, deviceID string) (*ratchet.DoubleRatchetState, bool) {
+	ratchetKey := identityHex + ":" + deviceID
+	fm.ratchetMu.RLock()
+	defer fm.ratchetMu.RUnlock()
+	state, ok := fm.ratchetStates[ratchetKey]
+	return state, ok
 }
 
-// getOrCreateSymmetricKey gets or creates a symmetric key for a recipient
+// getOrCreateSymmetricKey gets or creates a symmetric key for a recipient.
+// Uses double-check locking to avoid TOCTOU race where two concurrent callers
+// could generate different keys, causing decryption failures.
 func (fm *FanoutManager) getOrCreateSymmetricKey(recipientIdentityPub []byte) ([]byte, error) {
 	identityHex := hex.EncodeToString(recipientIdentityPub)
 
-	fm.symKeyMu.RLock()
+	fm.symKeyMu.Lock()
+	defer fm.symKeyMu.Unlock()
+
 	if key, ok := fm.symmetricKeys[identityHex]; ok {
-		fm.symKeyMu.RUnlock()
 		return key, nil
 	}
-	fm.symKeyMu.RUnlock()
 
 	// Generate new symmetric key
 	key := make([]byte, 32)
@@ -390,9 +500,7 @@ func (fm *FanoutManager) getOrCreateSymmetricKey(recipientIdentityPub []byte) ([
 		return nil, fmt.Errorf("failed to generate symmetric key: %w", err)
 	}
 
-	fm.symKeyMu.Lock()
 	fm.symmetricKeys[identityHex] = key
-	fm.symKeyMu.Unlock()
 
 	// In full implementation, would distribute key to recipient devices
 	// via pairwise channels
@@ -425,7 +533,7 @@ func (fm *FanoutManager) encryptKeyForDevice(symKey []byte, device *pb.DeviceCer
 		return nil, err
 	}
 
-	encryptedKey, err := crypto.Encrypt(symKey, encryptionKey, nonce)
+	encryptedKey, err := crypto.Encrypt(encryptionKey, nonce, symKey)
 	if err != nil {
 		return nil, err
 	}
@@ -438,51 +546,35 @@ func (fm *FanoutManager) encryptKeyForDevice(symKey []byte, device *pb.DeviceCer
 	}, nil
 }
 
-// signEnvelope signs a BabylonEnvelope
+// signBabylonEnvelope signs a BabylonEnvelope using the canonical serialization
 func (fm *FanoutManager) signBabylonEnvelope(envelope *pb.BabylonEnvelope) ([]byte, error) {
-	// Canonical serialization for signing (fields 1-10, 12)
-	data := make([]byte, 0, 4+4+32+32+8+16+len(envelope.Payload)+16+24+4)
-
-	// Append fields in order
-	data = append(data, byte(envelope.ProtocolVersion))
-	data = append(data, byte(envelope.MessageType))
-	data = append(data, envelope.SenderIdentity...)
-	data = append(data, envelope.RecipientIdentity...)
-
-	tsBytes := make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		tsBytes[i] = byte(envelope.Timestamp >> (56 - i*8))
+	data, err := protocol.SerializeEnvelopeForSigning(envelope)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize envelope for signing: %w", err)
 	}
-	data = append(data, tsBytes...)
-
-	data = append(data, envelope.MessageId...)
-	data = append(data, envelope.Payload...)
-	data = append(data, envelope.SenderDeviceId...)
-
-	suiteBytes := make([]byte, 4)
-	for i := 0; i < 4; i++ {
-		suiteBytes[i] = byte(envelope.CipherSuiteId >> (24 - i*8))
-	}
-	data = append(data, suiteBytes...)
-
 	signature := ed25519.Sign(fm.deviceManager.deviceSignPriv, data)
 	return signature, nil
 }
 
-// signEnvelope signs a MultiDeviceEnvelope
+// signEnvelope signs a MultiDeviceEnvelope using little-endian serialization
+// consistent with the canonical BabylonEnvelope signing format
 func (fm *FanoutManager) signEnvelope(envelope *pb.MultiDeviceEnvelope) ([]byte, error) {
-	// Canonical serialization for signing
-	data := make([]byte, 0, 256) // Approximate size
+	data := make([]byte, 0, 256)
 
-	data = append(data, byte(envelope.ProtocolVersion))
-	data = append(data, byte(envelope.MessageType))
+	// Use little-endian to match protocol.SerializeEnvelopeForSigning
+	verBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(verBytes, envelope.ProtocolVersion)
+	data = append(data, verBytes...)
+
+	typeBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(typeBytes, uint32(envelope.MessageType))
+	data = append(data, typeBytes...)
+
 	data = append(data, envelope.SenderIdentity...)
 	data = append(data, envelope.RecipientIdentity...)
 
 	tsBytes := make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		tsBytes[i] = byte(envelope.Timestamp >> (56 - i*8))
-	}
+	binary.LittleEndian.PutUint64(tsBytes, envelope.Timestamp)
 	data = append(data, tsBytes...)
 
 	data = append(data, envelope.MessageId...)

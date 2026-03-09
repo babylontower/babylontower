@@ -214,7 +214,7 @@ func (l *Loader) loadAppConfig() (*AppConfig, error) {
 		IPFSDir:      filepath.Join(l.dataDir, "ipfs"),
 		LogLevel:     cfg.Logging.Level,
 		LogFile:      resolvePath(cfg.Logging.File, l.dataDir),
-		IPFSConfig:   cfg.ToIPFSConfig(),
+		NetworkConfig: cfg.ToIPFSConfig(),
 	}, nil
 }
 

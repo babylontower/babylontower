@@ -1,15 +1,19 @@
 package groups
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
+	btcrypto "babylontower/pkg/crypto"
 	pb "babylontower/pkg/proto"
+	"babylontower/pkg/protocol"
 	"babylontower/pkg/storage"
 
 	"golang.org/x/crypto/ed25519"
@@ -27,7 +31,7 @@ var (
 
 // ChannelService manages channels (private and public)
 type ChannelService struct {
-	storage storage.Storage
+	storage storage.ChannelStore
 	// Identity keys for signing
 	identitySignPub  ed25519.PublicKey
 	identitySignPriv ed25519.PrivateKey
@@ -37,6 +41,9 @@ type ChannelService struct {
 	posts map[string]map[string]*ChannelPost
 	// Subscribers for public channels: channelID -> subscriberPubkey -> subscribedAt
 	subscribers map[string]map[string]uint64
+	// §5.4: Channel encryption keys for private channels (Sender Key scheme)
+	// channelID -> 32-byte symmetric key
+	channelKeys map[string][]byte
 	mu          sync.RWMutex
 }
 
@@ -86,7 +93,7 @@ type ChannelPost struct {
 
 // NewChannelService creates a new channel service
 func NewChannelService(
-	storage storage.Storage,
+	storage storage.ChannelStore,
 	identitySignPub ed25519.PublicKey,
 	identitySignPriv ed25519.PrivateKey,
 ) *ChannelService {
@@ -97,6 +104,7 @@ func NewChannelService(
 		channels:         make(map[string]*ChannelState),
 		posts:            make(map[string]map[string]*ChannelPost),
 		subscribers:      make(map[string]map[string]uint64),
+		channelKeys:      make(map[string][]byte),
 	}
 }
 
@@ -148,6 +156,15 @@ func (s *ChannelService) CreateChannel(name, description string, channelType Gro
 	s.channels[channelKey] = state
 	s.posts[channelKey] = make(map[string]*ChannelPost)
 
+	// §5.4: Generate encryption key for private channels
+	if channelType == PrivateChannel {
+		encKey := make([]byte, 32)
+		if _, err := io.ReadFull(rand.Reader, encKey); err != nil {
+			return nil, fmt.Errorf("failed to generate channel key: %w", err)
+		}
+		s.channelKeys[channelKey] = encKey
+	}
+
 	// For public channels, initialize subscriber map
 	if channelType == PublicChannel {
 		s.subscribers[channelKey] = make(map[string]uint64)
@@ -180,12 +197,54 @@ func (s *ChannelService) CreatePost(channelID []byte, content interface{}) (*Cha
 
 	now := uint64(time.Now().Unix())
 
+	// §5.4: Encrypt content for private channels using channel key
+	postContent := content
+	if state.Type == PrivateChannel {
+		channelKey := hex.EncodeToString(channelID)
+		encKey, hasKey := s.channelKeys[channelKey]
+		if !hasKey {
+			return nil, errors.New("no encryption key for private channel")
+		}
+
+		// Serialize content for encryption
+		var contentBytes []byte
+		switch c := content.(type) {
+		case []byte:
+			contentBytes = c
+		case string:
+			contentBytes = []byte(c)
+		default:
+			var err error
+			contentBytes, err = json.Marshal(content)
+			if err != nil {
+				return nil, fmt.Errorf("failed to serialize content for encryption: %w", err)
+			}
+		}
+
+		nonce, err := btcrypto.GenerateNonce()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate nonce: %w", err)
+		}
+
+		ciphertext, err := btcrypto.Encrypt(encKey, nonce, contentBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt channel post: %w", err)
+		}
+
+		// Store nonce + ciphertext as a MediaMessage to avoid UTF-8 issues
+		// ContentType identifies this as encrypted channel content
+		postContent = &pb.MediaMessage{
+			ContentType: "encrypted/channel",
+			MediaKey:    append(nonce, ciphertext...),
+		}
+	}
+
 	post := &ChannelPost{
 		PostID:          postID,
 		ChannelID:       channelID,
 		AuthorPubkey:    s.identitySignPub,
 		Timestamp:       now,
-		Content:         content,
+		Content:         postContent,
 		PreviousPostCID: state.LatestPostCID,
 	}
 
@@ -199,8 +258,16 @@ func (s *ChannelService) CreatePost(channelID []byte, content interface{}) (*Cha
 		return nil, fmt.Errorf("failed to store channel post: %w", err)
 	}
 
-	// Update channel's latest post CID
-	state.LatestPostCID = postID
+	// §5.5: Compute content hash as the CID for the linked-list
+	// The "CID" is SHA256 of the serialized post (approximating IPFS CID)
+	postBytes, err := post.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize post for CID: %w", err)
+	}
+	postCID := sha256.Sum256(postBytes)
+
+	// Update channel's latest post CID with content hash (not random PostID)
+	state.LatestPostCID = postCID[:]
 	state.UpdatedAt = now
 	if err := state.Sign(s.identitySignPriv); err != nil {
 		return nil, fmt.Errorf("failed to sign updated channel: %w", err)
@@ -300,6 +367,15 @@ func (s *ChannelService) Unsubscribe(channelID []byte, subscriberPubkey []byte) 
 	delete(s.subscribers[channelKey], hex.EncodeToString(subscriberPubkey))
 	state.SubscriberCount = uint64(len(s.subscribers[channelKey]))
 
+	// §5.4: Rotate channel key on subscriber removal for private channels
+	if state.Type == PrivateChannel {
+		newKey := make([]byte, 32)
+		if _, err := io.ReadFull(rand.Reader, newKey); err != nil {
+			return fmt.Errorf("failed to rotate channel key: %w", err)
+		}
+		s.channelKeys[channelKey] = newKey
+	}
+
 	return s.storeChannel(state)
 }
 
@@ -365,6 +441,52 @@ func (s *ChannelService) DeleteChannel(channelID []byte) error {
 	delete(s.subscribers, channelKey)
 
 	return nil
+}
+
+// GetChannelKey returns the current encryption key for a private channel.
+// Used for key distribution to subscribers via pairwise DMs.
+func (s *ChannelService) GetChannelKey(channelID []byte) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channelKey := hex.EncodeToString(channelID)
+	key, exists := s.channelKeys[channelKey]
+	if !exists {
+		return nil, errors.New("no encryption key for channel")
+	}
+
+	keyCopy := make([]byte, len(key))
+	copy(keyCopy, key)
+	return keyCopy, nil
+}
+
+// DecryptChannelPost decrypts a private channel post's encrypted content.
+// The encryptedData should be the Data field from a MediaMessage with type "encrypted".
+func (s *ChannelService) DecryptChannelPost(channelID []byte, encryptedData []byte) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channelKey := hex.EncodeToString(channelID)
+	encKey, exists := s.channelKeys[channelKey]
+	if !exists {
+		return nil, errors.New("no encryption key for channel")
+	}
+
+	if len(encryptedData) < btcrypto.NonceSize {
+		return nil, errors.New("encrypted content too short")
+	}
+
+	nonce := encryptedData[:btcrypto.NonceSize]
+	ciphertext := encryptedData[btcrypto.NonceSize:]
+
+	return btcrypto.Decrypt(encKey, nonce, ciphertext)
+}
+
+// SetChannelKey sets the encryption key for a private channel (used when receiving key distribution).
+func (s *ChannelService) SetChannelKey(channelID []byte, key []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.channelKeys[hex.EncodeToString(channelID)] = key
 }
 
 // Helper functions
@@ -566,7 +688,7 @@ func ComputeChannelID(name string) []byte {
 }
 
 // GetChannelTopic derives the PubSub topic for a channel
+// Delegates to protocol.DeriveChannelTopic for canonical topic derivation.
 func GetChannelTopic(channelID []byte) string {
-	hash := sha256.Sum256(channelID)
-	return "babylon-ch-" + hex.EncodeToString(hash[:8])
+	return protocol.DeriveChannelTopic(channelID)
 }

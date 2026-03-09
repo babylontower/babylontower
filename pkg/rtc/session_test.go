@@ -230,6 +230,10 @@ func TestSessionManager_GetAllActiveSessions(t *testing.T) {
 }
 
 func TestSessionManager_CallExpiration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow expiration test in short mode")
+	}
+
 	// Setup
 	store := storage.NewMemoryStorage()
 	id := newTestIdentity(t)
@@ -244,8 +248,8 @@ func TestSessionManager_CallExpiration(t *testing.T) {
 	// Manually expire the offer
 	session.ExpiresAt = time.Now().Add(-1 * time.Second)
 
-	// Wait for cleanup goroutine to run
-	time.Sleep(15 * time.Second)
+	// Wait for cleanup goroutine to run (ticker interval is 10s)
+	time.Sleep(11 * time.Second)
 
 	// Session should be cleaned up
 	_, err = sessionMgr.GetSession(session.CallID)

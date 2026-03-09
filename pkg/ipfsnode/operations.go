@@ -16,7 +16,7 @@ import (
 // Add adds data to IPFS and returns the CID
 // The data is stored in the node's blockstore
 func (n *Node) Add(data []byte) (string, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return "", ErrNodeNotStarted
 	}
 
@@ -45,7 +45,7 @@ func (n *Node) Add(data []byte) (string, error) {
 // Get retrieves data from IPFS by CID
 // Returns the raw bytes if successful
 func (n *Node) Get(cidStr string) ([]byte, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 
@@ -65,7 +65,7 @@ func (n *Node) Get(cidStr string) ([]byte, error) {
 
 // ConnectToPeer connects to a peer by multiaddr
 func (n *Node) ConnectToPeer(maddr string) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -108,7 +108,7 @@ func (n *Node) ConnectToPeer(maddr string) error {
 // It first tries direct FindPeer, then falls back to GetClosestPeers which returns
 // peers closest to the target in DHT space (useful when target isn't directly advertised).
 func (n *Node) FindPeer(peerID string) (*peer.AddrInfo, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 
@@ -158,31 +158,36 @@ func (n *Node) FindPeer(peerID string) (*peer.AddrInfo, error) {
 // This should be called after Start() before attempting DHT operations.
 // Returns an error if the timeout expires before any peers are found.
 func (n *Node) WaitForDHT(timeout time.Duration) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
-	ctx, cancel := context.WithTimeout(n.ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	// Fast path: routing table already populated
+	if len(n.dht.RoutingTable().ListPeers()) > 0 {
+		return nil
+	}
 
 	logger.Debugw("waiting for DHT bootstrap...", "timeout", timeout)
 
-	for {
-		select {
-		case <-ctx.Done():
-			routingTableSize := len(n.dht.RoutingTable().ListPeers())
-			return fmt.Errorf("DHT bootstrap timeout after %s (routing table has %d peers)", timeout, routingTableSize)
-		case <-ticker.C:
-			routingTableSize := len(n.dht.RoutingTable().ListPeers())
-			if routingTableSize > 0 {
-				logger.Debugw("DHT bootstrap complete", "routing_table_size", routingTableSize)
-				return nil
-			}
-			logger.Debugw("DHT routing table empty, waiting...")
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	// Wait for IPFS bootstrap to complete first (event-driven),
+	// then check routing table
+	select {
+	case <-n.ipfsBootstrapDone:
+		// Bootstrap finished — check routing table
+		routingTableSize := len(n.dht.RoutingTable().ListPeers())
+		if routingTableSize > 0 {
+			logger.Debugw("DHT bootstrap complete", "routing_table_size", routingTableSize)
+			return nil
 		}
+		return fmt.Errorf("DHT bootstrap completed but routing table empty (0 peers)")
+	case <-timer.C:
+		routingTableSize := len(n.dht.RoutingTable().ListPeers())
+		return fmt.Errorf("DHT bootstrap timeout after %s (routing table has %d peers)", timeout, routingTableSize)
+	case <-n.ctx.Done():
+		return n.ctx.Err()
 	}
 }
 
@@ -191,7 +196,7 @@ func (n *Node) WaitForDHT(timeout time.Duration) error {
 // For Babylon protocol keys (/bt/id/, /bt/prekeys/), uses Babylon DHT
 // For other keys, uses the default IPFS DHT
 func (n *Node) PutToDHT(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -287,7 +292,7 @@ func (n *Node) shouldUseBabylonDHT(key string) bool {
 // For Babylon protocol keys (/bt/id/, /bt/prekeys/), uses Babylon DHT
 // For other keys, uses the default IPFS DHT
 func (n *Node) GetFromDHT(ctx context.Context, key string) ([]byte, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 
@@ -323,7 +328,7 @@ func (n *Node) GetFromDHT(ctx context.Context, key string) ([]byte, error) {
 // GetClosestPeers finds peers closest to a given key in the DHT
 // This implements the DHTClient interface
 func (n *Node) GetClosestPeers(ctx context.Context, key string) ([]string, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 	if n.dht == nil {

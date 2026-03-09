@@ -2,9 +2,12 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 // LoadAppConfig loads the unified configuration with the following precedence:
@@ -51,10 +54,49 @@ func LoadAppConfig(dataDir, configPath string) (*AppConfig, error) {
 	return cfg, nil
 }
 
+// SaveMinimalConfig writes a minimal config.yaml with the profile section to
+// the given data directory. It only writes fields explicitly set, avoiding
+// dumping all defaults.
+func SaveMinimalConfig(dataDir string, profile ProfileConfig) error {
+	type minimalConfig struct {
+		Profile ProfileConfig `yaml:"profile"`
+	}
+	cfg := minimalConfig{Profile: profile}
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	configPath := filepath.Join(dataDir, "config.yaml")
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	return nil
+}
+
+// SaveAppConfig writes the full AppConfig to config.yaml in the given data directory.
+func SaveAppConfig(dataDir string, cfg *AppConfig) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	configPath := filepath.Join(dataDir, "config.yaml")
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	return nil
+}
+
 // setViperDefaults registers all default values so that env vars can be
 // resolved even when no config file is present.
 func setViperDefaults(v *viper.Viper) {
 	d := DefaultAppConfig()
+
+	// Profile
+	v.SetDefault("profile.display_name", d.Profile.DisplayName)
+	v.SetDefault("profile.device_name", d.Profile.DeviceName)
 
 	// Network
 	v.SetDefault("network.bootstrap_peers", d.Network.BootstrapPeers)
@@ -101,6 +143,16 @@ func setViperDefaults(v *viper.Viper) {
 	v.SetDefault("multidevice.device_name", d.Multidevice.DeviceName)
 	v.SetDefault("multidevice.max_devices", d.Multidevice.MaxDevices)
 	v.SetDefault("multidevice.sync_interval", d.Multidevice.SyncInterval)
+
+	// Appearance
+	v.SetDefault("appearance.dark_mode", d.Appearance.DarkMode)
+	v.SetDefault("appearance.font_size", d.Appearance.FontSize)
+	v.SetDefault("appearance.window_width", d.Appearance.WindowWidth)
+	v.SetDefault("appearance.window_height", d.Appearance.WindowHeight)
+
+	// Privacy
+	v.SetDefault("privacy.send_read_receipts", d.Privacy.SendReadReceipts)
+	v.SetDefault("privacy.send_typing_indicators", d.Privacy.SendTypingIndicators)
 
 	// Identity
 	v.SetDefault("identity.dht_publish", d.Identity.DHTPublish)

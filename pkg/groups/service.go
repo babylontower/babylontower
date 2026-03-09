@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	pb "babylontower/pkg/proto"
 	"babylontower/pkg/storage"
 
@@ -18,8 +20,8 @@ import (
 )
 
 var (
-	// ErrGroupNotFound is returned when a group is not found
-	ErrGroupNotFound = errors.New("group not found")
+	// ErrGroupNotFound aliases the canonical sentinel from pkg/errors.
+	ErrGroupNotFound = bterrors.ErrGroupNotFound
 	// ErrMemberNotFound is returned when a member is not found
 	ErrMemberNotFound = errors.New("member not found")
 	// ErrAlreadyMember is returned when trying to add an existing member
@@ -28,13 +30,17 @@ var (
 	ErrNotAuthorized = errors.New("not authorized")
 	// ErrInvalidEpoch is returned when epoch validation fails
 	ErrInvalidEpoch = errors.New("invalid epoch")
-	// ErrSenderKeyNotFound is returned when a sender key is not found
-	ErrSenderKeyNotFound = errors.New("sender key not found")
+	// ErrSenderKeyNotFound aliases the canonical sentinel from pkg/errors.
+	ErrSenderKeyNotFound = bterrors.ErrSenderKeyNotFound
 )
+
+// GroupStorage defines the storage operations needed by the groups service.
+// Matches the storage.GroupStore sub-interface.
+type GroupStorage = storage.GroupStore
 
 // Service manages private groups
 type Service struct {
-	storage *storage.BadgerStorage
+	storage GroupStorage
 	// Identity keys for signing
 	identitySignPub  ed25519.PublicKey
 	identitySignPriv ed25519.PrivateKey
@@ -49,7 +55,7 @@ type Service struct {
 
 // NewService creates a new groups service
 func NewService(
-	storage *storage.BadgerStorage,
+	storage GroupStorage,
 	identitySignPub ed25519.PublicKey,
 	identitySignPriv ed25519.PrivateKey,
 	opts ...ServiceOption,
@@ -265,8 +271,8 @@ func (s *Service) RemoveMember(groupID []byte, memberPubkey []byte) (*GroupState
 
 // EncryptGroupMessage encrypts a message using Sender Keys
 func (s *Service) EncryptGroupMessage(groupID []byte, plaintext []byte) (*pb.GroupPayload, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	groupKey := hex.EncodeToString(groupID)
 	senderKeyMap, exists := s.senderKeys[groupKey]
@@ -285,9 +291,14 @@ func (s *Service) EncryptGroupMessage(groupID []byte, plaintext []byte) (*pb.Gro
 		return nil, fmt.Errorf("failed to derive message key: %w", err)
 	}
 
-	// Generate nonce
+	// ChainIndex was incremented by DeriveMessageKey; the message index is ChainIndex-1
+	messageIndex := senderKey.ChainIndex - 1
+
+	// Generate nonce (must match decrypt path)
 	nonce := make([]byte, chacha20poly1305.NonceSizeX)
-	if _, err := hkdf.New(sha256.New, messageKey, []byte("nonce"), nil).Read(nonce); err != nil {
+	chainIndexBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(chainIndexBytes, messageIndex)
+	if _, err := hkdf.New(sha256.New, messageKey, []byte("nonce"), chainIndexBytes).Read(nonce); err != nil {
 		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
@@ -312,7 +323,7 @@ func (s *Service) EncryptGroupMessage(groupID []byte, plaintext []byte) (*pb.Gro
 	// For PoC, store ciphertext directly in the oneof bytes field
 	return &pb.GroupPayload{
 		Epoch:                senderKey.Epoch,
-		ChainIndex:           senderKey.ChainIndex - 1, // Already incremented
+		ChainIndex:           messageIndex,
 		Content:              &pb.GroupPayload_Ciphertext{Ciphertext: ciphertext},
 		SenderGroupSignature: signature,
 	}, nil
@@ -339,28 +350,26 @@ func (s *Service) DecryptGroupMessage(groupID []byte, senderPubkey []byte, paylo
 		return nil, ErrInvalidEpoch
 	}
 
-	// Derive message key (need to advance to the correct index)
-	// In a real implementation, we'd need to handle out-of-order messages
-	// by caching skipped message keys
-	currentIndex := senderKey.ChainIndex
-	if payload.ChainIndex < currentIndex {
-		// This is a skipped message - would need to retrieve cached key
-		return nil, errors.New("skipped message key not implemented")
-	}
-
-	// Advance chain to the correct index
-	for senderKey.ChainIndex <= payload.ChainIndex {
-		_, err := senderKey.DeriveMessageKey()
+	// §2.4: Handle out-of-order messages using skipped key cache (up to 256)
+	var messageKey []byte
+	if payload.ChainIndex < senderKey.ChainIndex {
+		// Past message — look in skipped key cache
+		if senderKey.SkippedKeys == nil {
+			return nil, errors.New("skipped message key not found (no cache)")
+		}
+		cachedKey, ok := senderKey.SkippedKeys[payload.ChainIndex]
+		if !ok {
+			return nil, fmt.Errorf("skipped message key not found for index %d", payload.ChainIndex)
+		}
+		messageKey = cachedKey
+		delete(senderKey.SkippedKeys, payload.ChainIndex)
+	} else {
+		// Current or future message — advance chain, caching skipped keys
+		var err error
+		messageKey, err = senderKey.SkipToIndex(payload.ChainIndex)
 		if err != nil {
 			return nil, fmt.Errorf("failed to derive message key: %w", err)
 		}
-	}
-
-	// For simplicity, regenerate the message key at the target index
-	// In production, this would use cached keys
-	messageKey, err := s.deriveMessageKeyAtIndex(senderKey, payload.ChainIndex)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive message key at index: %w", err)
 	}
 
 	// Generate nonce (same derivation as encryption)
@@ -531,10 +540,13 @@ func (s *Service) deriveMessageKeyAtIndex(senderKey *SenderKey, targetIndex uint
 		return nil, errors.New("out-of-order message key derivation not implemented")
 	}
 
-	// Derive message key at current index
+	// Derive message key at current index using proper HKDF
 	chainIndexBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(chainIndexBytes, targetIndex)
-	hkdfInput := append([]byte("bt-sk-msg"), chainIndexBytes...)
-	hash := sha256.Sum256(append(senderKey.ChainKey, hkdfInput...))
-	return hash[:], nil
+	messageKey := make([]byte, 32)
+	msgHKDF := hkdf.New(sha256.New, senderKey.ChainKey, []byte("bt-sk-msg"), chainIndexBytes)
+	if _, err := io.ReadFull(msgHKDF, messageKey); err != nil {
+		return nil, fmt.Errorf("failed to derive message key: %w", err)
+	}
+	return messageKey, nil
 }

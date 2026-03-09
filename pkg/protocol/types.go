@@ -2,17 +2,17 @@
 // It provides high-level orchestration for identity management, session establishment,
 // peer discovery, and message routing over the decentralized P2P network.
 //
+// Status: Phase 18 (Integration & Hardening). The active code in this package is
+// EnvelopeBuilder (envelope.go) and topic derivation (envelope.go). The interface
+// definitions (SessionStore, IdentityStore, PeerDiscovery, etc.) and
+// ProtocolConfig/SessionManager types are specification scaffolding that will be
+// wired into the runtime path during Phase 18 integration.
+//
 // Protocol Architecture:
 //   - Transport Layer: IPFS DHT for peer routing and content addressing
 //   - Protocol Layer: Babylon DHT for identity documents and protocol-specific data
 //   - Session Layer: X3DH key agreement + Double Ratchet for E2E encryption
 //   - Application Layer: Message types, groups, channels, and RTC signaling
-//
-// Key Design Decisions:
-//   - Separate DHT instances: IPFS DHT for transport, Babylon DHT for protocol
-//   - High-level methods: Simple Load(), Connect(), Bootstrap() methods
-//   - State tracking: Atomic booleans for bootstrap state
-//   - Modular design: Each component is independently testable
 package protocol
 
 import (

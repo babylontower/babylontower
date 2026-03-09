@@ -22,7 +22,7 @@ var timeNow = time.Now
 
 // CommandHandler handles CLI commands
 type CommandHandler struct {
-	storage   storage.Storage
+	storage   storage.ContactStore
 	ipfsNode  app.NetworkNode
 	messaging app.Messenger
 	groups    app.GroupManager
@@ -49,7 +49,7 @@ type CommandHandler struct {
 
 // NewCommandHandler creates a new command handler
 func NewCommandHandler(
-	storage storage.Storage,
+	storage storage.ContactStore,
 	ipfsNode app.NetworkNode,
 	messaging app.Messenger,
 	groupsSvc app.GroupManager,

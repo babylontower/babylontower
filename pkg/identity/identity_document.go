@@ -25,7 +25,8 @@ func NewIdentityDocumentManager(identity *IdentityV1) *IdentityDocumentManager {
 	}
 }
 
-// CreateIdentityDocument creates a new IdentityDocument or updates an existing one
+// CreateIdentityDocument creates a new IdentityDocument or updates an existing one.
+// prevCreatedAt should be the created_at timestamp from the previous document (0 for first doc).
 func (m *IdentityDocumentManager) CreateIdentityDocument(
 	prevSequence uint64,
 	prevHash []byte,
@@ -33,6 +34,7 @@ func (m *IdentityDocumentManager) CreateIdentityDocument(
 	signedPrekeys []*pb.SignedPrekey,
 	oneTimePrekeys []*pb.OneTimePrekey,
 	displayName string,
+	prevCreatedAt ...uint64,
 ) (*pb.IdentityDocument, error) {
 	now := time.Now()
 
@@ -72,9 +74,9 @@ func (m *IdentityDocumentManager) CreateIdentityDocument(
 		Features:              features,
 	}
 
-	// Set created_at to previous timestamp if updating
-	if prevSequence > 0 {
-		doc.CreatedAt = prevSequence // Will be overwritten by actual creation time on first doc
+	// §1.4: created_at is the first publication timestamp, never changes on updates
+	if prevSequence > 0 && len(prevCreatedAt) > 0 && prevCreatedAt[0] > 0 {
+		doc.CreatedAt = prevCreatedAt[0]
 	}
 
 	// Sign the document
@@ -146,12 +148,30 @@ func VerifyIdentityDocument(doc *pb.IdentityDocument) error {
 		return errors.New("document timestamp out of reasonable range")
 	}
 
+	// §1.4 rule 7: Revoked devices/prekeys MUST NOT appear in active lists
+	revokedKeys := make(map[string]bool, len(doc.Revocations))
+	for _, rev := range doc.Revocations {
+		revokedKeys[string(rev.RevokedKey)] = true
+	}
+	for _, device := range doc.Devices {
+		if revokedKeys[string(device.DeviceId)] {
+			return fmt.Errorf("revoked device %x still in active device list", device.DeviceId)
+		}
+	}
+	for _, spk := range doc.SignedPrekeys {
+		if revokedKeys[string(spk.DeviceId)] {
+			return fmt.Errorf("signed prekey for revoked device %x still in active list", spk.DeviceId)
+		}
+	}
+
 	return nil
 }
 
 // SerializeDocumentForSigning is the canonical serialization of fields 1-16
 // for signing and verification. Both signer and validator MUST use this function
 // to ensure identical byte sequences.
+// NOTE: All multi-byte integers use LittleEndian encoding. This is a protocol
+// convention — cross-implementation compatibility requires matching this choice.
 func SerializeDocumentForSigning(doc *pb.IdentityDocument) ([]byte, error) {
 	data := make([]byte, 0, 256)
 

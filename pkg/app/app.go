@@ -21,9 +21,14 @@ type Application interface {
 	// Identity
 	GetIdentity() *IdentityInfo
 
+	// High-level managers for UI
+	Contacts() ContactManager
+	Chat() ChatManager
+
 	// Core services (return interfaces, not concrete types)
 	Messenger() Messenger
 	Groups() GroupManager
+	UIGroups() UIGroupManager
 	Network() NetworkNode
 	Storage() storage.Storage
 
@@ -35,12 +40,22 @@ type Application interface {
 type IdentityInfo struct {
 	// PublicKey is the Ed25519 public key in hex format
 	PublicKey string
+	// PublicKeyBase58 is the Ed25519 public key in base58 format
+	PublicKeyBase58 string
+	// X25519KeyBase58 is the X25519 public key in base58 format
+	X25519KeyBase58 string
 	// PeerID is the libp2p peer ID
 	PeerID string
 	// Multiaddrs is the list of listen addresses
 	Multiaddrs []string
 	// Mnemonic is the BIP39 mnemonic (only available on first generation)
 	Mnemonic string
+	// Fingerprint is the identity fingerprint for out-of-band verification
+	Fingerprint string
+	// ContactLink is the btower:// contact exchange link
+	ContactLink string
+	// DisplayName is the user's configured display name
+	DisplayName string
 }
 
 // MessageEvent represents an incoming message event.

@@ -38,8 +38,7 @@ func channelPostKey(channelID, postID []byte) []byte {
 
 // SaveChannel stores a channel state in the database
 func (s *BadgerStorage) SaveChannel(channel *pb.ChannelState) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	data, err := proto.Marshal(channel)
 	if err != nil {
@@ -62,8 +61,7 @@ func (s *BadgerStorage) SaveChannel(channel *pb.ChannelState) error {
 
 // GetChannel retrieves a channel state from the database
 func (s *BadgerStorage) GetChannel(channelID []byte) (*pb.ChannelState, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := channelKey(channelID)
 
@@ -98,8 +96,7 @@ func (s *BadgerStorage) GetChannel(channelID []byte) (*pb.ChannelState, error) {
 
 // ListChannels returns all channels in the database
 func (s *BadgerStorage) ListChannels() ([]*pb.ChannelState, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var channels []*pb.ChannelState
 
@@ -136,8 +133,7 @@ func (s *BadgerStorage) ListChannels() ([]*pb.ChannelState, error) {
 
 // DeleteChannel removes a channel from the database
 func (s *BadgerStorage) DeleteChannel(channelID []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	key := channelKey(channelID)
 
@@ -155,8 +151,7 @@ func (s *BadgerStorage) DeleteChannel(channelID []byte) error {
 
 // SaveChannelPost stores a channel post in the database
 func (s *BadgerStorage) SaveChannelPost(post *pb.ChannelPost) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 
 	data, err := proto.Marshal(post)
 	if err != nil {
@@ -196,8 +191,7 @@ func (s *BadgerStorage) SaveChannelPost(post *pb.ChannelPost) error {
 
 // GetChannelPosts retrieves posts from a channel
 func (s *BadgerStorage) GetChannelPosts(channelID []byte, limit, offset int) ([]*pb.ChannelPost, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	var posts []*pb.ChannelPost
 
@@ -252,8 +246,7 @@ func (s *BadgerStorage) GetChannelPosts(channelID []byte, limit, offset int) ([]
 
 // GetLatestChannelPostCID retrieves the latest post CID for a channel
 func (s *BadgerStorage) GetLatestChannelPostCID(channelID []byte) ([]byte, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 
 	key := channelKey(channelID)
 

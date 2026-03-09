@@ -7,8 +7,6 @@ import (
 	"time"
 
 	pb "babylontower/pkg/proto"
-
-	"google.golang.org/protobuf/proto"
 )
 
 // testStorage creates an in-memory BadgerDB for testing
@@ -38,38 +36,13 @@ func createTestContact(pubKey []byte, displayName string) *pb.Contact {
 	}
 }
 
-// createTestEnvelope creates a test signed envelope
-func createTestEnvelope(text string, senderPubKey []byte) *pb.SignedEnvelope {
-	return createTestEnvelopeWithNonce(text, senderPubKey, nil)
-}
-
-// createTestEnvelopeWithNonce creates a test signed envelope with a specific nonce
-func createTestEnvelopeWithNonce(text string, senderPubKey, nonce []byte) *pb.SignedEnvelope {
-	// Create inner message
-	msg := &pb.Message{
-		Text:      text,
-		Timestamp: uint64(time.Now().Unix()),
-	}
-	msgData, _ := proto.Marshal(msg)
-
-	// Use provided nonce or generate a random one
-	if nonce == nil {
-		nonce = make([]byte, 24)
-	}
-
-	// Create envelope (with dummy encryption for testing)
-	env := &pb.Envelope{
-		Ciphertext:      msgData, // Not actually encrypted in test
-		EphemeralPubkey: make([]byte, 32),
-		Nonce:           nonce,
-	}
-	envData, _ := proto.Marshal(env)
-
-	// Create signed envelope (with dummy signature for testing)
-	return &pb.SignedEnvelope{
-		Envelope:     envData,
-		Signature:    make([]byte, 64), // Dummy signature
-		SenderPubkey: senderPubKey,
+// createTestMessage creates a test stored message
+func createTestMessage(text string, senderPubKey []byte, isOutgoing bool) *StoredMessage {
+	return &StoredMessage{
+		Text:         text,
+		Timestamp:    uint64(time.Now().Unix()),
+		SenderPubKey: senderPubKey,
+		IsOutgoing:   isOutgoing,
 	}
 }
 
@@ -219,9 +192,9 @@ func TestAddMessage(t *testing.T) {
 	store := testStorage(t)
 
 	contactPubKey := []byte("contact_pub_key_32_bytes_longg")
-	envelope := createTestEnvelope("Hello, World!", []byte("sender_pub_key_32_bytes_longgg"))
+	msg := createTestMessage("Hello, World!", []byte("sender_pub_key_32_bytes_longgg"), false)
 
-	err := store.AddMessage(contactPubKey, envelope)
+	err := store.AddMessage(contactPubKey, msg)
 	if err != nil {
 		t.Fatalf("AddMessage failed: %v", err)
 	}
@@ -233,13 +206,11 @@ func TestGetMessages(t *testing.T) {
 	contactPubKey := []byte("contact_pub_key_32_bytes_longg")
 	senderPubKey := []byte("sender_pub_key_32_bytes_longgg")
 
-	// Add multiple messages with unique nonces
-	messages := []string{"Message 1", "Message 2", "Message 3"}
-	for i, text := range messages {
-		nonce := make([]byte, 24)
-		nonce[0] = byte(i) // Unique nonce for each message
-		envelope := createTestEnvelopeWithNonce(text, senderPubKey, nonce)
-		if err := store.AddMessage(contactPubKey, envelope); err != nil {
+	// Add multiple messages
+	texts := []string{"Message 1", "Message 2", "Message 3"}
+	for _, text := range texts {
+		msg := createTestMessage(text, senderPubKey, false)
+		if err := store.AddMessage(contactPubKey, msg); err != nil {
 			t.Fatalf("AddMessage failed: %v", err)
 		}
 	}
@@ -250,8 +221,8 @@ func TestGetMessages(t *testing.T) {
 		t.Fatalf("GetMessages failed: %v", err)
 	}
 
-	if len(retrieved) != len(messages) {
-		t.Errorf("GetMessages returned %d messages, want %d", len(retrieved), len(messages))
+	if len(retrieved) != len(texts) {
+		t.Errorf("GetMessages returned %d messages, want %d", len(retrieved), len(texts))
 	}
 }
 
@@ -261,13 +232,11 @@ func TestGetMessagesWithLimit(t *testing.T) {
 	contactPubKey := []byte("contact_pub_key_32_bytes_longg")
 	senderPubKey := []byte("sender_pub_key_32_bytes_longgg")
 
-	// Add multiple messages with unique nonces
-	messages := []string{"Message 1", "Message 2", "Message 3", "Message 4", "Message 5"}
-	for i, text := range messages {
-		nonce := make([]byte, 24)
-		nonce[0] = byte(i) // Unique nonce for each message
-		envelope := createTestEnvelopeWithNonce(text, senderPubKey, nonce)
-		if err := store.AddMessage(contactPubKey, envelope); err != nil {
+	// Add multiple messages
+	for i := 0; i < 5; i++ {
+		msg := createTestMessage("Message", senderPubKey, false)
+		msg.Timestamp = uint64(time.Now().Unix()) + uint64(i)
+		if err := store.AddMessage(contactPubKey, msg); err != nil {
 			t.Fatalf("AddMessage failed: %v", err)
 		}
 	}
@@ -289,13 +258,11 @@ func TestGetMessagesWithOffset(t *testing.T) {
 	contactPubKey := []byte("contact_pub_key_32_bytes_longg")
 	senderPubKey := []byte("sender_pub_key_32_bytes_longgg")
 
-	// Add multiple messages with unique nonces
-	messages := []string{"Message 1", "Message 2", "Message 3", "Message 4", "Message 5"}
-	for i, text := range messages {
-		nonce := make([]byte, 24)
-		nonce[0] = byte(i) // Unique nonce for each message
-		envelope := createTestEnvelopeWithNonce(text, senderPubKey, nonce)
-		if err := store.AddMessage(contactPubKey, envelope); err != nil {
+	// Add multiple messages
+	for i := 0; i < 5; i++ {
+		msg := createTestMessage("Message", senderPubKey, false)
+		msg.Timestamp = uint64(time.Now().Unix()) + uint64(i)
+		if err := store.AddMessage(contactPubKey, msg); err != nil {
 			t.Fatalf("AddMessage failed: %v", err)
 		}
 	}
@@ -332,12 +299,11 @@ func TestDeleteMessages(t *testing.T) {
 	contactPubKey := []byte("contact_pub_key_32_bytes_longg")
 	senderPubKey := []byte("sender_pub_key_32_bytes_longgg")
 
-	// Add messages with unique nonces
+	// Add messages
 	for i := 0; i < 3; i++ {
-		nonce := make([]byte, 24)
-		nonce[0] = byte(i)
-		envelope := createTestEnvelopeWithNonce("Message", senderPubKey, nonce)
-		if err := store.AddMessage(contactPubKey, envelope); err != nil {
+		msg := createTestMessage("Message", senderPubKey, false)
+		msg.Timestamp = uint64(time.Now().Unix()) + uint64(i)
+		if err := store.AddMessage(contactPubKey, msg); err != nil {
 			t.Fatalf("AddMessage failed: %v", err)
 		}
 	}
@@ -365,29 +331,17 @@ func TestMessageOrdering(t *testing.T) {
 	contactPubKey := []byte("contact_pub_key_32_bytes_longg")
 	senderPubKey := []byte("sender_pub_key_32_bytes_longgg")
 
+	baseTime := uint64(time.Now().Unix())
+
 	// Add messages with explicit timestamps to ensure ordering
 	for i := 0; i < 5; i++ {
-		// Create message with specific timestamp
-		msg := &pb.Message{
-			Text:      "Message",
-			Timestamp: uint64(time.Now().Unix()) + uint64(i),
+		msg := &StoredMessage{
+			Text:         "Message",
+			Timestamp:    baseTime + uint64(i),
+			SenderPubKey: senderPubKey,
+			IsOutgoing:   false,
 		}
-		msgData, _ := proto.Marshal(msg)
-
-		env := &pb.Envelope{
-			Ciphertext:      msgData,
-			EphemeralPubkey: make([]byte, 32),
-			Nonce:           []byte{byte(i)}, // Different nonce for each message
-		}
-		envData, _ := proto.Marshal(env)
-
-		envelope := &pb.SignedEnvelope{
-			Envelope:     envData,
-			Signature:    make([]byte, 64),
-			SenderPubkey: senderPubKey,
-		}
-
-		if err := store.AddMessage(contactPubKey, envelope); err != nil {
+		if err := store.AddMessage(contactPubKey, msg); err != nil {
 			t.Fatalf("AddMessage failed: %v", err)
 		}
 	}
@@ -400,6 +354,14 @@ func TestMessageOrdering(t *testing.T) {
 
 	if len(retrieved) != 5 {
 		t.Errorf("GetMessages returned %d messages, want 5", len(retrieved))
+	}
+
+	// Verify ordering
+	for i := 1; i < len(retrieved); i++ {
+		if retrieved[i].Timestamp < retrieved[i-1].Timestamp {
+			t.Errorf("messages not ordered: timestamp %d < %d at index %d",
+				retrieved[i].Timestamp, retrieved[i-1].Timestamp, i)
+		}
 	}
 }
 

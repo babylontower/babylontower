@@ -11,7 +11,6 @@ import (
 	"babylontower/cmd/messenger/ui"
 	"babylontower/pkg/app"
 	"babylontower/pkg/config"
-	"babylontower/pkg/identity"
 
 	"github.com/ipfs/go-log/v2"
 )
@@ -51,11 +50,6 @@ func printHelp() {
 	fmt.Println("  -log-file <path>              Write logs to file instead of stderr")
 	fmt.Println("                                (env: BABYLONTOWER_LOG_FILE)")
 	fmt.Println("  -dark-mode                    Enable dark mode")
-	fmt.Println("")
-	fmt.Println("Running Multiple Instances:")
-	fmt.Println("  To run two nodes on the same machine, use different data directories:")
-	fmt.Println("    ./babylon-ui -data-dir ~/.babylontower/node1")
-	fmt.Println("    ./babylon-ui -data-dir ~/.babylontower/node2")
 }
 
 func run() error {
@@ -63,7 +57,7 @@ func run() error {
 	configFlag := flag.String("config", "", "Config file path (optional)")
 	logLevelFlag := flag.String("log-level", "", "Log level (default: warn)")
 	logFileFlag := flag.String("log-file", "", "Write logs to file")
-	darkModeFlag := flag.Bool("dark-mode", false, "Enable dark mode")
+	darkModeFlag := flag.Bool("dark-mode", true, "Enable dark mode (default: true)")
 	flag.Parse()
 
 	dataDir, err := getDataDir(*dataDirFlag)
@@ -77,68 +71,108 @@ func run() error {
 
 	identityPath := filepath.Join(dataDir, IdentityFileName)
 
-	// Load configuration
-	appConfig, err := loadAppConfig(dataDir, *configFlag, *logLevelFlag, *logFileFlag)
+	// ── Step 1: Identity ────────────────────────────────────────────────
+	// If no identity file exists, launch the onboarding GUI.
+	// The user creates or restores an identity before the app boots.
+
+	if !app.IdentityFileExists(identityPath) {
+		result := runOnboarding()
+		if result == nil {
+			// User closed the onboarding window — exit cleanly
+			return nil
+		}
+
+		if err := app.SaveIdentityToFile(result.identity, identityPath); err != nil {
+			return fmt.Errorf("failed to save identity: %w", err)
+		}
+		logger.Infow("identity saved", "path", identityPath)
+
+		// Save initial config with profile from onboarding
+		profile := config.ProfileConfig{
+			DisplayName: result.displayName,
+			DeviceName:  result.deviceName,
+		}
+		if err := config.SaveMinimalConfig(dataDir, profile); err != nil {
+			logger.Warnw("failed to save initial config", "error", err)
+		}
+	}
+
+	// ── Step 2: Load identity ───────────────────────────────────────────
+	identResult, err := app.LoadIdentityFromFile(identityPath)
+	if err != nil {
+		return fmt.Errorf("failed to load identity: %w", err)
+	}
+	ident := identResult.Identity
+
+	// ── Step 3: Config & logging ────────────────────────────────────────
+	appConfig, rawCfg, err := loadAppConfig(dataDir, *configFlag, *logLevelFlag, *logFileFlag)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Configure logging
 	if err := configureLogging(appConfig.LogLevel, appConfig.LogFile); err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
 	}
 
 	logger.Infow("starting Babylon Tower UI", "version", getVersion(), "data_dir", dataDir)
 
-	// Load or create identity
-	ident, err := loadOrCreateIdentity(identityPath)
-	if err != nil {
-		return fmt.Errorf("failed to load identity: %w", err)
-	}
-
-	logger.Infow("identity loaded", "public_key", ident.PublicKeyHex())
-
-	// Create application (core services)
-	application, err := app.NewApplication(appConfig, ident)
-	if err != nil {
-		return fmt.Errorf("failed to create application: %w", err)
-	}
-	defer func() {
-		if err := application.Stop(); err != nil {
-			logger.Errorw("failed to stop application", "error", err)
-		}
-	}()
-
-	if err := application.Start(); err != nil {
-		return fmt.Errorf("failed to start application: %w", err)
-	}
-
-	// Create and run Gio UI
+	// ── Step 4: Create UI immediately (core initializes in background) ──
 	gioUI, err := ui.New(&ui.Config{
-		DarkMode: *darkModeFlag,
-		Title:    "Babylon Tower",
-	}, application)
+		DarkMode:  *darkModeFlag,
+		Title:     "Babylon Tower",
+		DataDir:   dataDir,
+		AppConfig: rawCfg,
+	}, nil) // nil coreApp — will be set asynchronously
 	if err != nil {
 		return fmt.Errorf("failed to create UI: %w", err)
 	}
 
-	// Run UI event loop
-	if err := gioUI.Start(); err != nil {
-		return fmt.Errorf("UI error: %w", err)
+	// ── Step 5: Initialize core services in background ──────────────────
+	var application app.Application
+	go func() {
+		coreApp, initErr := app.NewApplication(appConfig, ident)
+		if initErr != nil {
+			logger.Errorw("failed to create application", "error", initErr)
+			gioUI.SetCoreError(initErr)
+			return
+		}
+
+		if startErr := coreApp.Start(); startErr != nil {
+			logger.Errorw("failed to start application", "error", startErr)
+			if stopErr := coreApp.Stop(); stopErr != nil {
+				logger.Warnw("failed to stop application after start failure", "error", stopErr)
+			}
+			gioUI.SetCoreError(startErr)
+			return
+		}
+
+		application = coreApp
+		gioUI.SetCoreApp(coreApp)
+		logger.Infow("core services ready")
+	}()
+
+	// ── Step 6: Run main UI (blocking) ──────────────────────────────────
+	uiErr := gioUI.Start()
+
+	// Cleanup: stop core if it was started
+	if application != nil {
+		if err := application.Stop(); err != nil {
+			logger.Errorw("failed to stop application", "error", err)
+		}
 	}
 
 	logger.Info("Babylon Tower UI shutdown complete")
-	return nil
+	return uiErr
 }
 
-// loadAppConfig loads and merges configuration from file and CLI flags
-func loadAppConfig(dataDir, configFile, logLevel, logFile string) (*app.AppConfig, error) {
+// loadAppConfig loads and merges configuration from file and CLI flags.
+// Returns both the core app config and the raw config (for UI settings screen).
+func loadAppConfig(dataDir, configFile, logLevel, logFile string) (*app.AppConfig, *config.AppConfig, error) {
 	cfg, err := config.LoadAppConfig(dataDir, configFile)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	// Apply CLI flag overrides
 	if logLevel != "" {
 		cfg.Logging.Level = logLevel
 	}
@@ -146,13 +180,11 @@ func loadAppConfig(dataDir, configFile, logLevel, logFile string) (*app.AppConfi
 		cfg.Logging.File = logFile
 	}
 
-	// Validate config
 	if err := config.ValidateAppConfig(cfg); err != nil {
 		logger.Warnw("config validation failed, using defaults", "error", err)
 		cfg = config.DefaultAppConfig()
 	}
 
-	// Convert to app.AppConfig
 	return &app.AppConfig{
 		DataDir:      dataDir,
 		IdentityPath: filepath.Join(dataDir, IdentityFileName),
@@ -160,11 +192,12 @@ func loadAppConfig(dataDir, configFile, logLevel, logFile string) (*app.AppConfi
 		IPFSDir:      filepath.Join(dataDir, "ipfs"),
 		LogLevel:     cfg.Logging.Level,
 		LogFile:      resolvePath(cfg.Logging.File, dataDir),
-		IPFSConfig:   cfg.ToIPFSConfig(),
-	}, nil
+		DisplayName:  cfg.Profile.DisplayName,
+		DeviceName:   cfg.Profile.DeviceName,
+		NetworkConfig: cfg.ToIPFSConfig(),
+	}, cfg, nil
 }
 
-// resolvePath resolves a relative path against a base directory
 func resolvePath(path, baseDir string) string {
 	if path == "" || filepath.IsAbs(path) {
 		return path
@@ -172,7 +205,6 @@ func resolvePath(path, baseDir string) string {
 	return filepath.Join(baseDir, path)
 }
 
-// configureLogging sets up structured logging
 func configureLogging(level, logFile string) error {
 	if level == "" {
 		level = os.Getenv("BABYLONTOWER_LOG_LEVEL")
@@ -195,7 +227,6 @@ func configureLogging(level, logFile string) error {
 	}
 	log.SetupLogging(logCfg)
 
-	// Set babylontower subsystems
 	btSubsystems := []string{
 		"babylontower", "babylontower/ui", "babylontower/storage",
 		"babylontower/messaging", "babylontower/ipfsnode", "babylontower/identity",
@@ -208,7 +239,6 @@ func configureLogging(level, logFile string) error {
 		_ = log.SetLogLevel(sub, level)
 	}
 
-	// Quiet libp2p subsystems
 	libp2pLevel := "error"
 	if level == "debug" {
 		libp2pLevel = "warn"
@@ -239,35 +269,6 @@ func getDataDir(flagDir string) (string, error) {
 		}
 	}
 	return filepath.Join(homeDir, DefaultDataDir), nil
-}
-
-func loadOrCreateIdentity(identityPath string) (*identity.Identity, error) {
-	if identity.IdentityExists(identityPath) {
-		return identity.LoadIdentity(identityPath)
-	}
-
-	logger.Info("Generating new identity...")
-	ident, err := identity.GenerateIdentity()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate identity: %w", err)
-	}
-
-	if err := identity.SaveIdentity(ident, identityPath); err != nil {
-		return nil, fmt.Errorf("failed to save identity: %w", err)
-	}
-
-	logger.Info("New identity generated and saved")
-	printNewIdentityInfo(ident)
-
-	return ident, nil
-}
-
-func printNewIdentityInfo(ident *identity.Identity) {
-	fmt.Printf("\n🎉 New identity generated!\n")
-	fmt.Printf("Your mnemonic (write this down safely):\n")
-	fmt.Printf("  %s\n\n", ident.Mnemonic)
-	fmt.Printf("WARNING: If you lose this mnemonic, you lose your identity!\n")
-	fmt.Printf("Store it in a secure location.\n\n")
 }
 
 func getVersion() string {

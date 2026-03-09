@@ -4,13 +4,13 @@ package ipfsnode
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"babylontower/pkg/config"
+	"babylontower/pkg/protocol"
 	"babylontower/pkg/storage"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -31,7 +31,7 @@ const (
 	// DialTimeout is the timeout for individual dial attempts
 	DialTimeout = 20 * time.Second // Increased from 15s for better NAT traversal
 	// DHTBootstrapTimeout is the timeout for DHT bootstrap
-	DHTBootstrapTimeout = 60 * time.Second
+	DHTBootstrapTimeout = 30 * time.Second
 	// DHTRefreshInterval is how often to refresh the DHT routing table
 	DHTRefreshInterval = 2 * time.Minute
 	// MDnsAnnounceInterval is how often mDNS announces our presence
@@ -162,7 +162,7 @@ type Node struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	peerChan   <-chan peer.AddrInfo
-	isStarted  bool
+	isStarted  atomic.Bool
 	topicCache *topicCache
 
 	// Peer tracking
@@ -194,10 +194,12 @@ type Node struct {
 	// === DECOUPLED BOOTSTRAP STATE FLAGS ===
 	// IPFS DHT bootstrap state (transport layer)
 	ipfsBootstrapComplete atomic.Bool
+	ipfsBootstrapDone     chan struct{} // closed when IPFS bootstrap completes
 
 	// Babylon DHT bootstrap state (protocol layer)
 	babylonBootstrapComplete atomic.Bool
 	babylonBootstrapDeferred atomic.Bool
+	babylonBootstrapDone     chan struct{} // closed when Babylon bootstrap completes or defers
 
 	// Rendezvous discovery state
 	rendezvousActive atomic.Bool
@@ -284,33 +286,24 @@ type BootstrapStatus struct {
 	TotalConnectedPeers int
 }
 
-// DefaultConfig returns a Config with sensible defaults
+// DefaultConfig returns a Config with sensible defaults.
+// Network defaults (bootstrap peers, relay, DHT mode) come from config.DefaultAppConfig().
 func DefaultConfig() *Config {
+	defaults := config.DefaultIPFSConfig()
 	return &Config{
-		RepoDir:    DefaultRepoDir,
-		ProtocolID: DefaultProtocolID,
-		BootstrapPeers: []string{
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiRNN6vEC9qmL9egu92p",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-			"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-			"/ip4/104.236.179.241/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-			"/ip4/128.199.219.111/tcp/4001/p2p/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64",
-			"/ip4/104.236.76.40/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-			"/ip4/178.62.158.147/tcp/4001/p2p/QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd",
-		},
-		EnableRelay:        true,
-		EnableHolePunching: true,
-		DHTMode:            "auto",
+		RepoDir:            DefaultRepoDir,
+		ProtocolID:         defaults.ProtocolID,
+		BootstrapPeers:     defaults.BootstrapPeers,
+		EnableRelay:        defaults.EnableRelay,
+		EnableHolePunching: defaults.EnableHolePunching,
+		DHTMode:            defaults.DHTMode,
 		Bootstrap:          DefaultBootstrapConfig(),
 	}
 }
 
 // TopicFromPublicKey derives a PubSub topic from a public key.
 // Per protocol spec §4.3: DM topic = "babylon-dm-" + hex(SHA256(recipient.pub)[:8])
+// Delegates to protocol.DeriveDMTopic for canonical topic derivation.
 func TopicFromPublicKey(pubKey []byte) string {
-	hash := sha256.Sum256(pubKey)
-	return "babylon-dm-" + hex.EncodeToString(hash[:8])
+	return protocol.DeriveDMTopic(pubKey)
 }

@@ -6,6 +6,9 @@ import (
 
 // TestGetNetworkInfo tests network info retrieval
 func TestGetNetworkInfo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -38,6 +41,9 @@ func TestGetNetworkInfo(t *testing.T) {
 
 // TestMDnsStats tests mDNS statistics
 func TestMDnsStats(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -54,6 +60,9 @@ func TestMDnsStats(t *testing.T) {
 	defer stopNode(node)()
 
 	stats := node.GetMDnsStats()
-	t.Logf("mDNS stats: TotalDiscoveries=%d, LastPeerFound=%v",
-		stats.TotalDiscoveries, stats.LastPeerFound)
+
+	// Freshly started node should have zero discoveries
+	if stats.TotalDiscoveries != 0 {
+		t.Errorf("Expected 0 discoveries for freshly started node, got %d", stats.TotalDiscoveries)
+	}
 }

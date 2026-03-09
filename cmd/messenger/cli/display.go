@@ -92,10 +92,9 @@ func FormatBootstrapStatus(connected int, routingTableSize int) string {
 	return fmt.Sprintf("✅ Network ready (%d peers)", routingTableSize)
 }
 
-// FormatMessageFromEnvelope formats a message from a signed envelope
-func FormatMessageFromEnvelope(envelope *pb.SignedEnvelope, contactName string, isOutgoing bool) string {
-	// For PoC, we can't decrypt incoming messages without the full flow
-	// This is a placeholder that shows the envelope was received
+// FormatMessageFromBabylonEnvelope formats a message from a BabylonEnvelope
+// Used as a fallback when the decrypted message is not available
+func FormatMessageFromBabylonEnvelope(envelope *pb.BabylonEnvelope, contactName string, isOutgoing bool) string {
 	timestamp := time.Now().Format(timeFormat)
 
 	var sender string

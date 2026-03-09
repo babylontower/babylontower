@@ -295,7 +295,7 @@ func (n *Node) startConnectionHealthChecks() {
 // AdvertiseSelf refreshes our presence in the DHT by querying closest peers
 // This helps keep our peer record visible in the routing table
 func (n *Node) AdvertiseSelf(ctx context.Context) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -347,7 +347,7 @@ func (n *Node) AdvertiseSelf(ctx context.Context) error {
 // FindContactByPubkey finds a contact's peer information by their Ed25519 public key
 // This fetches the IdentityDocument from DHT and extracts peer addresses
 func (n *Node) FindContactByPubkey(ctx context.Context, pubkey []byte) (*ContactDiscoveryResult, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 
@@ -417,7 +417,7 @@ type ContactDiscoveryResult struct {
 // PublishPresenceAnnouncement publishes a presence announcement to signal online status
 // This helps contacts know we're available for direct messaging
 func (n *Node) PublishPresenceAnnouncement(ctx context.Context, identityPub []byte) error {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return ErrNodeNotStarted
 	}
 
@@ -469,7 +469,7 @@ func (n *Node) PublishPresenceAnnouncement(ctx context.Context, identityPub []by
 // SubscribeToPresenceTopic subscribes to a contact's presence topic
 // This allows us to receive their online/offline announcements
 func (n *Node) SubscribeToPresenceTopic(ctx context.Context, identityPub []byte) (*Subscription, error) {
-	if !n.isStarted {
+	if !n.isStarted.Load() {
 		return nil, ErrNodeNotStarted
 	}
 

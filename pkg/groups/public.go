@@ -56,7 +56,7 @@ type MutedMember struct {
 
 // PublicGroupService manages public groups with moderation
 type PublicGroupService struct {
-	storage storage.Storage
+	storage storage.GroupStore
 	// Identity keys for signing
 	identitySignPub  ed25519.PublicKey
 	identitySignPriv ed25519.PrivateKey
@@ -73,7 +73,7 @@ type PublicGroupService struct {
 
 // NewPublicGroupService creates a new public groups service
 func NewPublicGroupService(
-	storage storage.Storage,
+	storage storage.GroupStore,
 	identitySignPub ed25519.PublicKey,
 	identitySignPriv ed25519.PrivateKey,
 ) *PublicGroupService {
@@ -511,6 +511,67 @@ func VerifyProofOfWork(data []byte, nonce []byte, difficulty uint8) bool {
 	hash := sha256.Sum256(hashInput)
 
 	return hash[0] < difficulty
+}
+
+// DerivePublicGroupDHTKey derives the DHT key for discovering a public group.
+// Per §5.3: Discoverable at SHA256("bt-pubgroup-v1:" ‖ group_id)
+func DerivePublicGroupDHTKey(groupID []byte) string {
+	data := append([]byte("bt-pubgroup-v1:"), groupID...)
+	hash := sha256.Sum256(data)
+	return "/bt/pubgroup/" + hex.EncodeToString(hash[:])
+}
+
+// DeriveChannelHeadDHTKey derives the DHT key for a channel's head pointer.
+// Per §5.5: Channel head at SHA256("bt-chanhead-v1:" ‖ channel_id)
+func DeriveChannelHeadDHTKey(channelID []byte) string {
+	data := append([]byte("bt-chanhead-v1:"), channelID...)
+	hash := sha256.Sum256(data)
+	return "/bt/chanhead/" + hex.EncodeToString(hash[:])
+}
+
+// ValidatePublicGroupMessage validates a message for a public group.
+// Per §5.3: HashCash PoW required, reputation-based filtering.
+// senderReputation is the sender's reputation score (0.0-1.0); proofOfWork is the PoW nonce.
+func (s *PublicGroupService) ValidatePublicGroupMessage(
+	groupID []byte,
+	senderPubkey []byte,
+	messageData []byte,
+	proofOfWork []byte,
+	senderReputation float64,
+) error {
+	groupKey := hex.EncodeToString(groupID)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check sender is not banned
+	if _, banned := s.banned[groupKey][hex.EncodeToString(senderPubkey)]; banned {
+		return errors.New("sender is banned")
+	}
+
+	// Check sender is not muted
+	if muted, exists := s.muted[groupKey][hex.EncodeToString(senderPubkey)]; exists {
+		if muted.ExpiresAt == 0 || muted.ExpiresAt > uint64(time.Now().Unix()) {
+			return ErrAlreadyMuted
+		}
+	}
+
+	// §5.3: Verify HashCash proof of work
+	// Difficulty scales inversely with reputation (trusted users need less PoW)
+	difficulty := uint8(128) // Default difficulty
+	if senderReputation > 0.8 {
+		difficulty = 32 // Trusted: very easy
+	} else if senderReputation > 0.6 {
+		difficulty = 64 // Reliable: easy
+	} else if senderReputation > 0.3 {
+		difficulty = 96 // Contributor: moderate
+	}
+
+	if !VerifyProofOfWork(messageData, proofOfWork, difficulty) {
+		return errors.New("invalid proof of work")
+	}
+
+	return nil
 }
 
 // GenerateRandomID generates a random identifier

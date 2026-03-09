@@ -35,90 +35,19 @@ const (
 	DefaultListenAddrTCPv6 = "/ip6/::/tcp/0"
 )
 
-// IPFSConfig holds configuration for the IPFS node (internal representation for ipfsnode package)
-type IPFSConfig struct {
-	// Bootstrap configuration
-	BootstrapPeers   []string      `json:"bootstrap_peers"`
-	BootstrapTimeout time.Duration `json:"bootstrap_timeout"`
+// IPFSConfig is an alias for NetworkConfig (defined in app.go).
+// Kept for backward compatibility — prefer using NetworkConfig directly.
+type IPFSConfig = NetworkConfig
 
-	// Peer persistence
-	MaxStoredPeers     int `json:"max_stored_peers"`
-	MinPeerConnections int `json:"min_peer_connections"`
-
-	// Connection management
-	ConnectionTimeout time.Duration `json:"connection_timeout"`
-	DialTimeout       time.Duration `json:"dial_timeout"`
-	MaxConnections    int           `json:"max_connections"`
-	LowWater          int           `json:"low_water"`
-	HighWater         int           `json:"high_water"`
-
-	// NAT traversal
-	EnableRelay        bool `json:"enable_relay"`
-	EnableHolePunching bool `json:"enable_hole_punching"`
-	EnableAutoNAT      bool `json:"enable_autonat"`
-
-	// DHT configuration
-	DHTMode             string        `json:"dht_mode"`
-	DHTBootstrapTimeout time.Duration `json:"dht_bootstrap_timeout"`
-
-	// Network configuration
-	ListenAddrs []string `json:"listen_addrs"`
-	ProtocolID  string   `json:"protocol_id"`
+// DefaultIPFSConfig returns a NetworkConfig with sensible defaults.
+// Delegates to DefaultAppConfig().Network to avoid duplicate default lists.
+func DefaultIPFSConfig() *NetworkConfig {
+	defaults := DefaultAppConfig()
+	return &defaults.Network
 }
 
-// DefaultIPFSConfig returns an IPFSConfig with sensible defaults
-func DefaultIPFSConfig() *IPFSConfig {
-	return &IPFSConfig{
-		// Bootstrap peers - mix of DNS and IP addresses for redundancy
-		BootstrapPeers: []string{
-			// Primary libp2p bootstrap nodes (dnsaddr)
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiRNN6vEC9qmL9egu92p",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-			"/dnsaddr/bootstrap.libp2p.io/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-			// Direct IP bootstrap nodes (fallback)
-			"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-			"/ip4/104.236.179.241/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-			"/ip4/128.199.219.111/tcp/4001/p2p/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64",
-			"/ip4/104.236.76.40/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-			"/ip4/178.62.158.147/tcp/4001/p2p/QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd",
-			"/ip4/178.62.61.185/tcp/4001/p2p/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3",
-		},
-		BootstrapTimeout: DefaultBootstrapTimeout,
-
-		// Peer storage
-		MaxStoredPeers:     DefaultMaxStoredPeers,
-		MinPeerConnections: DefaultMinPeerConnections,
-
-		// Connection management
-		ConnectionTimeout: DefaultConnectionTimeout,
-		DialTimeout:       DefaultDialTimeout,
-		MaxConnections:    DefaultMaxConnections,
-		LowWater:          DefaultLowWater,
-		HighWater:         DefaultHighWater,
-
-		// NAT traversal
-		EnableRelay:        false,
-		EnableHolePunching: true,
-		EnableAutoNAT:      true,
-
-		// DHT
-		DHTMode:             "auto",
-		DHTBootstrapTimeout: DefaultDHTBootstrapTimeout,
-
-		// Network
-		ListenAddrs: []string{
-			DefaultListenAddrTCP,
-			DefaultListenAddrWS,
-			DefaultListenAddrTCPv6,
-		},
-		ProtocolID: DefaultProtocolID,
-	}
-}
-
-// Validate validates the configuration
-func (c *IPFSConfig) Validate() error {
+// Validate validates the network configuration.
+func (c *NetworkConfig) Validate() error {
 	// Validate bootstrap peers
 	for i, peer := range c.BootstrapPeers {
 		if err := validateMultiaddr(peer); err != nil {
@@ -183,8 +112,8 @@ func validateMultiaddr(addr string) error {
 	return nil
 }
 
-// GetBootstrapPeerInfos parses bootstrap peers into AddrInfo format
-func (c *IPFSConfig) GetBootstrapPeerInfos() ([]multiaddr.Multiaddr, error) {
+// GetBootstrapPeerInfos parses bootstrap peers into multiaddr format.
+func (c *NetworkConfig) GetBootstrapPeerInfos() ([]multiaddr.Multiaddr, error) {
 	addrs := make([]multiaddr.Multiaddr, 0, len(c.BootstrapPeers))
 	for _, peerStr := range c.BootstrapPeers {
 		ma, err := multiaddr.NewMultiaddr(peerStr)

@@ -21,13 +21,53 @@ const (
 	// CipherSuiteXChaCha20Poly1305 is the mandatory cipher suite for Babylon Tower v1
 	CipherSuiteXChaCha20Poly1305 uint32 = 0x0001
 
+	// CipherSuiteAES256GCM is an optional cipher suite (not yet implemented)
+	CipherSuiteAES256GCM uint32 = 0x0002
+
 	// Key sizes
 	KeySize32 = 32
 	KeySize64 = 64
 
 	// Ratchet constants
 	MaxSkippedKeys = 256
+
+	// SPKMaxAge is the maximum age for a signed prekey (21 days per §2.2)
+	SPKMaxAge = 21 * 24 * time.Hour
 )
+
+// SupportedCipherSuites lists cipher suites in preference order (highest first).
+// Per §2.1: Initiator selects highest mutually supported suite.
+var SupportedCipherSuites = []uint32{
+	CipherSuiteXChaCha20Poly1305, // 0x0001 — mandatory
+}
+
+// NegotiateCipherSuite selects the highest mutually supported cipher suite.
+// Per §2.1: Initiator selects highest mutually supported suite.
+// Returns 0 if no common suite exists.
+func NegotiateCipherSuite(localSuites, remoteSuites []uint32) uint32 {
+	remoteSet := make(map[uint32]bool, len(remoteSuites))
+	for _, s := range remoteSuites {
+		remoteSet[s] = true
+	}
+	// localSuites is ordered by preference (highest first)
+	for _, s := range localSuites {
+		if remoteSet[s] {
+			return s
+		}
+	}
+	return 0
+}
+
+// ValidateSPKAge checks whether a signed prekey is within the acceptable age.
+// Per §2.2: Reject SPK with created_at older than 21 days.
+func ValidateSPKAge(spkCreatedAt uint64) error {
+	created := time.Unix(int64(spkCreatedAt), 0)
+	age := time.Since(created)
+	if age > SPKMaxAge {
+		return fmt.Errorf("signed prekey expired: age %s exceeds maximum %s", age.Round(time.Hour), SPKMaxAge)
+	}
+	return nil
+}
 
 // X3DHResult holds the result of an X3DH key exchange
 type X3DHResult struct {
@@ -362,7 +402,7 @@ func DeriveNonce(messageKey []byte, counter uint32) ([]byte, error) {
 	binary.LittleEndian.PutUint32(counterBytes, counter)
 
 	hkdfReader := hkdf.New(sha256.New, messageKey, []byte("nonce"), counterBytes)
-	nonce := make([]byte, 12) // ChaCha20-Poly1305 nonce size
+	nonce := make([]byte, 24) // XChaCha20-Poly1305 nonce size
 	if _, err := io.ReadFull(hkdfReader, nonce); err != nil {
 		return nil, fmt.Errorf("failed to derive nonce: %w", err)
 	}

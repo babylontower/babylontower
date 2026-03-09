@@ -672,33 +672,45 @@ func TestFanoutManager_SendMessageToIdentity_NoDevices(t *testing.T) {
 	assert.Contains(t, err.Error(), "no recipient devices")
 }
 
-func TestFanoutManager_DeriveMessageKey(t *testing.T) {
-	cfg := newTestDeviceConfig(t, "key-derive")
+func TestFanoutManager_SessionCreatesRatchet(t *testing.T) {
+	cfg := newTestDeviceConfig(t, "ratchet-session")
 	dm := NewDeviceManager(cfg)
 
 	fm := NewFanoutManager(&FanoutConfig{
 		DeviceManager: dm,
 	})
 
-	session := &DeviceSession{
-		SessionKey: make([]byte, 32),
-		ChainKey:   make([]byte, 32),
+	// Create a mock device certificate with valid X25519 key
+	deviceDHPub := make([]byte, 32)
+	deviceDHPub[0] = 9 // valid X25519 point
+	deviceSignPub := make([]byte, 32)
+
+	device := &pb.DeviceCertificate{
+		DeviceId:      []byte("test-device-id00"),
+		DeviceSignPub: deviceSignPub,
+		DeviceDhPub:   deviceDHPub,
 	}
 
-	key := fm.deriveMessageKey(session)
-	assert.Len(t, key, 32, "derived key should be 32 bytes")
+	recipientIdentity := make([]byte, 32)
+	recipientIdentity[0] = 1
 
-	// Same session state should produce the same key.
-	key2 := fm.deriveMessageKey(session)
-	assert.Equal(t, key, key2, "deriveMessageKey should be deterministic")
+	// Creating a session should establish X3DH and Double Ratchet
+	session, err := fm.getOrCreateSession(recipientIdentity, device)
+	assert.NoError(t, err, "session creation should succeed")
+	assert.NotNil(t, session)
+	assert.NotEqual(t, make([]byte, 32), session.SessionKey, "session key should not be zero-filled")
 
-	// Different chain key should produce a different key.
-	session2 := &DeviceSession{
-		SessionKey: make([]byte, 32),
-		ChainKey:   []byte("different-chain-key-for-testing!!"),
-	}
-	key3 := fm.deriveMessageKey(session2)
-	assert.NotEqual(t, key, key3, "different session state should produce different key")
+	// Verify ratchet state was created
+	identityHex := hex.EncodeToString(recipientIdentity)
+	deviceIDHex := hex.EncodeToString(device.DeviceId)
+	ratchetState, ok := fm.getRatchetState(identityHex, deviceIDHex)
+	assert.True(t, ok, "ratchet state should exist")
+	assert.NotNil(t, ratchetState)
+
+	// Getting the same session should return cached version
+	session2, err := fm.getOrCreateSession(recipientIdentity, device)
+	assert.NoError(t, err)
+	assert.Equal(t, session, session2, "should return cached session")
 }
 
 // ---------------------------------------------------------------------------

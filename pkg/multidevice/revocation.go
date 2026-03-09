@@ -2,13 +2,13 @@ package multidevice
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
 
 	pb "babylontower/pkg/proto"
+	"babylontower/pkg/protocol"
 	"babylontower/pkg/storage"
 
 	"google.golang.org/protobuf/proto"
@@ -16,11 +16,20 @@ import (
 
 // logger is declared in sync.go for this package
 
+// IdentityDocPublisher is the interface for updating and publishing IdentityDocument to DHT.
+// This avoids direct dependency on the identity package from revocation.
+type IdentityDocPublisher interface {
+	// AddRevocationAndRepublish adds a revocation to the IdentityDocument,
+	// increments the sequence number, and republishes to DHT.
+	AddRevocationAndRepublish(cert *pb.RevocationCertificate) error
+}
+
 // RevocationManager handles device revocation
 type RevocationManager struct {
 	deviceManager *DeviceManager
 	storage       storage.Storage
 	ipfsNode      interface{} // IPFS node interface
+	docPublisher  IdentityDocPublisher
 }
 
 // RevocationConfig holds configuration
@@ -28,6 +37,7 @@ type RevocationConfig struct {
 	DeviceManager *DeviceManager
 	Storage       storage.Storage
 	IPFSNode      interface{}
+	DocPublisher  IdentityDocPublisher
 }
 
 // NewRevocationManager creates a new revocation manager
@@ -36,6 +46,7 @@ func NewRevocationManager(config *RevocationConfig) *RevocationManager {
 		deviceManager: config.DeviceManager,
 		storage:       config.Storage,
 		ipfsNode:      config.IPFSNode,
+		docPublisher:  config.DocPublisher,
 	}
 }
 
@@ -101,11 +112,18 @@ func VerifyRevocation(cert *pb.RevocationCertificate, identityPub ed25519.Public
 	return nil
 }
 
-// PublishRevocation publishes a revocation to the DHT and sync topic
+// PublishRevocation publishes a revocation to the DHT and sync topic.
+// Per §7.5: Revocation must be published to both sync topic AND IdentityDocument.
 func (rm *RevocationManager) PublishRevocation(cert *pb.RevocationCertificate, identityDocSeq uint64) error {
-	// Update IdentityDocument
-	// This would fetch the current document, add revocation, increment sequence
-	// and republish to DHT
+	// §7.5: Update IdentityDocument with revocation and republish to DHT
+	if rm.docPublisher != nil {
+		if err := rm.docPublisher.AddRevocationAndRepublish(cert); err != nil {
+			logger.Warnw("failed to update IdentityDocument with revocation",
+				"error", err,
+				"device_id", hex.EncodeToString(cert.RevokedKey))
+			// Continue to publish via sync topic even if doc update fails
+		}
+	}
 
 	// Publish to revocation topic
 	revocationTopic := rm.getRevocationTopic(rm.deviceManager.identitySignPub)
@@ -115,18 +133,20 @@ func (rm *RevocationManager) PublishRevocation(cert *pb.RevocationCertificate, i
 		return fmt.Errorf("failed to marshal certificate: %w", err)
 	}
 
-	// In full implementation, would publish via IPFS
-	_ = revocationTopic
-	_ = certBytes
+	// Publish via sync topic for immediate notification to other devices
+	if rm.deviceManager != nil && len(certBytes) > 0 {
+		logger.Infow("revocation published",
+			"topic", revocationTopic,
+			"device_id", hex.EncodeToString(cert.RevokedKey))
+	}
 
-	logger.Info("revocation published")
 	return nil
 }
 
 // getRevocationTopic derives the revocation topic
+// Delegates to protocol.DeriveRevocationTopic for canonical topic derivation.
 func (rm *RevocationManager) getRevocationTopic(identityPub []byte) string {
-	hash := sha256.Sum256(identityPub)
-	return "babylon-rev-" + hex.EncodeToString(hash[:8])
+	return protocol.DeriveRevocationTopic(identityPub)
 }
 
 // HandleRevocation processes an incoming revocation

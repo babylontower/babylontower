@@ -6,31 +6,11 @@ import (
 	"time"
 )
 
-// TestBootstrapResult tests the BootstrapResult struct
-func TestBootstrapResult(t *testing.T) {
-	result := &BootstrapResult{
-		StoredPeersAttempted: 5,
-		StoredPeersConnected: 3,
-		ConfigPeersAttempted: 10,
-		ConfigPeersConnected: 7,
-		TotalConnected:       10,
-		RoutingTableSize:     15,
-		Duration:             5 * time.Second,
-	}
-
-	if result.StoredPeersAttempted != 5 {
-		t.Errorf("StoredPeersAttempted mismatch: %d", result.StoredPeersAttempted)
-	}
-	if result.TotalConnected != 10 {
-		t.Errorf("TotalConnected mismatch: %d", result.TotalConnected)
-	}
-	if result.RoutingTableSize != 15 {
-		t.Errorf("RoutingTableSize mismatch: %d", result.RoutingTableSize)
-	}
-}
-
 // TestDHTMaintenance tests that DHT maintenance runs
 func TestDHTMaintenance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -61,6 +41,9 @@ func TestDHTMaintenance(t *testing.T) {
 
 // TestAdvertiseSelf tests self-advertisement to DHT
 func TestAdvertiseSelf(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,

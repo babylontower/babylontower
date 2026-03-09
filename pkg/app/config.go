@@ -18,22 +18,26 @@ type AppConfig struct {
 	LogLevel string
 	// LogFile is the path to the log file (optional)
 	LogFile string
-	// IPFSConfig is the IPFS node configuration
-	IPFSConfig *config.IPFSConfig
+	// DisplayName is the user's chosen display name
+	DisplayName string
+	// DeviceName is the name of this device
+	DeviceName string
+	// NetworkConfig is the network/IPFS node configuration
+	NetworkConfig *config.NetworkConfig
 }
 
 // DefaultAppConfig returns an AppConfig with sensible defaults.
 func DefaultAppConfig() *AppConfig {
 	return &AppConfig{
 		LogLevel:   "warn",
-		IPFSConfig: config.DefaultIPFSConfig(),
+		NetworkConfig: config.DefaultIPFSConfig(),
 	}
 }
 
 // Validate validates the application configuration.
 func (c *AppConfig) Validate() error {
-	if c.IPFSConfig != nil {
-		return c.IPFSConfig.Validate()
+	if c.NetworkConfig != nil {
+		return c.NetworkConfig.Validate()
 	}
 	return nil
 }

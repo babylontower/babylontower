@@ -1,18 +1,18 @@
 package storage
 
 import (
-	"errors"
 	"time"
 
+	bterrors "babylontower/pkg/errors"
 	pb "babylontower/pkg/proto"
 
 	"github.com/mr-tron/base58"
 )
 
-// Storage errors
+// Storage errors — aliases to canonical sentinels in pkg/errors.
 var (
-	ErrGroupNotFound     = errors.New("group not found")
-	ErrSenderKeyNotFound = errors.New("sender key not found")
+	ErrGroupNotFound     = bterrors.ErrGroupNotFound
+	ErrSenderKeyNotFound = bterrors.ErrSenderKeyNotFound
 )
 
 // PeerSource indicates where a peer was discovered
@@ -70,55 +70,73 @@ func (b *BlacklistEntry) IsExpired() bool {
 	return time.Now().After(b.ExpiresAt)
 }
 
-// Storage defines the interface for persistent storage
-type Storage interface {
-	// Contact operations
+// ContactStore handles contact persistence.
+type ContactStore interface {
 	AddContact(contact *pb.Contact) error
 	GetContact(pubKey []byte) (*pb.Contact, error)
 	GetContactByBase58(pubKeyBase58 string) (*pb.Contact, error)
 	GetContactX25519Key(pubKey []byte) ([]byte, error)
 	ListContacts() ([]*pb.Contact, error)
 	DeleteContact(pubKey []byte) error
+}
 
-	// Message operations
-	AddMessage(contactPubKey []byte, envelope *pb.SignedEnvelope) error
-	GetMessages(contactPubKey []byte, limit, offset int) ([]*pb.SignedEnvelope, error)
-	GetMessagesWithTimestamps(contactPubKey []byte, limit, offset int) ([]*MessageWithKey, error)
+// StoredMessage is a plaintext message stored locally after decryption.
+// No cryptographic material is stored — the message is already decrypted at
+// storage time, eliminating the need for key storage alongside ciphertext.
+type StoredMessage struct {
+	Text         string `json:"text"`
+	Timestamp    uint64 `json:"timestamp"`
+	SenderPubKey []byte `json:"sender_pubkey"`
+	IsOutgoing   bool   `json:"is_outgoing"`
+}
+
+// MessageStore handles message persistence.
+type MessageStore interface {
+	AddMessage(contactPubKey []byte, msg *StoredMessage) error
+	GetMessages(contactPubKey []byte, limit, offset int) ([]*StoredMessage, error)
 	DeleteMessages(contactPubKey []byte) error
+}
 
-	// Peer operations
+// PeerStore handles peer record persistence.
+type PeerStore interface {
 	AddPeer(peer *PeerRecord) error
 	GetPeer(peerID string) (*PeerRecord, error)
 	ListPeers(limit int) ([]*PeerRecord, error)
 	ListPeersBySource(source PeerSource) ([]*PeerRecord, error)
 	DeletePeer(peerID string) error
 	PrunePeers(maxAgeDays int, keepCount int) error
+}
 
-	// Peer blacklist operations
+// BlacklistStore handles peer blacklist persistence.
+type BlacklistStore interface {
 	BlacklistPeer(peerID string, reason string) error
 	IsBlacklisted(peerID string) (bool, error)
 	ListBlacklisted() ([]*BlacklistEntry, error)
 	RemoveFromBlacklist(peerID string) error
+}
 
-	// Config operations
+// ConfigStore handles key-value configuration persistence.
+type ConfigStore interface {
 	GetConfig(key string) (string, error)
 	SetConfig(key, value string) error
 	DeleteConfig(key string) error
+}
 
-	// Group operations
+// GroupStore handles group and sender key persistence.
+type GroupStore interface {
 	SaveGroup(group *pb.GroupState) error
 	GetGroup(groupID []byte) (*pb.GroupState, error)
 	ListGroups() ([]*pb.GroupState, error)
 	DeleteGroup(groupID []byte) error
-
-	// Sender key operations
 	SaveSenderKey(sk *pb.SenderKeyDistribution) error
 	GetSenderKey(groupID, senderPubkey []byte) (*pb.SenderKeyDistribution, error)
 	ListSenderKeys(groupID []byte) ([]*pb.SenderKeyDistribution, error)
 	DeleteSenderKey(groupID, senderPubkey []byte) error
 	DeleteAllSenderKeys(groupID []byte) error
+}
 
-	// Channel operations
+// ChannelStore handles channel and channel post persistence.
+type ChannelStore interface {
 	SaveChannel(channel *pb.ChannelState) error
 	GetChannel(channelID []byte) (*pb.ChannelState, error)
 	ListChannels() ([]*pb.ChannelState, error)
@@ -126,16 +144,20 @@ type Storage interface {
 	SaveChannelPost(post *pb.ChannelPost) error
 	GetChannelPosts(channelID []byte, limit, offset int) ([]*pb.ChannelPost, error)
 	GetLatestChannelPostCID(channelID []byte) ([]byte, error)
-
-	// Lifecycle
-	Close() error
 }
 
-// MessageWithKey contains an envelope with its storage key components
-type MessageWithKey struct {
-	Envelope  *pb.SignedEnvelope
-	Timestamp uint64
-	Nonce     []byte
+// Storage is the composite interface for full persistent storage.
+// Prefer accepting a narrower sub-interface (ContactStore, MessageStore, etc.)
+// in consumer code.
+type Storage interface {
+	ContactStore
+	MessageStore
+	PeerStore
+	BlacklistStore
+	ConfigStore
+	GroupStore
+	ChannelStore
+	Close() error
 }
 
 // ContactKeyToBase58 converts a public key to base58 string for display

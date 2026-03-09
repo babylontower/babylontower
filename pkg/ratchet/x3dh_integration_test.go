@@ -395,7 +395,7 @@ func TestX3DHWithoutOPK(t *testing.T) {
 // Helper functions
 
 // setupIdentities creates test identities for Alice and Bob
-func setupIdentities(t *testing.T) (*identity.IdentityV1, *identity.IdentityV1) {
+func setupIdentities(t testing.TB) (*identity.IdentityV1, *identity.IdentityV1) {
 	aliceEntropy, _ := bip39.NewEntropy(128)
 	aliceMnemonic, _ := bip39.NewMnemonic(aliceEntropy)
 	alice, err := identity.NewIdentityV1(aliceMnemonic, "Alice")
@@ -414,7 +414,7 @@ func setupIdentities(t *testing.T) (*identity.IdentityV1, *identity.IdentityV1) 
 }
 
 // setupRatchetSession creates a complete ratchet session between Alice and Bob
-func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.IdentityV1, *DoubleRatchetState, *DoubleRatchetState) {
+func setupRatchetSession(t testing.TB) (*identity.IdentityV1, *identity.IdentityV1, *DoubleRatchetState, *DoubleRatchetState) {
 	alice, bob := setupIdentities(t)
 
 	// Generate Bob's prekeys as raw X25519 pairs
@@ -480,11 +480,10 @@ func setupRatchetSession(t *testing.T) (*identity.IdentityV1, *identity.Identity
 
 // BenchmarkX3DHPerformance benchmarks X3DH key exchange
 func BenchmarkX3DH_4DH(b *testing.B) {
-	alice, bob := setupIdentities(&testing.T{})
+	alice, bob := setupIdentities(b)
 
-	t := &testing.T{}
-	bobSPKPub, _ := generateX25519TestKey(t)
-	bobOPKPub, _ := generateX25519TestKey(t)
+	bobSPKPub, _ := generateX25519TestKey(b)
+	bobOPKPub, _ := generateX25519TestKey(b)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -505,7 +504,7 @@ func BenchmarkX3DH_4DH(b *testing.B) {
 
 // BenchmarkDoubleRatchetEncrypt benchmarks message encryption
 func BenchmarkDoubleRatchetEncrypt(b *testing.B) {
-	_, _, aliceRatchet, _ := setupRatchetSession(&testing.T{})
+	_, _, aliceRatchet, _ := setupRatchetSession(b)
 
 	plaintext := []byte("Hello, this is a test message for benchmarking!")
 	associatedData := []byte("benchmark")
@@ -521,7 +520,7 @@ func BenchmarkDoubleRatchetEncrypt(b *testing.B) {
 
 // BenchmarkDoubleRatchetDecrypt benchmarks message decryption
 func BenchmarkDoubleRatchetDecrypt(b *testing.B) {
-	_, _, aliceRatchet, bobRatchet := setupRatchetSession(&testing.T{})
+	_, _, aliceRatchet, bobRatchet := setupRatchetSession(b)
 
 	plaintext := []byte("Hello, this is a test message for benchmarking!")
 	associatedData := []byte("benchmark")

@@ -498,12 +498,12 @@ func TestSerializeDeserializeEnvelope(t *testing.T) {
 		SenderPubkey: make([]byte, 32),
 	}
 
-	data, err := SerializeEnvelope(envelope)
+	data, err := proto.Marshal(envelope)
 	if err != nil {
 		t.Fatalf("failed to serialize: %v", err)
 	}
 
-	parsed, err := DeserializeEnvelope(data)
+	parsed, err := ParseSignedEnvelope(data)
 	if err != nil {
 		t.Fatalf("failed to deserialize: %v", err)
 	}
@@ -574,8 +574,8 @@ func TestGetTopic(t *testing.T) {
 	}
 }
 
-// Test ReceiveMessageDirect
-func TestReceiveMessageDirect(t *testing.T) {
+// Test ReceiveMessage when service is not started
+func TestReceiveMessage_NotStarted(t *testing.T) {
 	memStorage := storage.NewMemoryStorage()
 
 	// Generate identities
@@ -600,7 +600,7 @@ func TestReceiveMessageDirect(t *testing.T) {
 	}
 
 	// Serialize envelope
-	envelopeBytes, err := SerializeEnvelope(signedEnvelope)
+	envelopeBytes, err := proto.Marshal(signedEnvelope)
 	if err != nil {
 		t.Fatalf("failed to serialize envelope: %v", err)
 	}
@@ -612,8 +612,8 @@ func TestReceiveMessageDirect(t *testing.T) {
 	}
 }
 
-// Test GetMessages
-func TestGetMessages(t *testing.T) {
+// Test GetDecryptedMessagesWithMeta
+func TestGetDecryptedMessagesWithMeta(t *testing.T) {
 	memStorage := storage.NewMemoryStorage()
 	id, edPriv, x25519Priv := generateTestIdentity(t)
 	x25519Pub := id.X25519PubKey
@@ -628,7 +628,7 @@ func TestGetMessages(t *testing.T) {
 	service := NewService(config, memStorage, nil)
 
 	// Try to get messages (will fail because service not started)
-	_, err := service.GetMessages([]byte("contact"), 10, 0)
+	_, err := service.GetDecryptedMessagesWithMeta([]byte("contact"), 10, 0)
 	if err != ErrServiceNotStarted {
 		t.Errorf("expected ErrServiceNotStarted, got %v", err)
 	}
@@ -690,12 +690,12 @@ func TestSerializeDeserializeEnvelopeRoundtrip(t *testing.T) {
 		SenderPubkey: make([]byte, 32),
 	}
 
-	data, err := SerializeEnvelope(original)
+	data, err := proto.Marshal(original)
 	if err != nil {
 		t.Fatalf("failed to serialize: %v", err)
 	}
 
-	parsed, err := DeserializeEnvelope(data)
+	parsed, err := ParseSignedEnvelope(data)
 	if err != nil {
 		t.Fatalf("failed to deserialize: %v", err)
 	}

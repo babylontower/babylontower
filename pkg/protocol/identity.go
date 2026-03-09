@@ -701,15 +701,6 @@ func (m *IdentityManager) Validate(doc *IdentityDocument) error {
 		}
 	}
 
-	// Verify pubkey hashes match
-	hash := sha256.Sum256(doc.IdentitySignPub)
-	expectedKey := hex.EncodeToString(hash[:16])
-	hash2 := sha256.Sum256(doc.IdentitySignPub)
-	actualKey := hex.EncodeToString(hash2[:16])
-	if expectedKey != actualKey {
-		return errors.New("identity pubkey hash mismatch")
-	}
-
 	return nil
 }
 
@@ -786,20 +777,15 @@ func (m *IdentityManager) GetPrekeyBundle(ctx context.Context, identityPub ed255
 }
 
 // identityDHTKey creates the DHT key for an identity document.
+// Delegates to identity.DeriveIdentityDHTKey for canonical key derivation.
 func (m *IdentityManager) identityDHTKey(identityPub ed25519.PublicKey) string {
-	hash := sha256.Sum256(identityPub)
-	return DHTNamespaceIdentity + hex.EncodeToString(hash[:16])
+	return identity.DeriveIdentityDHTKey(identityPub)
 }
 
 // prekeyBundleDHTKey creates the DHT key for a standalone prekey bundle.
-// Per spec section 4.2: SHA256("bt-prekeys-v1:" ‖ ed25519_pubkey)
+// Delegates to identity.DerivePrekeyBundleDHTKey for canonical key derivation.
 func (m *IdentityManager) prekeyBundleDHTKey(identityPub ed25519.PublicKey) string {
-	// Concatenate prefix and pubkey
-	prefix := []byte("bt-prekeys-v1:")
-	data := append(prefix, identityPub...)
-	// Compute SHA256
-	hash := sha256.Sum256(data)
-	return DHTNamespacePrekeys + hex.EncodeToString(hash[:])
+	return identity.DerivePrekeyBundleDHTKey(identityPub)
 }
 
 // PublishPrekeyBundleSeparate publishes a standalone prekey bundle to the DHT.

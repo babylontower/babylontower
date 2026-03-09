@@ -435,6 +435,26 @@ func (t *Tracker) AddAttestation(attestation *Attestation) error {
 	record.mu.Lock()
 	defer record.mu.Unlock()
 
+	// §12.3: No single attestation can move a score by more than 0.1
+	// Calculate predicted score with this attestation, reject if delta > 0.1
+	oldScore := record.compositeScore
+	testRecord := &Record{
+		peerID:          record.peerID,
+		metrics:         record.metrics,
+		compositeScore:  record.compositeScore,
+		tier:            record.tier,
+		attestations:    append(append([]*Attestation{}, record.attestations...), attestation),
+		trustAdjustment: record.trustAdjustment,
+	}
+	testRecord.updateCompositeScore(t.config)
+	scoreDelta := testRecord.compositeScore - oldScore
+	if scoreDelta < 0 {
+		scoreDelta = -scoreDelta
+	}
+	if scoreDelta > 0.1 {
+		return ErrScoreDeltaTooLarge
+	}
+
 	// Limit number of attestations
 	if uint32(len(record.attestations)) >= t.config.MaxAttestationsPerPeer {
 		// Remove oldest attestation
@@ -625,9 +645,10 @@ func (e Error) Error() string {
 }
 
 const (
-	ErrAttestationExpired Error = "attestation has expired"
-	ErrAttesterNotTrusted Error = "attester has not been observed long enough"
-	ErrInvalidSignature   Error = "invalid attestation signature"
+	ErrAttestationExpired  Error = "attestation has expired"
+	ErrAttesterNotTrusted  Error = "attester has not been observed long enough"
+	ErrInvalidSignature    Error = "invalid attestation signature"
+	ErrScoreDeltaTooLarge  Error = "attestation would move score by more than 0.1"
 )
 
 // Helper function to convert peer.ID to hex string

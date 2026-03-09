@@ -5,10 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
+	"babylontower/pkg/identity"
 	pb "babylontower/pkg/proto"
 
 	"golang.org/x/crypto/curve25519"
@@ -114,63 +114,15 @@ func (dm *DeviceManager) RegisterNewDevice() (*pb.DeviceCertificate, error) {
 }
 
 // signDeviceCertificate signs a device certificate with the identity key
+// Delegates to identity.SignDeviceCertificate for canonical serialization
 func (dm *DeviceManager) signDeviceCertificate(cert *pb.DeviceCertificate) ([]byte, error) {
-	// Canonical serialization for signing (fields 1-7)
-	data := make([]byte, 0, 16+32+32+len(cert.DeviceName)+8+8+32)
-	data = append(data, cert.DeviceId...)
-	data = append(data, cert.DeviceSignPub...)
-	data = append(data, cert.DeviceDhPub...)
-	data = append(data, []byte(cert.DeviceName)...)
-
-	// Append timestamps as big-endian bytes
-	tsBytes := make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		tsBytes[i] = byte(cert.CreatedAt >> (56 - i*8))
-	}
-	data = append(data, tsBytes...)
-
-	tsBytes = make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		tsBytes[i] = byte(cert.ExpiresAt >> (56 - i*8))
-	}
-	data = append(data, tsBytes...)
-
-	data = append(data, cert.IdentityPub...)
-
-	// Sign with identity key
-	signature := ed25519.Sign(dm.identitySignPriv, data)
-	return signature, nil
+	return identity.SignDeviceCertificate(dm.identitySignPriv, cert)
 }
 
-// VerifyDeviceCertificate verifies a device certificate signature
+// VerifyDeviceCertificate verifies a device certificate signature.
+// Delegates to identity.VerifyDeviceCertificate for canonical serialization.
 func VerifyDeviceCertificate(cert *pb.DeviceCertificate) error {
-	// Verify signature against identity public key
-	data := make([]byte, 0, 16+32+32+len(cert.DeviceName)+8+8+32)
-	data = append(data, cert.DeviceId...)
-	data = append(data, cert.DeviceSignPub...)
-	data = append(data, cert.DeviceDhPub...)
-	data = append(data, []byte(cert.DeviceName)...)
-
-	tsBytes := make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		tsBytes[i] = byte(cert.CreatedAt >> (56 - i*8))
-	}
-	data = append(data, tsBytes...)
-
-	tsBytes = make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		tsBytes[i] = byte(cert.ExpiresAt >> (56 - i*8))
-	}
-	data = append(data, tsBytes...)
-
-	data = append(data, cert.IdentityPub...)
-
-	valid := ed25519.Verify(cert.IdentityPub, data, cert.Signature)
-	if !valid {
-		return errors.New("invalid device certificate signature")
-	}
-
-	return nil
+	return identity.VerifyDeviceCertificate(cert)
 }
 
 // GetDeviceID returns the current device ID

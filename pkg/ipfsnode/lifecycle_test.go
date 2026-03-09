@@ -6,20 +6,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-// Helper to safely stop a node
-func stopNode(node *Node) func() {
-	return func() {
-		_ = node.Stop()
-	}
-}
-
-// Helper to safely close a subscription
-func closeSub(sub *Subscription) func() {
-	return func() {
-		_ = sub.Close()
-	}
-}
-
 // TestNodeCreation tests that a node can be created with default config
 func TestNodeCreation(t *testing.T) {
 	config := DefaultConfig()
@@ -44,6 +30,9 @@ func TestNodeCreation(t *testing.T) {
 
 // TestNodeStartStop tests starting and stopping a node
 func TestNodeStartStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -89,6 +78,9 @@ func TestNodeStartStop(t *testing.T) {
 
 // TestNodeDoubleStartStop tests that starting/stopping twice is safe
 func TestNodeDoubleStartStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,
@@ -118,6 +110,9 @@ func TestNodeDoubleStartStop(t *testing.T) {
 
 // TestPeerKeyPersistence tests that peer key is persisted and reused
 func TestPeerKeyPersistence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping node test in short mode")
+	}
 	tmpDir := t.TempDir()
 	config := &Config{
 		RepoDir: tmpDir,

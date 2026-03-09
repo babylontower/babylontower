@@ -2,7 +2,6 @@ package multidevice
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -10,7 +9,9 @@ import (
 	"time"
 
 	"babylontower/pkg/crypto"
+	bterrors "babylontower/pkg/errors"
 	pb "babylontower/pkg/proto"
+	"babylontower/pkg/protocol"
 	"babylontower/pkg/storage"
 
 	"github.com/ipfs/go-log/v2"
@@ -43,11 +44,18 @@ type SyncEvent struct {
 	VectorClock    *pb.VectorClock
 }
 
+// Publisher is the interface for publishing messages to PubSub topics.
+// Defined here to avoid circular imports with ipfsnode.
+type Publisher interface {
+	Publish(topic string, data []byte) error
+}
+
 // SyncManager handles cross-device state synchronization
 type SyncManager struct {
 	deviceManager *DeviceManager
 	storage       storage.Storage
-	ipfsNode      interface{} // IPFS node interface (avoid circular import)
+	publisher     Publisher // For publishing sync messages
+	syncTopic     string   // Cached sync topic
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -83,7 +91,7 @@ type HistoryRequestState struct {
 type SyncManagerConfig struct {
 	DeviceManager *DeviceManager
 	Storage       storage.Storage
-	IPFSNode      interface{}
+	Publisher     Publisher
 }
 
 // NewSyncManager creates a new sync manager
@@ -93,7 +101,7 @@ func NewSyncManager(config *SyncManagerConfig) *SyncManager {
 	sm := &SyncManager{
 		deviceManager:   config.DeviceManager,
 		storage:         config.Storage,
-		ipfsNode:        config.IPFSNode,
+		publisher:       config.Publisher,
 		ctx:             ctx,
 		cancel:          cancel,
 		vectorClock:     make(map[string]uint64),
@@ -106,19 +114,16 @@ func NewSyncManager(config *SyncManagerConfig) *SyncManager {
 
 // GetSyncTopic derives the sync topic from the identity public key
 // Format: babylon-sync-<hex(SHA256(IK_sign.pub)[:8])>
+// Delegates to protocol.DeriveSyncTopic for canonical topic derivation.
 func GetSyncTopic(identityPub []byte) string {
-	hash := sha256.Sum256(identityPub)
-	return "babylon-sync-" + hex.EncodeToString(hash[:8])
+	return protocol.DeriveSyncTopic(identityPub)
 }
 
 // Start starts the sync manager and subscribes to the sync topic
 func (sm *SyncManager) Start(identityPub []byte) error {
-	topic := GetSyncTopic(identityPub)
+	sm.syncTopic = GetSyncTopic(identityPub)
 
-	// Subscribe to sync topic
-	// Note: Actual subscription requires type assertion to IPFS node
-	// This is handled by the caller in main.go
-	logger.Infow("sync manager started", "topic", topic)
+	logger.Infow("sync manager started", "topic", sm.syncTopic)
 
 	return nil
 }
@@ -182,8 +187,11 @@ func (sm *SyncManager) BroadcastSync(syncType SyncType, payload proto.Message) e
 	}
 
 	// Publish to sync topic
-	// This requires IPFS node access - handled by caller
-	_ = data
+	if sm.publisher != nil && sm.syncTopic != "" {
+		if err := sm.publisher.Publish(sm.syncTopic, data); err != nil {
+			return fmt.Errorf("failed to publish sync message: %w", err)
+		}
+	}
 
 	return nil
 }
@@ -296,6 +304,54 @@ func (sm *SyncManager) mergeVectorClock(remote *pb.VectorClock) {
 	}
 }
 
+// ResolveConflict resolves conflicts between local and remote sync events.
+// Per §7.4:
+//   - Contacts: LWW by wall clock + vector clock sum as tiebreaker
+//   - Read receipts: max timestamp wins
+//   - Groups: longest chain (highest epoch) wins
+//
+// Returns true if remote event should be applied (wins), false if local wins.
+func (sm *SyncManager) ResolveConflict(localEvent, remoteEvent *SyncEvent) bool {
+	switch remoteEvent.Type {
+	case pb.SyncType_CONTACT_ADDED, pb.SyncType_CONTACT_REMOVED, pb.SyncType_CONTACT_UPDATED:
+		// LWW: higher wall clock wins; on tie, higher vector clock sum wins
+		if remoteEvent.Timestamp != localEvent.Timestamp {
+			return remoteEvent.Timestamp > localEvent.Timestamp
+		}
+		return vectorClockSum(remoteEvent.VectorClock) > vectorClockSum(localEvent.VectorClock)
+
+	case pb.SyncType_MESSAGE_READ:
+		// Max timestamp: the later read receipt wins
+		return remoteEvent.Timestamp > localEvent.Timestamp
+
+	case pb.SyncType_GROUP_JOINED, pb.SyncType_GROUP_LEFT:
+		// Longest chain: compare group epochs if available
+		localGroup, localOk := localEvent.Payload.(*pb.GroupSync)
+		remoteGroup, remoteOk := remoteEvent.Payload.(*pb.GroupSync)
+		if localOk && remoteOk {
+			return remoteGroup.Epoch > localGroup.Epoch
+		}
+		// Fallback to timestamp
+		return remoteEvent.Timestamp > localEvent.Timestamp
+
+	default:
+		// Default: later timestamp wins
+		return remoteEvent.Timestamp > localEvent.Timestamp
+	}
+}
+
+// vectorClockSum returns the sum of all counters in a vector clock (used as tiebreaker)
+func vectorClockSum(vc *pb.VectorClock) uint64 {
+	if vc == nil {
+		return 0
+	}
+	var sum uint64
+	for _, v := range vc.Clocks {
+		sum += v
+	}
+	return sum
+}
+
 // Events returns the channel for receiving sync events
 func (sm *SyncManager) Events() <-chan *SyncEvent {
 	return sm.eventChan
@@ -343,11 +399,75 @@ func (sm *SyncManager) SendHistoryBatch(contactPubKey []byte, messages []*pb.His
 	return sm.BroadcastSync(SyncTypeHistoryBatch, batch)
 }
 
-// HandleHistoryRequest processes an incoming history request
+// HandleHistoryRequest processes an incoming history request.
+// Per §7.3: Responds with batches of 100 messages in reverse chronological order.
 func (sm *SyncManager) HandleHistoryRequest(request *pb.HistoryRequest, sourceDeviceID []byte) error {
-	// Fetch messages from storage
-	// This would query the storage layer and send back batches
-	// Implementation depends on storage schema
+	if sm.storage == nil {
+		return errors.New("storage not available for history sync")
+	}
+
+	// Query messages from storage for the requested contact
+	maxMsgs := int(request.MaxMessages)
+	if maxMsgs == 0 || maxMsgs > 10000 {
+		maxMsgs = 10000
+	}
+	messages, err := sm.storage.GetMessages(request.ContactPubkey, maxMsgs, 0)
+	if err != nil {
+		return fmt.Errorf("failed to query messages: %w", err)
+	}
+
+	// Filter by time range
+	var filtered []*storage.StoredMessage
+	for _, msg := range messages {
+		if request.StartTime > 0 && msg.Timestamp < request.StartTime {
+			continue
+		}
+		if request.EndTime > 0 && msg.Timestamp > request.EndTime {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+
+	// Sort by timestamp descending (reverse chronological)
+	for i := 0; i < len(filtered)-1; i++ {
+		for j := i + 1; j < len(filtered); j++ {
+			if filtered[i].Timestamp < filtered[j].Timestamp {
+				filtered[i], filtered[j] = filtered[j], filtered[i]
+			}
+		}
+	}
+
+	// Send in batches of 100
+	const batchSize = 100
+	totalBatches := (len(filtered) + batchSize - 1) / batchSize
+	if totalBatches == 0 {
+		totalBatches = 1
+	}
+
+	for batchNum := 0; batchNum < totalBatches; batchNum++ {
+		start := batchNum * batchSize
+		end := start + batchSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+
+		batch := filtered[start:end]
+		historyMsgs := make([]*pb.HistoryMessage, len(batch))
+		for i, msg := range batch {
+			historyMsgs[i] = &pb.HistoryMessage{
+				Text:         msg.Text,
+				Timestamp:    msg.Timestamp,
+				IsSent:       msg.IsOutgoing,
+				SenderPubkey: msg.SenderPubKey,
+			}
+		}
+
+		isLast := batchNum == totalBatches-1
+		if err := sm.SendHistoryBatch(request.ContactPubkey, historyMsgs, uint32(batchNum), isLast); err != nil {
+			return fmt.Errorf("failed to send history batch %d: %w", batchNum, err)
+		}
+	}
+
 	return nil
 }
 
@@ -417,7 +537,8 @@ func CreateSettingsSync(key string, value []byte) *pb.SettingsSync {
 
 // Common errors
 var (
-	ErrDecryptionFailed = errors.New("failed to decrypt sync message")
+	// ErrDecryptionFailed aliases the canonical sentinel from pkg/errors.
+	ErrDecryptionFailed = bterrors.ErrDecryptionFailed
 	ErrInvalidPayload   = errors.New("invalid sync payload")
 	ErrChannelFull      = errors.New("sync event channel full")
 )

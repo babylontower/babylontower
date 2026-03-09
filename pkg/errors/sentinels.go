@@ -34,8 +34,18 @@ var (
 var (
 	// ErrDecryptionFailed is returned when message decryption fails.
 	ErrDecryptionFailed = errors.New("decryption failed")
+	// ErrInvalidSignature is returned when signature verification fails.
+	ErrInvalidSignature = errors.New("invalid signature")
 	// ErrInvalidEnvelope is returned when an envelope is malformed or has an invalid signature.
 	ErrInvalidEnvelope = errors.New("invalid envelope")
+)
+
+// Group sentinels
+var (
+	// ErrGroupNotFound is returned when a group is not found.
+	ErrGroupNotFound = errors.New("group not found")
+	// ErrSenderKeyNotFound is returned when a sender key is not found.
+	ErrSenderKeyNotFound = errors.New("sender key not found")
 )
 
 // Mailbox sentinels

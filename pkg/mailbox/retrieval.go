@@ -312,7 +312,11 @@ func RetrieveFromMailbox(ctx context.Context, h host.Host, mailboxPeerID string,
 	}
 
 	// Sign request
-	signature, err := crypto.Sign(recipientIdentity.Ed25519PrivKey, mustMarshal(req))
+	reqData, err := proto.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal retrieval request: %w", err)
+	}
+	signature, err := crypto.Sign(recipientIdentity.Ed25519PrivKey, reqData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign request: %w", err)
 	}
@@ -372,7 +376,11 @@ func AcknowledgeMessages(ctx context.Context, h host.Host, mailboxPeerID string,
 	}
 
 	// Sign request
-	signature, err := crypto.Sign(recipientIdentity.Ed25519PrivKey, mustMarshal(req))
+	ackData, err := proto.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal acknowledgment request: %w", err)
+	}
+	signature, err := crypto.Sign(recipientIdentity.Ed25519PrivKey, ackData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign request: %w", err)
 	}

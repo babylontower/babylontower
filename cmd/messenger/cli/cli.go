@@ -31,7 +31,7 @@ type Config struct {
 // CLI represents the main command-line interface
 type CLI struct {
 	config    *Config
-	storage   storage.Storage
+	storage   storage.ContactStore
 	ipfsNode  app.NetworkNode
 	messaging app.Messenger
 	groups    app.GroupManager
@@ -51,7 +51,7 @@ type CLI struct {
 }
 
 // New creates a new CLI instance
-func New(config *Config, identity *Identity, storage storage.Storage, ipfsNode app.NetworkNode, messaging app.Messenger, groupsSvc app.GroupManager) (*CLI, error) {
+func New(config *Config, identity *Identity, storage storage.ContactStore, ipfsNode app.NetworkNode, messaging app.Messenger, groupsSvc app.GroupManager) (*CLI, error) {
 	// Create readline instance
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          ">>> ",
@@ -200,7 +200,7 @@ func (c *CLI) handleIncomingMessage(event *app.MessageEvent) {
 		c.output(FormatMessage(event.Message, contactName, false))
 	} else {
 		// Fallback to envelope if message not decrypted
-		c.output(FormatMessageFromEnvelope(event.Envelope, contactName, false))
+		c.output(FormatMessageFromBabylonEnvelope(event.BabylonEnvelope, contactName, false))
 	}
 
 	if !inChatWithSender {
@@ -242,7 +242,7 @@ func (c *CLI) Stop() error {
 }
 
 // GetStorage returns the storage instance
-func (c *CLI) GetStorage() storage.Storage {
+func (c *CLI) GetStorage() storage.ContactStore {
 	return c.storage
 }
 

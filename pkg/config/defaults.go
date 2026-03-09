@@ -6,6 +6,10 @@ import "time"
 // existing hardcoded values throughout the codebase.
 func DefaultAppConfig() *AppConfig {
 	return &AppConfig{
+		Profile: ProfileConfig{
+			DisplayName: "",
+			DeviceName:  "",
+		},
 		Network: NetworkConfig{
 			BootstrapPeers: []string{
 				"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -67,6 +71,16 @@ func DefaultAppConfig() *AppConfig {
 			DeviceName:   "",
 			MaxDevices:   5,
 			SyncInterval: 30 * time.Second,
+		},
+		Appearance: AppearanceConfig{
+			DarkMode:     true,
+			FontSize:     14,
+			WindowWidth:  1200,
+			WindowHeight: 800,
+		},
+		Privacy: PrivacyConfig{
+			SendReadReceipts:     true,
+			SendTypingIndicators: true,
 		},
 		Identity: IdentityConfig{
 			DHTPublish:      true,

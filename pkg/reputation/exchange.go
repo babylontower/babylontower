@@ -3,6 +3,7 @@ package reputation
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -226,7 +227,8 @@ func (e *AttestationExchange) RequestAttestations(ctx context.Context, target pe
 	}
 
 	// Publish query to reputation topic
-	topic := "babylon-rep-" + hex.EncodeToString([]byte(target)[:8])
+	// Per §12.3: Published to DHT at SHA256("bt-rep-v1:" ‖ subject_peer_id)
+	topic := DeriveReputationTopic(target)
 	if err := e.ipfsNode.Publish(ctx, topic, data); err != nil {
 		return nil, fmt.Errorf("failed to publish query: %w", err)
 	}
@@ -316,8 +318,16 @@ func (e *AttestationExchange) RespondToAttestationRequest(ctx context.Context, q
 	}
 
 	// Publish response to query topic
-	topic := "babylon-rep-" + hex.EncodeToString(query.TargetPeerId[:8])
+	topic := DeriveReputationTopic(peer.ID(query.TargetPeerId))
 	return e.ipfsNode.Publish(ctx, topic, data)
+}
+
+// DeriveReputationTopic derives the PubSub topic for reputation queries about a peer.
+// Per §12.3: SHA256("bt-rep-v1:" ‖ subject_peer_id)
+func DeriveReputationTopic(subject peer.ID) string {
+	data := append([]byte("bt-rep-v1:"), []byte(subject)...)
+	hash := sha256.Sum256(data)
+	return "babylon-rep-" + hex.EncodeToString(hash[:])
 }
 
 // ComputeDHTKey computes the DHT key for storing reputation data

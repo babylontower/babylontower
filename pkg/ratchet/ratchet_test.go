@@ -15,7 +15,7 @@ import (
 )
 
 // generateX25519TestKey generates an X25519 key pair for testing
-func generateX25519TestKey(t *testing.T) (*[32]byte, *[32]byte) {
+func generateX25519TestKey(t testing.TB) (*[32]byte, *[32]byte) {
 	priv := new([32]byte)
 	pub := new([32]byte)
 	if _, err := io.ReadFull(rand.Reader, priv[:]); err != nil {
@@ -196,58 +196,51 @@ func TestKDF_CK(t *testing.T) {
 
 // TestDoubleRatchet_InitiatorResponder tests full Double Ratchet exchange
 func TestDoubleRatchet_InitiatorResponder(t *testing.T) {
-	// Generate identities with different mnemonics
-	aliceEntropy, _ := bip39.NewEntropy(128)
-	aliceMnemonic, _ := bip39.NewMnemonic(aliceEntropy)
-	bobEntropy, _ := bip39.NewEntropy(128)
-	bobMnemonic, _ := bip39.NewMnemonic(bobEntropy)
-	alice, _ := identity.NewIdentityV1(aliceMnemonic, "Alice")
-	bob, _ := identity.NewIdentityV1(bobMnemonic, "Bob")
+	aliceState, bobState := setupRatchetPair(t)
 
-	// Generate Bob's prekeys
-	bobSPK, _ := bob.GenerateSignedPrekey(1)
-	bobOPKs, _ := bob.GenerateOneTimePrekeys(1, 1)
+	ad := []byte("test-associated-data")
 
-	// Convert to X25519 format
-	bobSPKPub := new([32]byte)
-	copy(bobSPKPub[:], bobSPK.PrekeyPub)
-
-	bobOPKPub := new([32]byte)
-	copy(bobOPKPub[:], bobOPKs[0].PrekeyPub)
-
-	// X3DH: Alice initiates
-	x3dhResult, err := X3DHInitiator(
-		alice.IKDHPriv,
-		alice.IKDHPub,
-		alice.IKSignPub,
-		bob.IKDHPub,
-		bob.IKSignPub,
-		bobSPKPub,
-		bobOPKPub,
-	)
+	// Alice sends a message to Bob
+	msg1, err := aliceState.Encrypt([]byte("Hello Bob!"), ad)
 	if err != nil {
-		t.Fatalf("X3DH failed: %v", err)
+		t.Fatalf("Alice encrypt failed: %v", err)
 	}
 
-	// For this simplified test, just test KDF functions directly
-	// Full ratchet test requires more setup
-	t.Run("KDF chain", func(t *testing.T) {
-		rootKey, chainKey := KDF_RK(x3dhResult.SharedSecret, x3dhResult.SharedSecret)
-		if len(rootKey) != 32 {
-			t.Errorf("Expected root key length 32, got %d", len(rootKey))
-		}
-		if len(chainKey) != 32 {
-			t.Errorf("Expected chain key length 32, got %d", len(chainKey))
-		}
+	plaintext1, err := bobState.Decrypt(msg1.Header, msg1.Ciphertext, ad)
+	if err != nil {
+		t.Fatalf("Bob decrypt failed: %v", err)
+	}
+	if string(plaintext1) != "Hello Bob!" {
+		t.Errorf("Decrypted message mismatch: got %q", plaintext1)
+	}
 
-		newChainKey, msgKey := KDF_CK(chainKey)
-		if len(newChainKey) != 32 {
-			t.Errorf("Expected new chain key length 32, got %d", len(newChainKey))
-		}
-		if len(msgKey) != 32 {
-			t.Errorf("Expected message key length 32, got %d", len(msgKey))
-		}
-	})
+	// Bob replies to Alice
+	msg2, err := bobState.Encrypt([]byte("Hi Alice!"), ad)
+	if err != nil {
+		t.Fatalf("Bob encrypt failed: %v", err)
+	}
+
+	plaintext2, err := aliceState.Decrypt(msg2.Header, msg2.Ciphertext, ad)
+	if err != nil {
+		t.Fatalf("Alice decrypt failed: %v", err)
+	}
+	if string(plaintext2) != "Hi Alice!" {
+		t.Errorf("Decrypted reply mismatch: got %q", plaintext2)
+	}
+
+	// Alice sends another message (tests symmetric ratchet advancement)
+	msg3, err := aliceState.Encrypt([]byte("How are you?"), ad)
+	if err != nil {
+		t.Fatalf("Alice second encrypt failed: %v", err)
+	}
+
+	plaintext3, err := bobState.Decrypt(msg3.Header, msg3.Ciphertext, ad)
+	if err != nil {
+		t.Fatalf("Bob second decrypt failed: %v", err)
+	}
+	if string(plaintext3) != "How are you?" {
+		t.Errorf("Second decrypted message mismatch: got %q", plaintext3)
+	}
 }
 
 // setupRatchetPair creates an Alice-Bob ratchet pair for testing.
@@ -453,8 +446,8 @@ func TestDeriveNonce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Nonce derivation failed: %v", err)
 	}
-	if len(nonce1) != 12 {
-		t.Errorf("Expected nonce length 12, got %d", len(nonce1))
+	if len(nonce1) != 24 {
+		t.Errorf("Expected nonce length 24, got %d", len(nonce1))
 	}
 
 	nonce2, err := DeriveNonce(messageKey, 0)

@@ -6,11 +6,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	pb "babylontower/pkg/proto"
 
 	"golang.org/x/crypto/ed25519"
+	"golang.org/x/crypto/hkdf"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -99,6 +101,10 @@ type GroupStateUpdate struct {
 }
 
 // SenderKey represents a sender's key chain for group encryption
+// MaxSkippedKeys is the maximum number of skipped message keys to cache per sender key.
+// Per §2.4: Cache up to 256 skipped message keys.
+const MaxSkippedKeys = 256
+
 type SenderKey struct {
 	// GroupID is the group this sender key belongs to
 	GroupID []byte
@@ -114,6 +120,9 @@ type SenderKey struct {
 	ChainIndex uint32
 	// Epoch is the group epoch this sender key belongs to
 	Epoch uint64
+	// SkippedKeys caches message keys for out-of-order delivery.
+	// Key: chainIndex, Value: derived message key (32 bytes).
+	SkippedKeys map[uint32][]byte
 }
 
 // NewGroupState creates a new group state with the given parameters
@@ -391,6 +400,7 @@ func GenerateSenderKey(groupID []byte, senderPubkey []byte) (*SenderKey, error) 
 		SigningKeyPriv: signingKeyPriv,
 		ChainIndex:     0,
 		Epoch:          1,
+		SkippedKeys:    make(map[uint32][]byte),
 	}, nil
 }
 
@@ -401,17 +411,70 @@ func (sk *SenderKey) DeriveMessageKey() ([]byte, error) {
 	binary.BigEndian.PutUint32(chainIndexBytes, sk.ChainIndex)
 
 	// msg_key = HKDF(chain_key, salt="bt-sk-msg", info=chain_index_bytes, len=32)
-	hkdfInput := append([]byte("bt-sk-msg"), chainIndexBytes...)
-	hash := sha256.Sum256(append(sk.ChainKey, hkdfInput...))
-	messageKey := hash[:]
+	messageKey := make([]byte, 32)
+	msgHKDF := hkdf.New(sha256.New, sk.ChainKey, []byte("bt-sk-msg"), chainIndexBytes)
+	if _, err := io.ReadFull(msgHKDF, messageKey); err != nil {
+		return nil, fmt.Errorf("failed to derive message key: %w", err)
+	}
 
-	// Advance chain: chain_key = HKDF(chain_key, salt="bt-sk-chain", info="advance", len=32)
-	advanceInput := append([]byte("bt-sk-chain"), []byte("advance")...)
-	newHash := sha256.Sum256(append(sk.ChainKey, advanceInput...))
-	sk.ChainKey = newHash[:]
+	// Advance chain: chain_key = HKDF(chain_key, salt="bt-sk-chain", info=chain_index_bytes, len=32)
+	newChainKey := make([]byte, 32)
+	chainHKDF := hkdf.New(sha256.New, sk.ChainKey, []byte("bt-sk-chain"), chainIndexBytes)
+	if _, err := io.ReadFull(chainHKDF, newChainKey); err != nil {
+		return nil, fmt.Errorf("failed to advance chain key: %w", err)
+	}
+	sk.ChainKey = newChainKey
 	sk.ChainIndex++
 
 	return messageKey, nil
+}
+
+// SkipToIndex advances the chain to targetIndex, caching all skipped message keys.
+// Returns the message key at targetIndex.
+func (sk *SenderKey) SkipToIndex(targetIndex uint32) ([]byte, error) {
+	if sk.SkippedKeys == nil {
+		sk.SkippedKeys = make(map[uint32][]byte)
+	}
+
+	gap := int(targetIndex) - int(sk.ChainIndex)
+	if gap < 0 {
+		// Already past this index — look in cache
+		if key, ok := sk.SkippedKeys[targetIndex]; ok {
+			delete(sk.SkippedKeys, targetIndex)
+			return key, nil
+		}
+		return nil, fmt.Errorf("skipped key not cached for index %d", targetIndex)
+	}
+	if gap > MaxSkippedKeys {
+		return nil, fmt.Errorf("too many skipped keys (%d > %d)", gap, MaxSkippedKeys)
+	}
+
+	// Derive and cache all keys from current index up to targetIndex
+	var targetKey []byte
+	for sk.ChainIndex <= targetIndex {
+		msgKey, err := sk.DeriveMessageKey()
+		if err != nil {
+			return nil, err
+		}
+		if sk.ChainIndex-1 == targetIndex {
+			targetKey = msgKey
+		} else {
+			// Cache skipped keys (evict oldest if over limit)
+			if len(sk.SkippedKeys) >= MaxSkippedKeys {
+				// Remove the oldest key
+				var oldest uint32 = ^uint32(0)
+				for idx := range sk.SkippedKeys {
+					if idx < oldest {
+						oldest = idx
+					}
+				}
+				delete(sk.SkippedKeys, oldest)
+			}
+			sk.SkippedKeys[sk.ChainIndex-1] = msgKey
+		}
+	}
+
+	return targetKey, nil
 }
 
 // ToProto converts SenderKey to protobuf format
